@@ -1,0 +1,66 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Sync catalog into web resources
+        run: bash scripts/sync-catalog.sh
+
+      - name: Build web (production)
+        run: ./gradlew :composeApp:jsBrowserDistribution --no-daemon
+
+      - name: Prepare Pages artifact
+        run: |
+          OUT=composeApp/build/dist/js/productionExecutable
+          find "$OUT" -name '*.map' -delete
+          touch "$OUT/.nojekyll"
+          cat > "$OUT/_headers" <<'EOF'
+          /*.wasm
+            Cache-Control: public, max-age=31536000, immutable
+          /composeApp.js
+            Cache-Control: public, max-age=31536000, immutable
+          /catalog/*
+            Cache-Control: public, max-age=300
+          EOF
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: composeApp/build/dist/js/productionExecutable
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

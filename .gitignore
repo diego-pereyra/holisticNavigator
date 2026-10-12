@@ -1,0 +1,28 @@
+# --- Build output ---
+build/
+**/build/
+out/
+
+# --- Toolchain local (WSL/JDK/Gradle) ---
+.tools/
+
+# --- Kotlin/JS ---
+node_modules/
+
+# --- Catálogo generado (se reconstruye con scripts/sync-catalog.sh) ---
+composeApp/src/jsMain/resources/catalog/
+
+# --- Libro fuente (copyright, no publicar) ---
+*.pdf
+*.epub
+*:Zone.Identifier
+
+# --- IDE / OS ---
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+
+# --- Gradle ---
+.gradle/
