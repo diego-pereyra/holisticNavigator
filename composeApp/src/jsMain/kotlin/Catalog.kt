@@ -1,9 +1,11 @@
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -22,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -85,6 +88,7 @@ fun HolisticApp() {
     var routeFeatures by remember { mutableStateOf<JsonArray?>(null) }
     var selectedCode by remember { mutableStateOf(routeFromUrl()) }
     var selectedVariant by remember { mutableStateOf(variantFromUrl()) }
+    var panelOpen by remember { mutableStateOf(window.innerWidth >= 700) }
     var imported by remember {
         mutableStateOf(
             runCatching {
@@ -157,12 +161,15 @@ fun HolisticApp() {
             if (code != selectedCode) selectedVariant = null
             selectedCode = code
         },
+        overlayPaddingLeft = if (panelOpen) 440.dp else 24.dp,
     ) {
         CatalogOverlay(
             selectedCode = selectedCode,
             variants = variants,
             selectedVariant = selectedVariant,
             onSelectVariant = { selectedVariant = it },
+            open = panelOpen,
+            onToggle = { panelOpen = !panelOpen },
             imported = imported.map { it.toIndexEntry() },
             onImportGpx = {
                 pickTextFile(".gpx,.kml,.csv,application/gpx+xml") { name, content ->
@@ -198,6 +205,8 @@ fun CatalogOverlay(
     onImportGpx: () -> Unit = {},
     onDeleteImported: (String) -> Unit = {},
     onSelect: (IndexEntry?) -> Unit,
+    open: Boolean = true,
+    onToggle: () -> Unit = {},
 ) {
     var routes by remember { mutableStateOf<List<IndexEntry>>(emptyList()) }
     var regionFilter by remember { mutableStateOf<String?>(null) }
@@ -248,13 +257,47 @@ fun CatalogOverlay(
         }
     }
 
-    Surface(
-        color = Color(0xE60B1626),
-        contentColor = Color(0xFFE8EEF4),
-        shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp),
-        modifier = Modifier.width(380.dp).fillMaxHeight(),
-    ) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val panelWidth = if (maxWidth < 480.dp) maxWidth else 380.dp
+        if (!open) {
+            Surface(
+                color = Color(0xE60B1626),
+                contentColor = Color(0xFFE8EEF4),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.padding(12.dp).clickable(onClick = onToggle),
+            ) {
+                Text(
+                    "☰ Rutas",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                )
+            }
+        } else {
+        Surface(
+            color = Color(0xE60B1626),
+            contentColor = Color(0xFFE8EEF4),
+            shape = RoundedCornerShape(topEnd = 12.dp, bottomEnd = 12.dp),
+            modifier = Modifier.width(panelWidth).fillMaxHeight(),
+        ) {
         Column(modifier = Modifier.fillMaxHeight().padding(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    "Catálogo",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    "✕",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier
+                        .clickable(onClick = onToggle)
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                )
+            }
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -383,6 +426,8 @@ fun CatalogOverlay(
                     )
                 }
             }
+        }
+        }
         }
     }
 }

@@ -23,6 +23,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -159,6 +160,7 @@ fun App(
     routeGeoJson: String? = null,
     myPosition: NavPosition? = null,
     onRouteClick: ((String) -> Unit)? = null,
+    overlayPaddingLeft: Dp = 440.dp,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
     MaterialTheme(colorScheme = darkColorScheme()) {
@@ -295,7 +297,7 @@ fun App(
                     },
                 )
 
-            val fitPadding = DpPadding(left = 440.dp, top = 24.dp, right = 24.dp, bottom = 24.dp)
+            val fitPadding = DpPadding(left = overlayPaddingLeft, top = 24.dp, right = 24.dp, bottom = 24.dp)
 
             val centerOn: suspend (NavPosition, Boolean) -> Unit = { p, animate ->
                 val pad = 0.02 + p.accuracyMeters / 111320.0
