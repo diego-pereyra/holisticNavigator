@@ -344,12 +344,13 @@ fun App(
             MaplibreMap(
                 modifier = Modifier.fillMaxSize(),
                 state = mapState,
+                overlay = { overlay() },
             )
 
             val scope = rememberCoroutineScope()
             var controlsOpen by remember(compact) { mutableStateOf(!compact) }
 
-            if (!catalogOpen) {
+            if (!(compact && catalogOpen)) {
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
                 horizontalAlignment = Alignment.End,
@@ -415,7 +416,7 @@ fun App(
             }
             }
 
-            if (!catalogOpen) {
+            if (!(compact && catalogOpen)) {
             Column(
                 modifier =
                     Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
@@ -477,7 +478,7 @@ fun App(
             }
             }
 
-            if (!compact && !catalogOpen) {
+            if (!compact) {
                 Surface(
                     modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
                     tonalElevation = 4.dp,
@@ -488,8 +489,6 @@ fun App(
                     )
                 }
             }
-
-            overlay()
         }
     }
 }
