@@ -3,6 +3,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -12,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -21,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -49,7 +52,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-const val CATALOG_VERSION = 5
+const val CATALOG_VERSION = 6
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -94,6 +97,7 @@ fun HolisticApp() {
     var selectedVariant by remember { mutableStateOf(variantFromUrl()) }
     var panelOpen by remember { mutableStateOf(window.innerWidth >= 700) }
     var gpsOn by remember { mutableStateOf(true) }
+    var showHelp by remember { mutableStateOf(loadStore("hn_seen_help") == null) }
     var imported by remember {
         mutableStateOf(
             runCatching {
@@ -202,6 +206,86 @@ fun HolisticApp() {
                 selectedCode = it?.code
             },
         )
+
+        Box(modifier = Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+            Surface(
+                color = Color(0xF0181C22),
+                contentColor = Color(0xFFE8F5E9),
+                shape = RoundedCornerShape(50),
+                modifier = Modifier.clickable { showHelp = true },
+            ) {
+                Text(
+                    "?  ayuda",
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                )
+            }
+        }
+
+        if (showHelp) {
+            Box(
+                modifier = Modifier.fillMaxSize().background(Color(0xE6000000)).clickable { },
+                contentAlignment = Alignment.Center,
+            ) {
+                Surface(
+                    color = Color(0xFF12233A),
+                    contentColor = Color(0xFFE8EEF4),
+                    shape = RoundedCornerShape(14.dp),
+                    modifier = Modifier.padding(20.dp).widthIn(max = 420.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            "Holistic Navigator",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            "Planificá travesías oceánicas sin conexión, basadas en World Cruising Routes (Cornell).",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        HelpLine("☰ Rutas", "Abrí el catálogo, buscá por puerto o zona y tocá una ruta.")
+                        HelpLine(
+                            "Consejos y datos",
+                            "En la ficha: el consejo de la ruta, una cita del libro y los datos (temporada, ciclones, waypoints, millas).",
+                        )
+                        HelpLine("◉ / GPS", "Centrá el mapa en tu posición; el chip GPS la activa o desactiva.")
+                        HelpLine("⋯ controles", "Simulador de travesía y bitácora (exportá tu track en GPX).")
+                        Text(
+                            "Funciona sin conexión: agregala a la pantalla de inicio.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color(0xFF9FB0C0),
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                        ) {
+                            TextButton(
+                                onClick = {
+                                    showHelp = false
+                                    saveStore("hn_seen_help", "1")
+                                },
+                            ) { Text("Entendido") }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HelpLine(label: String, text: String) {
+    Column {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            color = Color(0xFF80CBC4),
+        )
+        Text(text, style = MaterialTheme.typography.bodySmall)
     }
 }
 
@@ -431,7 +515,7 @@ fun CatalogOverlay(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    "Consejos · ${sel.code}",
+                                    "Consejos y datos · ${sel.code}",
                                     style = MaterialTheme.typography.titleSmall,
                                     fontWeight = FontWeight.Bold,
                                 )
