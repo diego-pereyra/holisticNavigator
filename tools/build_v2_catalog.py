@@ -20,6 +20,22 @@ ROOT = os.path.join(os.path.dirname(__file__), "..")
 SRC = os.path.join(ROOT, "data", "epub", "routes_v2.json")
 DST = os.path.join(ROOT, "data", "catalog", "v2")
 QUOTES = os.path.join(DST, "quotes.json")
+TIPS_DIR = os.path.join(ROOT, "tools")
+TIPS_CHAPTERS = os.path.join(TIPS_DIR, "tips_chapters_es.json")
+TIPS_ROUTES_DIR = os.path.join(TIPS_DIR, "tips_routes_es")
+
+
+def load_route_tips():
+    tips = {}
+    if os.path.isdir(TIPS_ROUTES_DIR):
+        for name in sorted(os.listdir(TIPS_ROUTES_DIR)):
+            if not name.endswith(".json"):
+                continue
+            with open(os.path.join(TIPS_ROUTES_DIR, name), encoding="utf-8") as fh:
+                for code, text in json.load(fh).items():
+                    if text:
+                        tips[code] = text
+    return tips
 
 # A variant whose track runs over land for more than this (nm, interior run) is
 # flagged needsReview: the straight chord reveals a missing waypoint or a bad
@@ -117,6 +133,8 @@ def route_sort_key(code):
 def main():
     routes = json.load(open(SRC, encoding="utf-8"))
     quotes = json.load(open(QUOTES, encoding="utf-8")) if os.path.exists(QUOTES) else {}
+    chapter_tips = json.load(open(TIPS_CHAPTERS, encoding="utf-8")) if os.path.exists(TIPS_CHAPTERS) else {}
+    route_tips = load_route_tips()
     chapters = []
     features = []
     facts = {}
@@ -239,6 +257,10 @@ def main():
             fact["quoteEn"] = q.get("en") or ""
             fact["quoteEs"] = q.get("es") or ""
             fact["quoteSource"] = q.get("source") or ""
+        if route_tips.get(r["code"]):
+            fact["tip"] = route_tips[r["code"]]
+        if chapter_tips.get(ch):
+            fact["chapterTip"] = chapter_tips[ch]
         facts.setdefault(ch, []).append(fact)
         route_ports[r["code"]] = ports
 

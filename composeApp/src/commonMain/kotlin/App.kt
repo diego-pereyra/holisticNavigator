@@ -321,7 +321,7 @@ fun App(
                 }.onFailure { println("HN: ERR center: ${it.message}") }
             }
 
-            LaunchedEffect(routeGeoJson, overlayPaddingLeft) {
+            LaunchedEffect(routeGeoJson, overlayPaddingLeft, catalogOpen) {
                 val bbox = routeGeoJson?.let { routeBoundingBox(it) } ?: return@LaunchedEffect
                 runCatching {
                     mapState.animateCameraToBounds(

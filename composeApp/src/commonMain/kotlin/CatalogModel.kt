@@ -31,4 +31,6 @@ data class RouteDetail(
     val quoteEn: String = "",
     val quoteEs: String = "",
     val quoteSource: String = "",
+    val chapterTip: String = "",
+    val tip: String = "",
 )

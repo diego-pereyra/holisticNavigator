@@ -548,9 +548,36 @@ private fun RouteDetailView(
         Text(detail.code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(detail.title, style = MaterialTheme.typography.bodyMedium)
 
+        if (detail.tip.isNotBlank()) {
+            Text(
+                "Consejo",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF80CBC4),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(detail.tip, style = MaterialTheme.typography.bodySmall)
+        }
+        if (detail.chapterTip.isNotBlank()) {
+            Text(
+                "Cómo encarar · ${detail.region}",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF80CBC4),
+                modifier = Modifier.padding(top = 6.dp),
+            )
+            Text(detail.chapterTip, style = MaterialTheme.typography.bodySmall)
+        }
+
         val quote = detail.quoteEs.ifBlank { detail.quoteEn }
         if (quote.isNotBlank()) {
             HorizontalDivider(color = Color(0xFF2A3B4A))
+            Text(
+                "Del libro",
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF9FB0C0),
+            )
             Text(
                 "“$quote”",
                 style = MaterialTheme.typography.bodySmall,
