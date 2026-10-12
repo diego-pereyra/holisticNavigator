@@ -1,3 +1,4 @@
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -160,6 +162,10 @@ fun App(
     routeGeoJson: String? = null,
     myPosition: NavPosition? = null,
     onRouteClick: ((String) -> Unit)? = null,
+    gpsEnabled: Boolean = true,
+    onToggleGps: () -> Unit = {},
+    compact: Boolean = false,
+    catalogOpen: Boolean = false,
     overlayPaddingLeft: Dp = 440.dp,
     overlay: @Composable BoxScope.() -> Unit = {},
 ) {
@@ -338,64 +344,98 @@ fun App(
             MaplibreMap(
                 modifier = Modifier.fillMaxSize(),
                 state = mapState,
-                overlay = { overlay() },
             )
 
             val scope = rememberCoroutineScope()
+            var controlsOpen by remember(compact) { mutableStateOf(!compact) }
 
+            if (!catalogOpen) {
             Column(
                 modifier = Modifier.align(Alignment.TopEnd).padding(16.dp),
                 horizontalAlignment = Alignment.End,
             ) {
-                Surface(color = Color(0xF0181C22), contentColor = Color(0xFFE8F5E9)) {
-                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                        Text("Simulador")
-                        Row {
-                            TextButton(onClick = { simOn = !simOn }) {
-                                Text(if (simOn) "⏸" else "▶ probar")
-                            }
-                            TextButton(onClick = { simNm = 0.0 }) { Text("↺") }
-                            TextButton(onClick = { simFactor = nextSimFactor(simFactor) }) {
-                                Text("x${simFactor.roundToInt()}")
-                            }
-                        }
-                        if (simOn && totalNm > 0.0) {
-                            Text("${simNm.roundToInt()} / ${totalNm.roundToInt()} nm")
-                        } else if (simOn) {
-                            Text("Elegí una ruta para simular")
-                        }
+                if (compact) {
+                    Surface(
+                        color = Color(0xF0181C22),
+                        contentColor = Color(0xFFE8F5E9),
+                        shape = RoundedCornerShape(50),
+                        modifier = Modifier.clickable(onClick = { controlsOpen = !controlsOpen }),
+                    ) {
+                        Text(
+                            if (controlsOpen) "✕ cerrar" else "⋯ controles",
+                            style = MaterialTheme.typography.labelMedium,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        )
                     }
                 }
-                Spacer(Modifier.height(8.dp))
-                Surface(color = Color(0xF0181C22), contentColor = Color(0xFFE8F5E9)) {
-                    Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
-                        Text("Bitácora")
-                        Row {
-                            TextButton(onClick = { recording = !recording }) {
-                                Text(if (recording) "■ parar" else "● grabar")
+                if (controlsOpen) {
+                    if (compact) Spacer(Modifier.height(8.dp))
+                    Surface(color = Color(0xF0181C22), contentColor = Color(0xFFE8F5E9)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text("Simulador")
+                            Row {
+                                TextButton(onClick = { simOn = !simOn }) {
+                                    Text(if (simOn) "⏸" else "▶ probar")
+                                }
+                                TextButton(onClick = { simNm = 0.0 }) { Text("↺") }
+                                TextButton(onClick = { simFactor = nextSimFactor(simFactor) }) {
+                                    Text("x${simFactor.roundToInt()}")
+                                }
                             }
-                            TextButton(onClick = { voyage = VoyageLog() }) { Text("borrar") }
-                            TextButton(
-                                onClick = {
-                                    downloadText(
-                                        "travesia.gpx",
-                                        "application/gpx+xml",
-                                        voyage.toGpx(),
-                                    )
-                                },
-                            ) { Text("GPX") }
+                            if (simOn && totalNm > 0.0) {
+                                Text("${simNm.roundToInt()} / ${totalNm.roundToInt()} nm")
+                            } else if (simOn) {
+                                Text("Elegí una ruta para simular")
+                            }
                         }
-                        Text("${voyage.points.size} pts · ${voyage.distanceNm.roundToInt()} nm")
+                    }
+                    Spacer(Modifier.height(8.dp))
+                    Surface(color = Color(0xF0181C22), contentColor = Color(0xFFE8F5E9)) {
+                        Column(modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp)) {
+                            Text("Bitácora")
+                            Row {
+                                TextButton(onClick = { recording = !recording }) {
+                                    Text(if (recording) "■ parar" else "● grabar")
+                                }
+                                TextButton(onClick = { voyage = VoyageLog() }) { Text("borrar") }
+                                TextButton(
+                                    onClick = {
+                                        downloadText(
+                                            "travesia.gpx",
+                                            "application/gpx+xml",
+                                            voyage.toGpx(),
+                                        )
+                                    },
+                                ) { Text("GPX") }
+                            }
+                            Text("${voyage.points.size} pts · ${voyage.distanceNm.roundToInt()} nm")
+                        }
                     }
                 }
             }
+            }
 
-            if (pos != null) {
-                Column(
-                    modifier =
-                        Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
-                    horizontalAlignment = Alignment.End,
+            if (!catalogOpen) {
+            Column(
+                modifier =
+                    Modifier.align(Alignment.BottomEnd).padding(end = 16.dp, bottom = 16.dp),
+                horizontalAlignment = Alignment.End,
+            ) {
+                Surface(
+                    color = Color(0xF0181C22),
+                    contentColor = Color(0xFFE8F5E9),
+                    shape = RoundedCornerShape(50),
+                    modifier = Modifier.clickable(onClick = onToggleGps),
                 ) {
+                    Text(
+                        if (gpsEnabled) (if (compact) "GPS ✓" else "GPS: activado")
+                        else (if (compact) "GPS ✗" else "GPS: desactivado"),
+                        style = MaterialTheme.typography.labelMedium,
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    )
+                }
+                if (pos != null) {
+                    Spacer(Modifier.height(8.dp))
                     FloatingActionButton(
                         onClick = { scope.launch { centerOn(pos, true) } },
                     ) {
@@ -435,16 +475,21 @@ fun App(
                     }
                 }
             }
-
-            Surface(
-                modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
-                tonalElevation = 4.dp,
-            ) {
-                Text(
-                    text = sharedGreeting(),
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                )
             }
+
+            if (!compact && !catalogOpen) {
+                Surface(
+                    modifier = Modifier.align(Alignment.TopCenter).padding(top = 16.dp),
+                    tonalElevation = 4.dp,
+                ) {
+                    Text(
+                        text = sharedGreeting(),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    )
+                }
+            }
+
+            overlay()
         }
     }
 }

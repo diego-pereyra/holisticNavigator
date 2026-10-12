@@ -89,6 +89,7 @@ fun HolisticApp() {
     var selectedCode by remember { mutableStateOf(routeFromUrl()) }
     var selectedVariant by remember { mutableStateOf(variantFromUrl()) }
     var panelOpen by remember { mutableStateOf(window.innerWidth >= 700) }
+    var gpsOn by remember { mutableStateOf(true) }
     var imported by remember {
         mutableStateOf(
             runCatching {
@@ -156,11 +157,15 @@ fun HolisticApp() {
 
     App(
         routeGeoJson = selectedGeoJson,
-        myPosition = rememberDevicePosition(),
+        myPosition = rememberDevicePosition(gpsOn),
         onRouteClick = { code ->
             if (code != selectedCode) selectedVariant = null
             selectedCode = code
         },
+        gpsEnabled = gpsOn,
+        onToggleGps = { gpsOn = !gpsOn },
+        compact = window.innerWidth < 700,
+        catalogOpen = panelOpen,
         overlayPaddingLeft = if (panelOpen) 440.dp else 24.dp,
     ) {
         CatalogOverlay(

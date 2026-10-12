@@ -10,7 +10,10 @@ import kotlinx.browser.window
 actual fun rememberDevicePosition(enabled: Boolean): NavPosition? {
     var pos by remember { mutableStateOf<NavPosition?>(null) }
     DisposableEffect(enabled) {
-        if (!enabled) return@DisposableEffect onDispose {}
+        if (!enabled) {
+            pos = null
+            return@DisposableEffect onDispose {}
+        }
         val geo = window.navigator.asDynamic().geolocation
         if (geo == null || geo === undefined) {
             println("HN: geolocation no disponible")
