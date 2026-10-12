@@ -19,6 +19,7 @@ from landcheck import Land
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 SRC = os.path.join(ROOT, "data", "epub", "routes_v2.json")
 DST = os.path.join(ROOT, "data", "catalog", "v2")
+QUOTES = os.path.join(DST, "quotes.json")
 
 # A variant whose track runs over land for more than this (nm, interior run) is
 # flagged needsReview: the straight chord reveals a missing waypoint or a bad
@@ -115,6 +116,7 @@ def route_sort_key(code):
 
 def main():
     routes = json.load(open(SRC, encoding="utf-8"))
+    quotes = json.load(open(QUOTES, encoding="utf-8")) if os.path.exists(QUOTES) else {}
     chapters = []
     features = []
     facts = {}
@@ -232,6 +234,11 @@ def main():
             "needsReview": route_flagged,
             "attribution": "8.ª edición (EPUB, waypoints GPS)",
         }
+        q = quotes.get(r["code"])
+        if q and (q.get("en") or q.get("es")):
+            fact["quoteEn"] = q.get("en") or ""
+            fact["quoteEs"] = q.get("es") or ""
+            fact["quoteSource"] = q.get("source") or ""
         facts.setdefault(ch, []).append(fact)
         route_ports[r["code"]] = ports
 

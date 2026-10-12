@@ -28,4 +28,7 @@ data class RouteDetail(
     val miles: List<Int> = emptyList(),
     @SerialName("sourcePdfPages") val pages: List<Int> = emptyList(),
     val charCount: Int = 0,
+    val quoteEn: String = "",
+    val quoteEs: String = "",
+    val quoteSource: String = "",
 )

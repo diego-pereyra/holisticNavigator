@@ -1,4 +1,4 @@
-const HN_CACHE = "hn-v7";
+const HN_CACHE = "hn-v8";
 
 const HN_CORE = [
   "./",

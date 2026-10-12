@@ -109,16 +109,26 @@ def refine(tokens):
     return out
 
 
-def find_heading(text):
-    """Return (code, title) if the text ends with a route heading."""
-    m = re.search(r"(?:[•·]\s*)?([A-Z]{2})\s*(\d{1,3})?\s+([A-Z][^•]*?)\s*$", text)
+_HEADING_END_RE = re.compile(
+    r"(?:[•·]\s*)?([A-Z]{2})\s*(\d{1,3})?\s+([A-Z][^•]*?)\s*$"
+)
+
+
+def split_heading(text):
+    """If the text ends with a route heading, return (code, title, start)."""
+    m = _HEADING_END_RE.search(text)
     if not m:
         return None
     code = (m.group(1) or "") + (m.group(2) or "")
     title = m.group(3).strip()
-    if len(title) > 70 or title.startswith("•") or title.startswith("·"):
+    if len(title) < 2 or len(title) > 90:
         return None
-    return code, title
+    return code, title, m.start()
+
+
+def find_heading(text):
+    h = split_heading(text)
+    return (h[0], h[1]) if h else None
 
 
 COORD_SPLIT = re.compile(

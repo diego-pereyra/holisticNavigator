@@ -27,6 +27,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.browser.window
@@ -45,7 +46,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-const val CATALOG_VERSION = 3
+const val CATALOG_VERSION = 4
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -499,6 +500,28 @@ private fun RouteDetailView(
     Column(modifier = Modifier.fillMaxWidth().padding(top = 10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(detail.code, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
         Text(detail.title, style = MaterialTheme.typography.bodyMedium)
+
+        val quote = detail.quoteEs.ifBlank { detail.quoteEn }
+        if (quote.isNotBlank()) {
+            HorizontalDivider(color = Color(0xFF2A3B4A))
+            Text(
+                "“$quote”",
+                style = MaterialTheme.typography.bodySmall,
+                fontStyle = FontStyle.Italic,
+            )
+            if (detail.quoteEn.isNotBlank() && detail.quoteEs.isNotBlank()) {
+                Text(
+                    "“${detail.quoteEn}”",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color(0xFF9FB0C0),
+                )
+            }
+            Text(
+                "— ${detail.quoteSource.ifBlank { "Jimmy Cornell — World Cruising Routes" }}",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color(0xFF9FB0C0),
+            )
+        }
 
         val months = detail.monthsMentioned.map { MONTH_ABBR.getOrElse(it - 1) { "$it" } }
         DetailLine("Cuenca", detail.region.ifBlank { "—" })
