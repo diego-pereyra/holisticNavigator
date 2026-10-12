@@ -29,6 +29,11 @@ jobs:
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      - name: Configure Pages (enable if needed)
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Sync catalog into web resources
         run: bash scripts/sync-catalog.sh
 
