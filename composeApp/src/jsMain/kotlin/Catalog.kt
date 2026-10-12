@@ -1,5 +1,7 @@
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -7,6 +9,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -156,6 +159,7 @@ fun HolisticApp() {
             }.toString()
         }
 
+    val compact = window.innerWidth < 700
     App(
         routeGeoJson = selectedGeoJson,
         myPosition = rememberDevicePosition(gpsOn),
@@ -165,9 +169,9 @@ fun HolisticApp() {
         },
         gpsEnabled = gpsOn,
         onToggleGps = { gpsOn = !gpsOn },
-        compact = window.innerWidth < 700,
+        compact = compact,
         catalogOpen = panelOpen,
-        overlayPaddingLeft = if (panelOpen) 440.dp else 24.dp,
+        overlayPaddingLeft = if (panelOpen && !compact) 440.dp else 24.dp,
     ) {
         CatalogOverlay(
             selectedCode = selectedCode,
@@ -264,7 +268,9 @@ fun CatalogOverlay(
     }
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val panelWidth = if (maxWidth < 480.dp) maxWidth else 380.dp
+        val isNarrow = maxWidth < 480.dp
+        val panelMaxHeight = maxHeight
+        val panelWidth = if (isNarrow) maxWidth else 380.dp
         if (!open) {
             Surface(
                 color = Color(0xE60B1626),
@@ -413,23 +419,64 @@ fun CatalogOverlay(
             val sel = selected
             if (sel != null) {
                 HorizontalDivider()
-                val detail = details[sel.code]
-                when {
-                    detail != null -> RouteDetailView(
-                        sel,
-                        detail,
-                        storms = nhcFeed?.let { activeStorms(it, sel.chapter) } ?: emptyList(),
-                        nhcLoaded = nhcFeed != null,
-                        nhcError = nhcError,
-                    )
-                    loadingChapter == sel.chapter -> Text(
-                        "Cargando ficha…", style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
-                    else -> Text(
-                        "Sin datos de esta ruta", style = MaterialTheme.typography.labelMedium,
-                        modifier = Modifier.padding(top = 10.dp),
-                    )
+                var adviceOpen by remember(sel.code) { mutableStateOf(!isNarrow) }
+                Surface(color = Color(0xFF12233A), contentColor = Color(0xFFE8EEF4)) {
+                    Column {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { adviceOpen = !adviceOpen }
+                                .padding(vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    "Consejos · ${sel.code}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                )
+                                if (!adviceOpen) {
+                                    Text(
+                                        sel.title,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = Color(0xFF9FB0C0),
+                                        maxLines = 1,
+                                    )
+                                }
+                            }
+                            Text(
+                                if (adviceOpen) "▾" else "▴",
+                                style = MaterialTheme.typography.titleSmall,
+                            )
+                        }
+                        if (adviceOpen) {
+                            Column(
+                                modifier = Modifier
+                                    .heightIn(max = if (isNarrow) panelMaxHeight * 0.5f else 320.dp)
+                                    .verticalScroll(rememberScrollState())
+                                    .padding(bottom = 8.dp),
+                            ) {
+                                val detail = details[sel.code]
+                                when {
+                                    detail != null -> RouteDetailView(
+                                        sel,
+                                        detail,
+                                        storms = nhcFeed?.let { activeStorms(it, sel.chapter) } ?: emptyList(),
+                                        nhcLoaded = nhcFeed != null,
+                                        nhcError = nhcError,
+                                    )
+                                    loadingChapter == sel.chapter -> Text(
+                                        "Cargando ficha…", style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(top = 10.dp),
+                                    )
+                                    else -> Text(
+                                        "Sin datos de esta ruta", style = MaterialTheme.typography.labelMedium,
+                                        modifier = Modifier.padding(top = 10.dp),
+                                    )
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -509,13 +556,6 @@ private fun RouteDetailView(
                 style = MaterialTheme.typography.bodySmall,
                 fontStyle = FontStyle.Italic,
             )
-            if (detail.quoteEn.isNotBlank() && detail.quoteEs.isNotBlank()) {
-                Text(
-                    "“${detail.quoteEn}”",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color(0xFF9FB0C0),
-                )
-            }
             Text(
                 "— ${detail.quoteSource.ifBlank { "Jimmy Cornell — World Cruising Routes" }}",
                 style = MaterialTheme.typography.labelSmall,
@@ -551,7 +591,6 @@ private fun RouteDetailView(
         }
         DetailLine("Waypoints", if (detail.waypointCodes.isEmpty()) "—" else "${detail.waypointCodes.size} (${detail.waypointCodes.take(3).joinToString(", ")}…)")
         DetailLine("Millas", detail.miles.joinToString(", ").ifBlank { "—" })
-        DetailLine("Páginas del libro", detail.printedPages.joinToString("-").ifBlank { "—" })
 
         if (detail.needsReview) {
             Text(
