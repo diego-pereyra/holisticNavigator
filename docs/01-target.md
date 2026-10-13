@@ -60,8 +60,9 @@ nativo — ver [`docs/adr/004-web-first-prototype.md`](adr/004-web-first-prototy
 
 ## Non-goals explícitos
 
-Plotter / navegación en tiempo real · cartas náuticas completas · AIS · cuentas en la nube ·
-backend propio · social/feed · suscripciones de por medio (por ahora).
+Cartas oficiales (ENC/raster de hidrografías) · AIS (hasta target nativo) · piloto automático ·
+cuentas en la nube · backend propio · social/feed · suscripciones de por medio (por ahora).
+*La navegación en tiempo real sí es objetivo* ("casi un plotter", ver `00-mission.md`).
 
 ## Cómo se mide
 

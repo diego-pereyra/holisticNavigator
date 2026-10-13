@@ -25,11 +25,16 @@ Un solo lugar donde la **posición determina el contexto**: con una coordenada s
 estás, qué avisos te aplican, qué pilot chart te corresponde, qué rutas de Cornell son relevantes y
 qué estación local armar.
 
-## Qué no hacemos
+## Qué somos y qué no (revisado 2026-10-13)
 
-- No somos un plotter ni un sistema de navegación en tiempo real.
-- No distribuimos cartas náuticas raster/vectoriales.
-- No procesamos AIS ni tráfico marítimo.
+Somos **casi un plotter**: planificamos la travesía y después la acompañamos en tiempo real
+(seguir ruta, ETA, alarmas, fondeo, hombre al agua, carta de detalle offline por zonas, balizas y
+batimetría de datos abiertos). Lo que **no** somos:
+
+- No somos un plotter certificado: no distribuimos cartas oficiales (ENC/raster de hidrografías) y
+  no sustituimos al equipo de a bordo para aproximaciones y puertos.
+- No procesamos AIS ni tráfico marítimo (hasta que exista target nativo con NMEA, ADR-004).
+- No gobernamos piloto automático ni instrumentos.
 - No tenemos backend propio: todo vive en el dispositivo.
 
 ## Principios

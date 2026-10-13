@@ -13,10 +13,21 @@ en el dispositivo, usable sin conexión.
 | [`docs/adr/002-no-backend.md`](docs/adr/002-no-backend.md) | Sin backend · matriz CORS de las fuentes |
 | [`docs/adr/003-nhc-relay.md`](docs/adr/003-nhc-relay.md) | Relay estático NHC para Web |
 | [`docs/adr/004-web-first-prototype.md`](docs/adr/004-web-first-prototype.md) | Prototipo Web-first · Android nativo diferido · NMEA fuera del prototipo |
+| [`docs/03-ux-architecture.md`](docs/03-ux-architecture.md) | **Arquitectura de experiencia**: diagnóstico contra la misión, modelo de tres entradas (posición · mes · ruta), pantallas, fases, preguntas de espíritu |
+| [`docs/04-backlog-ux.md`](docs/04-backlog-ux.md) | **Backlog técnico** ejecutable (épicas E0–E10 con archivos y criterios de aceptación) |
+| [`docs/adr/005-offline-basemap.md`](docs/adr/005-offline-basemap.md) | Mapa base empaquetado (costa + retícula) · fase 2: detalle OSM por zonas con PMTiles |
+| [`docs/adr/006-nhc-relay-data-branch.md`](docs/adr/006-nhc-relay-data-branch.md) | Relay NHC en rama `data` leído por `raw.githubusercontent.com` (enmienda al ADR-003) |
 
 ## Estado
 
-**P0 cerrado** — esqueleto + spike Web verificado en browser (mapa MapLibre renderizando).
+**Prototipo Web publicado** (GitHub Pages, PWA): catálogo de 400 rutas / 2 268 variantes de la 8.ª
+edición con waypoints GPS, ficha con consejo + cita + temporada, navegación al próximo waypoint,
+simulador, bitácora en memoria, importación GPX/KML/CSV.
+
+**Próximo ciclo:** ejecutar [`docs/04-backlog-ux.md`](docs/04-backlog-ux.md) en el orden E0 → E7
+(catálogo v3, offline real con mapa base empaquetado, ficha con ventana de temporada real, posición
+→ contexto, bitácora persistente, avisos NHC reales). Diagnóstico y decisiones en
+[`docs/03-ux-architecture.md`](docs/03-ux-architecture.md).
 
 ```bash
 ./scripts/build-web.sh jsBrowserDevelopmentExecutableDistribution
@@ -34,7 +45,7 @@ data/catalog/v1/ dataset derivado del libro (routes, waypoints, text, tips)
 tools/           pipeline PDF → catalog (python)
 composeApp/      UI Compose Multiplatform
 shared/          dominio, db, importadores, posición, clima, capas
-relay/           GitHub Actions: NHC → GitHub Pages (estático)
+relay/           (pendiente, E7) GitHub Actions: NHC → rama `data` (ADR-006)
 ```
 
 ## Catálogo (P1)
@@ -71,5 +82,6 @@ dashboard local. No es una dependencia: la app instalada solo consume fuentes ex
 
 ## Fuente de conocimiento
 
-*World Cruising Routes*, Jimmy Cornell, 2ª ed. (Adlard Coles Nautical, 1995). © Jimmy Cornell —
-ver [`docs/02-content.md`](docs/02-content.md) para qué entra al producto y qué no.
+*World Cruising Routes*, Jimmy & Doina Cornell, **8.ª ed.** (EPUB; waypoints GPS). El PDF de la 2.ª ed.
+(1995) fue la fuente del catálogo v1 y queda como referencia histórica. © Cornell — ver
+[`docs/02-content.md`](docs/02-content.md) para qué entra al producto y qué no.

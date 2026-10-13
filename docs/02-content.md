@@ -2,6 +2,13 @@
 
 **Estado:** Acordado · **Fecha:** 2026-10-07 · **Fase:** P0
 
+> **Nota (2026-10-13):** el catálogo vigente (v2 y el v3 planificado) deriva de la **8.ª edición**
+> (EPUB, Jimmy & Doina Cornell), que trae tablas de waypoints GPS, mejor época, temporada de
+> tormentas, cartas y guías por ruta. Esta política se escribió para la 2.ª edición; la línea
+> hechos/expresión y la capa `tips` se aplican igual. Pendiente (T6.5 del backlog): reescribir este
+> documento para la 8.ª y decidir explícitamente la exposición de la tabla de waypoints y su
+> exportación GPX (pregunta 2 de `03-ux-architecture.md §9`).
+
 ## Fuente
 
 *World Cruising Routes*, Jimmy Cornell, 2ª edición, Adlard Coles Nautical / A & C Black, 1995.
