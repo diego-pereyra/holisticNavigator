@@ -1,4 +1,45 @@
-# Instrucciones para el agente implementador (Big Pickle / opencode)
+# EMPEZÁ ACÁ — Big Pickle
+
+## Qué cambió en este repo (2026-10-13)
+
+Claude hizo una auditoría de usabilidad de la app contra la misión y dejó **todo el trabajo
+siguiente ya decidido y escrito**. No hay nada que diseñar: hay que ejecutar.
+
+| Archivo | Qué es | Para qué lo usás |
+|---|---|---|
+| `docs/04-backlog-ux.md` | **Tu lista de tareas**, T0.1 → T12.1, cada una con archivos, qué hacer y criterio de aceptación | Es lo único que ejecutás. En orden. |
+| `docs/03-ux-architecture.md` | Por qué de cada tarea, pantallas (§3), ficha (§5), "casi un plotter" (§6 bis), 12 reglas de usabilidad (§6 ter) | Lo consultás cuando una tarea dice "según §X" |
+| `docs/adr/005-offline-basemap.md` | Mapa base empaquetado (costa + batimetría + retícula), sin teselas online | Lo aplicás en T1.1 y T10.x |
+| `docs/adr/006-nhc-relay-data-branch.md` | Relay NHC por rama `data` | Lo aplicás en E7 |
+| `docs/00-mission.md`, `01-target.md` | Espíritu actualizado: la app es "casi un plotter" | Contexto; no se edita |
+| `BLOCKERS.md` (lo creás vos si hace falta) | Donde anotás lo que no podés hacer tal cual | Nunca improvisás una alternativa |
+
+Las decisiones de producto están todas tomadas (ver `03-ux-architecture.md §9`). No preguntes
+si hacer algo del backlog: hacelo. Preguntá solo vía `BLOCKERS.md` cuando algo no se puede hacer
+como está escrito.
+
+## Tu primera sesión, paso a paso
+
+1. Leé `docs/04-backlog-ux.md` completo. Después `docs/03-ux-architecture.md` §3, §5 y §6 ter.
+2. Ejecutá **T0.1** (higiene: `__pycache__` fuera de git). Commit: `T0.1 Higiene del repo`.
+3. Ejecutá **T0.2** (parser de ventanas de meses en Python, con tests sobre las 92 + 38 frases del
+   EPUB). Commit: `T0.2 Parser de ventanas de meses`.
+4. Ejecutá **T0.3 → T0.6** (catálogo v3 e índice; la app debe seguir funcionando igual). Un commit
+   por tarea.
+5. Build de producción y prueba offline (`03-ux-architecture.md §8`). Si pasa, seguí con **E1**.
+
+Orden completo: apartado "Orden sugerido de entrega" al final del backlog. **No saltes tareas ni
+cambies el orden.**
+
+## Cómo reportás
+
+Al terminar cada tarea, en el mensaje de commit: qué hiciste, cómo verificaste el criterio de
+aceptación, y qué reglas de §6 ter toca si hay UI. Al terminar una épica, un resumen de cinco
+líneas para Diego: qué quedó, qué no, qué hay en `BLOCKERS.md`.
+
+---
+
+# Reglas permanentes para el agente implementador (Big Pickle / opencode)
 
 Este repo tiene dos roles. **Arquitectura y usabilidad** las define Claude (Diego valida);
 **vos implementás**. Tu fuente de verdad es, en este orden:
