@@ -27,6 +27,19 @@ jobs:
       - run: npm ci --prefix web
       - run: bash scripts/build-web.sh
       - run: bash scripts/budget.sh
+      - name: Smoke test en browser real (bloquea el deploy si la app no arranca)
+        run: |
+          cd web && npm i --no-save playwright && npx playwright install --with-deps chromium && cd ..
+          mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator
+          (cd /tmp/site && python3 -m http.server 8087 >/dev/null 2>&1 &)
+          sleep 2
+          node web/smoke.mjs http://localhost:8087/holisticNavigator/
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-screenshot
+          path: smoke.png
+          if-no-files-found: ignore
       - run: |
           OUT=web/dist
           find "$OUT" -name '*.map' -delete

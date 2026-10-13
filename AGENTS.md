@@ -83,8 +83,13 @@ sacar la pantalla de carga, sin progreso, sin tiempo máximo y sin error visible
 | 9 | **Smoke test en CI con browser real** (`.github/workflows/deploy-pages.yml`, job previo al deploy): `npx playwright install --with-deps chromium` en el runner (ahí sí hay libs), servir `web/dist` con `npx http-server -p 8087 --silent`, y un script `web/smoke.mjs` que abre `http://localhost:8087/`, falla si aparece cualquier `console.error` o `pageerror`, si `#hn-loading` sigue visible a los 15 s, o si no existe `.hn-context` en el DOM. Sin este test verde no se publica. Motivo: W4/W5 se publicaron sin haberse abierto nunca en un browser y el mapa no cargaba (worker de MapLibre ausente, commit 1e… ver abajo). |
 
 **Lección W5 (2026-10-13):** "npm test verde + tsc OK + build OK" **no** es verificación de una app de browser.
-Hasta que exista el smoke test de CI (#9), ninguna tarea con UI se da por cerrada sin que Diego la
-abra en Chrome de escritorio con la consola visible. La causa del cuelgue fue que MapLibre 6 carga su
+El smoke test de CI (#9) **ya existe** (`web/smoke.mjs` + job en `deploy-pages.yml`, escrito por
+Claude): corre en cada push a `main`, con browser real, y bloquea el deploy si la app no arranca o
+hay errores en consola. Diego **no** es parte del ciclo de verificación. El ciclo es:
+Big Pickle implementa → push → CI (tests, presupuesto, smoke) → deploy → Claude revisa el resultado
+(`https://api.github.com/repos/diego-pereyra/holisticNavigator/actions/runs?per_page=3` y el sitio).
+Si el smoke falla, el log del job dice qué (consola, HTTP, pantalla de carga) y Big Pickle lo
+arregla antes de seguir. Captura `smoke.png` como artefacto del run. La causa del cuelgue fue que MapLibre 6 carga su
 worker como archivo aparte (`maplibre-gl-worker.mjs`) y esbuild no lo bundlea: Claude lo corrigió en
 `main.ts` (`setWorkerUrl`), `scripts/build-web.sh` (copia) y el precache del SW. No volver a tocar eso.
 
@@ -160,7 +165,10 @@ Este repo tiene dos roles. **Arquitectura y usabilidad** las define Claude (Dieg
   en pantalla. Nada en inglés salvo nombres propios y títulos del libro.
 - **Usabilidad**: cada tarea con UI cumple las 12 reglas de `03-ux-architecture.md §6 ter` y lo
   dice en el commit (ej. `Reglas: 2, 6, 10`).
-- **No commitear** `tools/__pycache__`, builds, ni los PDF/EPUB. No hacer push de ramas nuevas sin pedirlo.
+- **No commitear** `tools/__pycache__`, builds, ni los PDF/EPUB. No crear ramas nuevas sin pedirlo.
+- **Push a `main` al cerrar cada tarea con UI y al cerrar cada épica** (`git push origin main`): el CI
+  verifica en browser real y despliega; Diego no participa. Si el push falla por credenciales,
+  anotarlo en `BLOCKERS.md`: Diego configura una sola vez `git config --global credential.helper store`.
 
 ## Cómo verificar antes de cada commit
 
