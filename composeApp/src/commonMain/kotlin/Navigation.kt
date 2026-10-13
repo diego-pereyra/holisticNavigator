@@ -20,6 +20,7 @@ private fun Double.toDeg() = this * 180.0 / PI
 data class RouteTrack(
     val names: List<String>,
     val dests: List<Boolean>,
+    val corrected: List<Boolean>,
     val coords: List<Pair<Double, Double>>,
 )
 
@@ -27,6 +28,7 @@ data class NavFix(
     val nextIndex: Int,
     val nextName: String,
     val nextIsDest: Boolean,
+    val nextCorrected: Boolean,
     val nextLon: Double,
     val nextLat: Double,
     val bearingDeg: Double,
@@ -121,6 +123,7 @@ fun navigate(track: RouteTrack, lat: Double, lon: Double): NavFix? {
         nextIndex = nextIndex,
         nextName = track.names.getOrNull(nextIndex) ?: "",
         nextIsDest = track.dests.getOrNull(nextIndex) ?: false,
+        nextCorrected = track.corrected.getOrNull(nextIndex) ?: false,
         nextLon = wp.first,
         nextLat = wp.second,
         bearingDeg = initialBearingDeg(lat, lon, wp.second, wp.first),
@@ -183,9 +186,11 @@ fun routeTrackFromGeoJson(geoJson: String?): RouteTrack? {
         val props = fo["properties"]?.jsonObject
         val names = props?.get("wpNames")?.jsonArray?.map { it.jsonPrimitive.content }
         val dests = props?.get("wpDests")?.jsonArray?.map { it.jsonPrimitive.content == "true" }
+        val corrected = props?.get("wpCorrected")?.jsonArray?.map { it.jsonPrimitive.content == "true" }
         val an = names?.takeIf { it.size == coords.size } ?: List(coords.size) { "WP $it" }
         val ad = dests?.takeIf { it.size == coords.size } ?: List(coords.size) { false }
-        return RouteTrack(an, ad, coords)
+        val ac = corrected?.takeIf { it.size == coords.size } ?: List(coords.size) { false }
+        return RouteTrack(an, ad, ac, coords)
     }
     return null
 }

@@ -448,8 +448,13 @@ fun App(
                             Column(
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
                             ) {
+                                val nextLabel = when {
+                                    !nav.nextCorrected -> nav.nextName.ifBlank { "WP ${nav.nextIndex}" }
+                                    nav.nextName.isBlank() -> "Punto corregido"
+                                    else -> "${nav.nextName} (corregido)"
+                                }
                                 Text(
-                                    "Próximo: ${nav.nextName.ifBlank { "WP ${nav.nextIndex}" }}" +
+                                    "Próximo: $nextLabel" +
                                         if (nav.nextIsDest) "  (destino)" else "",
                                 )
                                 Text(
