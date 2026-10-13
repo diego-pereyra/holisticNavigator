@@ -17,10 +17,13 @@ from collections import Counter
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from landcheck import Land
 from optimize_coast import Coast
+from windows import parse_window
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
 SRC = os.path.join(ROOT, "data", "epub", "routes_v2.json")
 DST = os.path.join(ROOT, "data", "catalog", "v2")
+DST3 = os.path.join(ROOT, "data", "catalog", "v3")
+ATTRIBUTION = "World Cruising Routes, 8.ª ed. — Jimmy & Doina Cornell"
 QUOTES = os.path.join(DST, "quotes.json")
 TIPS_DIR = os.path.join(ROOT, "tools")
 TIPS_CHAPTERS = os.path.join(TIPS_DIR, "tips_chapters_es.json")
@@ -283,6 +286,43 @@ def route_sort_key(code):
     return (code, 0, code)
 
 
+def split_field(values):
+    """Aplana una lista del libro en ítems limpios ('BA 4011, US 121' -> 2)."""
+    out = []
+    for v in values or []:
+        if not isinstance(v, str):
+            continue
+        for part in v.split(","):
+            part = part.strip()
+            if part:
+                out.append(part)
+    return out
+
+
+def build_when(fields):
+    """Ventana de meses v3 desde bestTime/tropicalStorms (parser T0.2)."""
+    best_txt = ", ".join(x.strip() for x in fields.get("bestTime", []) if x and x.strip())
+    storms_txt = ", ".join(x.strip() for x in fields.get("tropicalStorms", []) if x and x.strip())
+    bw = parse_window(best_txt) if best_txt else parse_window("")
+    sw = parse_window(storms_txt) if storms_txt else parse_window("")
+    when = {
+        "bestEn": best_txt,
+        "bestEs": bw.es,
+        "bestMonths": bw.months,
+        "stormsEn": storms_txt,
+        "stormsEs": sw.es,
+        "stormMonths": sw.months,
+    }
+    zones, seen = [], set()
+    for z in bw.zones + sw.zones:
+        if z["label"] not in seen:
+            seen.add(z["label"])
+            zones.append(z)
+    if zones:
+        when["zones"] = zones
+    return when
+
+
 def main():
     routes = json.load(open(SRC, encoding="utf-8"))
     quotes = json.load(open(QUOTES, encoding="utf-8")) if os.path.exists(QUOTES) else {}
@@ -291,6 +331,7 @@ def main():
     chapters = []
     features = []
     facts = {}
+    facts3 = {}
     route_ports = {}
     land = Land()
     coast = Coast(land)
@@ -335,9 +376,8 @@ def main():
 
         title = r.get("title") or ""
         route_flagged = False
+        v3_variants = []
 
-        for vid, wps, coords in variants:
-            first, last = wps[0], wps[-1]
         for vid, wps, coords in variants:
             first, last = wps[0], wps[-1]
             coastal = any((not w.get("name")) and w.get("approx") for w in wps)
@@ -348,6 +388,28 @@ def main():
             if flagged:
                 land_variants += 1
                 route_flagged = True
+            dist = sum(
+                haversine_nm(c[1], c[0], coords[i + 1][1], coords[i + 1][0])
+                for i, c in enumerate(coords[:-1])
+            )
+            v3_variants.append({
+                "id": vid,
+                "from": first["name"] or "start",
+                "to": last["name"] or "end",
+                "nm": int(round(dist)),
+                "coastal": coastal,
+                "needsReview": flagged,
+                "waypoints": [
+                    {
+                        "name": w["name"] or "",
+                        "lat": coords[i][1],
+                        "lon": coords[i][0],
+                        "dest": bool(w.get("dest")),
+                        "corrected": bool(w.get("corrected")),
+                    }
+                    for i, w in enumerate(wps)
+                ],
+            })
             features.append({
                 "type": "Feature",
                 "properties": {
@@ -432,31 +494,71 @@ def main():
             fact["chapterTip"] = chapter_tips[ch]
         facts.setdefault(ch, []).append(fact)
         route_ports[r["code"]] = ports
+
+        fields = r.get("fields", {})
+        fact3 = {
+            "code": r["code"],
+            "title": title,
+            "chapter": ch,
+            "region": CHAPTER_REGION.get(ch, ch),
+            "from": v3_variants[0]["from"] if v3_variants else "",
+            "to": v3_variants[0]["to"] if v3_variants else "",
+            "when": build_when(fields),
+            "charts": split_field(fields.get("charts")),
+            "guides": split_field(fields.get("cruisingGuides")),
+            "planner": split_field(fields.get("voyagePlanner")),
+            "variants": v3_variants,
+            "attribution": ATTRIBUTION,
+            "needsReview": route_flagged,
+            "monthsMentioned": months,
+            "waypointCodes": waypoint_codes,
+            "ports": ports,
+            "miles": miles,
+            "variantIds": [t["id"] for t in tables],
+        }
+        if q and (q.get("en") or q.get("es")):
+            fact3["quoteEn"] = q.get("en") or ""
+            fact3["quoteEs"] = q.get("es") or ""
+            fact3["quoteSource"] = q.get("source") or ""
+        if route_tips.get(r["code"]):
+            fact3["tip"] = route_tips[r["code"]]
+        if chapter_tips.get(ch):
+            fact3["chapterTip"] = chapter_tips[ch]
+        facts3.setdefault(ch, []).append(fact3)
+        route_ports[r["code"]] = ports
         dt = time.time() - t0
         if dt > 3.0:
             print(f"  ! lento {r['code']} ({dt:.1f}s)", flush=True)
 
     os.makedirs(os.path.join(DST, "facts"), exist_ok=True)
+    os.makedirs(os.path.join(DST3, "facts"), exist_ok=True)
 
-    with open(os.path.join(DST, "index.json"), "w", encoding="utf-8") as f:
-        json.dump(
-            {"chapters": chapters,
-             "routes": sorted(
-                 ({"code": r["code"], "title": r.get("title") or "",
-                   "chapter": re.match(r"^[A-Z]{2}", r["code"]).group(0),
-                   "region": CHAPTER_REGION.get(re.match(r"^[A-Z]{2}", r["code"]).group(0), ""),
-                   "ports": route_ports.get(r["code"], [])}
-                  for r in routes),
-                 key=lambda e: route_sort_key(e["code"]),
-             )},
-            f, ensure_ascii=False, indent=1,
-        )
+    index_obj = {
+        "chapters": chapters,
+        "routes": sorted(
+            ({"code": r["code"], "title": r.get("title") or "",
+              "chapter": re.match(r"^[A-Z]{2}", r["code"]).group(0),
+              "region": CHAPTER_REGION.get(re.match(r"^[A-Z]{2}", r["code"]).group(0), ""),
+              "ports": route_ports.get(r["code"], [])}
+             for r in routes),
+            key=lambda e: route_sort_key(e["code"]),
+        ),
+    }
+    geojson_obj = {"type": "FeatureCollection", "features": features}
 
-    with open(os.path.join(DST, "routes.geojson"), "w", encoding="utf-8") as f:
-        json.dump({"type": "FeatureCollection", "features": features}, f, ensure_ascii=False)
+    for d in (DST, DST3):
+        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as f:
+            json.dump(index_obj, f, ensure_ascii=False, indent=1)
+        with open(os.path.join(d, "routes.geojson"), "w", encoding="utf-8") as f:
+            json.dump(geojson_obj, f, ensure_ascii=False)
 
     for ch, rows in facts.items():
         with open(os.path.join(DST, "facts", f"{ch}.jsonl"), "w", encoding="utf-8") as f:
+            for row in sorted(rows, key=lambda x: route_sort_key(x["code"])):
+                f.write(json.dumps(row, ensure_ascii=False) + "\n")
+
+    for ch, rows in facts3.items():
+        with open(os.path.join(DST3, "facts", f"{ch}.jsonl"), "w", encoding="utf-8") as f:
             for row in sorted(rows, key=lambda x: route_sort_key(x["code"])):
                 f.write(json.dumps(row, ensure_ascii=False) + "\n")
 

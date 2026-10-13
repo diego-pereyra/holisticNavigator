@@ -2,7 +2,7 @@
 # Copia el catálogo (manifest + payloads por capítulo + geometría) a los recursos del target Web.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-SRC="$ROOT/data/catalog/v2"
+SRC="$ROOT/data/catalog/v3"
 DST="$ROOT/composeApp/src/jsMain/resources/catalog"
 
 mkdir -p "$DST/facts"
