@@ -170,6 +170,15 @@ ERRATA = {
     ("AT21A", "Demerara"): (6.967, -58.05),          # Guyana; libro: 6°58'N,52°34'W
     ("AN134B", "Hoyo"): (36.067, -6.333),            # Tarifa (España); libro copió -25°08' (vecino Azores)
     # Coordenada con hemisferio/signo invertido:
+    # Cabo Espartel (Marruecos): el libro perdió el signo del meridiano en
+    # todas las rutas que salen del Estrecho (-5°58'W quedó como +5°58'E,
+    # cayendo en Argelia).
+    ("AN32", "Espartel"): (35.8, -5.967),
+    ("AN33", "Espartel"): (35.8, -5.967),
+    ("AN39", "Espartel"): (35.8, -5.967),
+    ("AN46A", "Espartel"): (35.8, -5.967),
+    ("AN58", "Espartel"): (35.8, -5.967),
+    ("AT29", "Espartel"): (35.8, -5.967),
     ("AN164A", "Faroes S"): (61.217, -6.733),        # Feroe al W; libro puso +6°44' (al E)
     ("AN165C", "Scoresby"): (70.358, -22.0),         # Scoresby Sund (Groenlandia); libro: 70°46'N,9°06'W (Jan Mayen)
     # Torres Strait desplazado al mar de Banda (~123°E por 142°E):
