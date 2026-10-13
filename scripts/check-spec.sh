@@ -53,6 +53,12 @@ need "countries.geojson" "$SRC" "carta base con países"
 need "cities.geojson" "$SRC" "ciudades"
 need "moveend" "$SRC" "rutas por cuenca visible"
 
+echo "# W4.2 GPS y botón centrar"
+need "hn-fab" "$SRC" "#12b botón ◉ centrar / arrancar GPS"
+
+echo "# W4.4 lista informativa"
+for m in hn-row-title-en hn-count hn-ficha-dock hn-variant-chips; do need "$m" "$SRC" "W4.4 $m"; done
+
 echo "# W5"
 need "maplibre-gl-worker.mjs" "$SRC/main.ts" "worker de MapLibre fijado"
 need "hn-loading" "$SRC/main.ts" "pantalla de carga se oculta desde main"

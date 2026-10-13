@@ -75,7 +75,13 @@ que imprima `CHECK-SPEC OK`. Lo que falta hoy:
 - #4 GPX con `<copyright>` y atribución.
 - #5 `selectedVariant` como estado (Seguir, Exportar, Recorrer y tabla de waypoints la usan).
 - #6 `history.replaceState` al seleccionar; leer `?route=` y `?variant=` al abrir.
-- #12 GPS al abrir con `navigator.permissions.query`.
+- #12 **GPS al abrir** con `navigator.permissions.query`: si `granted`, `watchGps` inmediato; si
+  `prompt`, el chip de posición dice "Usar GPS" y un toque lanza `watchGps` (el browser pide
+  permiso); si `denied`, "GPS denegado" y el menú ofrece las otras fuentes. **Diego confirmó en el
+  teléfono que hoy la app no usa el GPS**: es el defecto más grave de W4.1.
+- #12b Botón flotante **◉** (`class="hn-fab"`, 56 px, abajo a la derecha, por encima de la hoja):
+  si no hay posición, arranca el GPS; si hay, centra el mapa en ella (zoom 6 si está más lejos).
+  Es el mismo botón que tenía la app vieja y que Diego usaba.
 - #13 Menú de posición con *Usar GPS · Fijar en el mapa · Escribir coordenadas · Apagar*.
 
 **Regla nueva, permanente:** antes de reportar cualquier tarea como hecha, corré
@@ -116,6 +122,31 @@ países, si no no sé en qué costa estoy". Un solo commit `W4.3 Mapa legible` d
 Marcadores para `check-spec.sh` (Claude los agrega): `country-fill`, `country-line`,
 `country-label`, `city-dot`, `city-label`, `basin-label`, `moveend`, `countries.geojson`,
 `cities.geojson`.
+
+## ▶ W4.4 — la lista de rutas tiene que informar como el panel viejo (Diego, 2026-10-13)
+
+Diego: la hoja desde abajo no molesta, pero "el panel de la izquierda era más práctico en la
+información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
+
+1. **El título del libro en cada fila.** La fila nueva dice `AN12 · Falmouth → Newport`; la vieja
+   decía `AN12 / Europe to North America (southern routes) / Atlántico Norte`. El título dice de
+   qué trata la ruta; origen→destino no. Fila nueva, tres líneas:
+   `AN12 · Europe to North America (southern routes)` (negrita) ·
+   `Falmouth → Newport · 3011–3309 nm · 3 variantes` ·
+   insignia de mes a la derecha. Región solo si el filtro es "Todas".
+2. **Contador** `133 de 400 rutas · Atlántico Norte` arriba de la lista, como antes.
+3. **Lista y ficha a la vez en escritorio.** En ≥ 700 px el panel izquierdo muestra la lista arriba
+   y la ficha de la ruta seleccionada abajo (acordeón "Consejos y datos · AN12" como el viejo, abierto
+   por defecto, ≤ 50 % del alto del panel con scroll propio). La lista no desaparece al elegir. En
+   móvil se mantiene la hoja con `‹ Rutas`.
+4. **Variantes como chips** `Todas · A · B · C` encima de la lista cuando hay ruta seleccionada
+   (como el panel viejo), además de las filas de variantes dentro de la ficha. Las dos cosas mueven
+   `selectedVariant`.
+5. **Importar** vuelve a ser visible sin scroll: fila fija bajo la búsqueda, texto
+   `+ Importar GPX / KML / CSV`.
+
+Commit `W4.4 Lista informativa y panel de escritorio`, después de W4.3. Marcadores: `hn-row-title-en`,
+`hn-count`, `hn-ficha-dock`, `hn-variant-chips`.
 
 ## ▶ W5.1 — arranque que nunca parece colgado (urgente, antes de E2)
 
