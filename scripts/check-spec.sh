@@ -47,6 +47,12 @@ need "height: 50vh" "$CSS" "#11 half 50vh"
 need "height: 92vh" "$CSS" "#11 full 92vh"
 forbid "gradle" "scripts/env.sh README.md" "#16 sin Gradle en env/README"
 
+echo "# W4.3 mapa legible"
+for id in country-fill country-line country-label city-dot city-label basin-label; do need "\"$id\"" "$SRC" "capa $id"; done
+need "countries.geojson" "$SRC" "carta base con países"
+need "cities.geojson" "$SRC" "ciudades"
+need "moveend" "$SRC" "rutas por cuenca visible"
+
 echo "# W5"
 need "maplibre-gl-worker.mjs" "$SRC/main.ts" "worker de MapLibre fijado"
 need "hn-loading" "$SRC/main.ts" "pantalla de carga se oculta desde main"
