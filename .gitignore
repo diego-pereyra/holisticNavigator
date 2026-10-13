@@ -17,6 +17,10 @@ composeApp/src/jsMain/resources/catalog/
 *.epub
 *:Zone.Identifier
 
+# --- Python ---
+__pycache__/
+*.pyc
+
 # --- IDE / OS ---
 .idea/
 .vscode/
