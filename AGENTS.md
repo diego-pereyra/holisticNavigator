@@ -33,6 +33,35 @@ E0 cerrado. **ADR-007 está aceptado**: el target Web se reescribe como frontend
 | **W4** | `W4 UI equivalente y retiro de Compose` | Barra de contexto, hoja/panel, tab Rutas (lista, búsqueda, chips), ficha v3 completa (§5: Cuándo con tira de meses, variantes, waypoints, cartas, acciones Seguir/Exportar GPX/Recorrer/Enlace), importar GPX/KML/CSV, GPS/manual, bitácora básica. Checklist §8. **En este mismo commit** se borran `composeApp/`, `shared/`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, `gradle.properties`, `kotlin-js-store/`, `.kotlin/`; `scripts/sync-catalog.sh` copia a `web/public/catalog/`. |
 | **W5** | `W5 Presupuestos y CI` | `scripts/budget.sh` (gzip de `web/dist`; falla si supera §6 quater), `.github/workflows/deploy-pages.yml` apuntando a `web/dist` (sin Java ni Gradle), SW con manifiesto de precache (T1.2) y aviso de versión (T1.3), chip de conexión (T1.4). |
 
+## ▶ W4.1 — correcciones obligatorias antes de W5 (revisión de Claude, 2026-10-13)
+
+W4 está bien encaminado: 470 KB gz de primera carga, 41 tests, sin framework. Pero se desvió de
+"Nombres fijos" y de varios criterios del backlog. Un solo commit `W4.1 Correcciones de revisión`
+con **todo** lo siguiente; no se empieza W5 sin esto.
+
+| # | Qué está mal | Qué hacer (sin alternativas) |
+|---|---|---|
+| 1 | Ids de capas y colores inventados (`selected-line`, `active-line`, `me-point`, `catalog-points`, `#2ecc71`, `#f0c419`, `#4aa3df`, `#9b59b6`, catálogo `#2a3b4d`) | Usar **exactamente** la tabla "Nombres fijos" del backlog: `catalog-lines` `#4FC3F7` α0,25 · `route-lines` (variantes de la ruta seleccionada) `#4FC3F7` α0,6 · `route-active` `#4FC3F7` 2,5 px · `route-wps` `#FFCC80` · `voyage-line` `#FFD54F` · `my-accuracy` (círculo de precisión, 64 vértices) · `my-halo` / `my-dot` con color por fuente: GPS `#2979FF`, manual `#B388FF`, simulada `#FF8F00` · `nav-to-wp` `#00E676` (línea posición → próximo waypoint, solo con ruta activa). Eliminar `catalog-points` (no se dibujan waypoints de todo el catálogo). Importadas: `imported-lines` `#B388FF` discontinua. |
+| 2 | Las rutas del catálogo no se pueden tocar en el mapa (solo los puntos) y el mapa no obedece al filtro de la lista | `catalog-lines` clicable (`map.on("click","catalog-lines")`, con `queryRenderedFeatures` en un buffer de 8 px); filtro por expresión `["in", ["get","code"], ["literal", codes]]` sincronizado con búsqueda, chip de cuenca y "cerca de mí". |
+| 3 | "Recorrer" solo encuadra; no hay simulador | T3.7: recorrer la variante elegida con `requestAnimationFrame` (pausa con `visibilitychange`), velocidad x4/x16/x64, reiniciar, `nm recorridas / total`; fuente de posición `simulated` mientras dura y vuelta a la anterior al parar. |
+| 4 | Exportar GPX: solo la primera variante, sin atribución, nombre `AN12.gpx` | T3.6: variante elegida; `<metadata><copyright author="Jimmy & Doina Cornell"><license>World Cruising Routes, 8.ª ed. — uso personal</license></copyright></metadata>`; `<rtept>` con `<name>` y `<desc>destino</desc>`; archivo `AN12A-Falmouth-Newport.gpx`. |
+| 5 | La variante elegida no existe como estado: Seguir toma siempre la A y la tabla de waypoints muestra siempre la A | Señal `selectedVariant`; las filas de variantes la fijan (marcada con `.on`); Seguir, Exportar, Recorrer y la tabla de waypoints usan esa variante; por defecto la A. |
+| 6 | Enlace usa `?ruta=`; no se lee la URL al abrir; no hay `history.replaceState` | T3.8: parámetros `route` y `variant`; leer al boot y abrir la ficha; `replaceState` en cada cambio de selección; Enlace copia la URL actual. |
+| 7 | `needsReview` dice "Datos por revisar (no es un error)" y la etiqueta "revisar" | T3.5: texto `Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta.` en clase `hn-info` (color `#80CBC4`), sin etiqueta en las variantes. |
+| 8 | Navegación: "Desvío 0,8 nm" sin lado; falta "tramo n de m" | `Desvío 0,8 nm a estribor` / `a babor` (signo de `xteNm`: positivo = estribor); celda `Tramo` = `${legIndex+1} de ${coords.length-1}`. |
+| 9 | Objetivos táctiles < 44 px (botones 10 px de padding, chips 26 px) | `min-height: 44px` en `.hn-btn`, `.hn-row`, `.hn-chip`, `.hn-tab`, `.hn-month`, `.hn-variant`, `.hn-wp`, `.hn-ctx-*`; separación ≥ 8 px. |
+| 10 | Sin layout de escritorio: en 1366 px la hoja sigue abajo a pantalla completa | `@media (min-width: 700px)`: la hoja pasa a panel izquierdo de 400 px, alto completo, con los mismos tabs; `fitTo` usa `padding.left = 400` en escritorio y `padding.bottom = alto real de la hoja` en móvil. |
+| 11 | Alturas de hoja: peek 108 px, half 48vh, full 88vh | peek **96 px**, half **50vh**, full **92vh**. |
+| 12 | El GPS no arranca nunca al abrir: solo al tocar Seguir o Grabar | Al boot: `navigator.permissions.query({name:"geolocation"})`; si `granted`, `watchGps` inmediato; si `prompt`, el chip dice "Usar GPS" y arranca al tocarlo; si `denied`, "GPS denegado". Regla 1 de §6 ter. |
+| 13 | El chip de posición abre directo el diálogo de coordenadas; falta "Fijar en el mapa" | Menú de 4 opciones (T2.2): *Usar GPS · Fijar en el mapa · Escribir coordenadas · Apagar*. "Fijar en el mapa" = banda superior "Tocá el mapa para fijar tu posición · Cancelar" y un solo click en el mapa. |
+| 14 | `alert()` para errores de importación y de coordenadas | Mensaje inline bajo el botón/campo (clase `hn-error`), sin `alert`. `confirm()` solo queda en "Nueva bitácora". |
+| 15 | La cita muestra ES y EN juntas | Solo `quoteEs`; `quoteEn` únicamente si `quoteEs` está vacía. |
+| 16 | `scripts/env.sh` y `README.md` siguen hablando de JDK y Gradle | Quitar JDK/Gradle de `env.sh` (solo Node); README: sección Entorno y comandos con `scripts/build-web.sh`, `npm test`, `python3 -m http.server … web/dist`. |
+
+Aceptación de W4.1: todo lo anterior verificado uno por uno en el mensaje del commit; `npm test`
+verde; `scripts/build-web.sh` OK; sin ningún id de capa ni color fuera de "Nombres fijos"
+(`grep -oE "#[0-9A-Fa-f]{6}" web/src` solo devuelve colores de la tabla y del mapa base).
+
 Reglas específicas de este plan:
 - **Sin framework ni librerías de UI.** Si creés que lo necesitás, `BLOCKERS.md`.
 - **Nombres fijos** del backlog se respetan igual (ids de capas, colores, claves, umbrales).
