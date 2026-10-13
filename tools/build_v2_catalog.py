@@ -333,6 +333,7 @@ def main():
     facts = {}
     facts3 = {}
     route_ports = {}
+    route_index = {}
     land = Land()
     coast = Coast(land)
     cache = load_coast_cache()
@@ -525,7 +526,26 @@ def main():
         if chapter_tips.get(ch):
             fact3["chapterTip"] = chapter_tips[ch]
         facts3.setdefault(ch, []).append(fact3)
-        route_ports[r["code"]] = ports
+
+        nms = [v["nm"] for v in v3_variants]
+        lons = [w["lon"] for v in v3_variants for w in v["waypoints"]]
+        lats = [w["lat"] for v in v3_variants for w in v["waypoints"]]
+        search_names = []
+        for v in v3_variants:
+            for w in v["waypoints"]:
+                if w["dest"] and w["name"] and w["name"] not in search_names:
+                    search_names.append(w["name"])
+        route_index[r["code"]] = {
+            "from": fact3["from"],
+            "to": fact3["to"],
+            "nmMin": min(nms) if nms else 0,
+            "nmMax": max(nms) if nms else 0,
+            "variantCount": len(v3_variants),
+            "bestMonths": fact3["when"]["bestMonths"],
+            "stormMonths": fact3["when"]["stormMonths"],
+            "bbox": [min(lons), min(lats), max(lons), max(lats)] if lons else [],
+            "searchNames": search_names,
+        }
         dt = time.time() - t0
         if dt > 3.0:
             print(f"  ! lento {r['code']} ({dt:.1f}s)", flush=True)
@@ -533,7 +553,7 @@ def main():
     os.makedirs(os.path.join(DST, "facts"), exist_ok=True)
     os.makedirs(os.path.join(DST3, "facts"), exist_ok=True)
 
-    index_obj = {
+    index_v2 = {
         "chapters": chapters,
         "routes": sorted(
             ({"code": r["code"], "title": r.get("title") or "",
@@ -544,11 +564,33 @@ def main():
             key=lambda e: route_sort_key(e["code"]),
         ),
     }
+    index_v3 = {
+        "chapters": chapters,
+        "routes": sorted(
+            ({"code": r["code"], "title": r.get("title") or "",
+              "chapter": re.match(r"^[A-Z]{2}", r["code"]).group(0),
+              "region": CHAPTER_REGION.get(re.match(r"^[A-Z]{2}", r["code"]).group(0), ""),
+              "from": route_index.get(r["code"], {}).get("from", ""),
+              "to": route_index.get(r["code"], {}).get("to", ""),
+              "nmMin": route_index.get(r["code"], {}).get("nmMin", 0),
+              "nmMax": route_index.get(r["code"], {}).get("nmMax", 0),
+              "variantCount": route_index.get(r["code"], {}).get("variantCount", 0),
+              "bestMonths": route_index.get(r["code"], {}).get("bestMonths", []),
+              "stormMonths": route_index.get(r["code"], {}).get("stormMonths", []),
+              "bbox": route_index.get(r["code"], {}).get("bbox", []),
+              "searchNames": route_index.get(r["code"], {}).get("searchNames", []),
+              "ports": route_index.get(r["code"], {}).get("searchNames", [])}
+             for r in routes),
+            key=lambda e: route_sort_key(e["code"]),
+        ),
+    }
     geojson_obj = {"type": "FeatureCollection", "features": features}
 
+    with open(os.path.join(DST, "index.json"), "w", encoding="utf-8") as f:
+        json.dump(index_v2, f, ensure_ascii=False, indent=1)
+    with open(os.path.join(DST3, "index.json"), "w", encoding="utf-8") as f:
+        json.dump(index_v3, f, ensure_ascii=False, indent=1)
     for d in (DST, DST3):
-        with open(os.path.join(d, "index.json"), "w", encoding="utf-8") as f:
-            json.dump(index_obj, f, ensure_ascii=False, indent=1)
         with open(os.path.join(d, "routes.geojson"), "w", encoding="utf-8") as f:
             json.dump(geojson_obj, f, ensure_ascii=False)
 
