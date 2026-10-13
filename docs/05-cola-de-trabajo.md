@@ -1,13 +1,11 @@
 # Cola de trabajo — especificaciones vigentes
 
-**Fecha:** 2026-10-13. El orden lo fija `SEMAFORO.md`. Cada tarea se cierra cuando `bash scripts/check-spec.sh` no marca FALTA para sus marcadores y el commit lleva la salida pegada.
+**Fecha:** 2026-10-13. El orden lo fija `SEMAFORO.md`. Cada tarea se cierra cuando funciona en el browser según su criterio de aceptación; el CI corre el smoke test y Claude revisa el diff.
 
-## W4.2 — lo que W4.1 reportó como hecho y no está (verificado por `scripts/check-spec.sh`)
+## W4.2 — lo que W4.1 reportó como hecho y no está 
 
-El commit `4edd5df W4.1` se reportó como "aplicado" con los 16 puntos. `scripts/check-spec.sh`
-(verificador mecánico, escrito por Claude, corre también en CI antes del deploy) encuentra **17
-faltantes**. Corré `bash scripts/check-spec.sh` y hacé un solo commit `W4.2 Completar W4.1` hasta
-que imprima `CHECK-SPEC OK`. Lo que falta hoy:
+El commit `4edd5df W4.1` se reportó como "aplicado" con los 16 puntos. Revisando el código, Claude encontró que falta
+lo siguiente. Un solo commit `W4.2 Completar W4.1`:
 
 - Capas `my-accuracy` (círculo de precisión) y `nav-to-wp` (línea posición → próximo waypoint, `#00E676`).
 - Color de posición simulada `#FF8F00`; quedan colores inventados `#2ecc71` y `#4aa3df` en el código o el CSS.
@@ -24,10 +22,6 @@ que imprima `CHECK-SPEC OK`. Lo que falta hoy:
   Es el mismo botón que tenía la app vieja y que Diego usaba.
 - #13 Menú de posición con *Usar GPS · Fijar en el mapa · Escribir coordenadas · Apagar*.
 
-**Regla nueva, permanente:** antes de reportar cualquier tarea como hecha, corré
-`bash scripts/check-spec.sh` y pegá su salida completa en el mensaje del commit. Un reporte que
-dice "hecho" sobre algo que `check-spec` marca como FALTA es un reporte falso y se rehace la tarea.
-Cuando una tarea nueva tenga UI, Claude agrega sus marcadores a `check-spec.sh` junto con la tarea.
 
 ## W4.3 — mapa legible: países y rutas sin lío (crítica de Diego, 2026-10-13)
 
@@ -59,7 +53,6 @@ países, si no no sé en qué costa estoy". Un solo commit `W4.3 Mapa legible` d
 - Prueba: a zoom mundial no hay líneas y se leen las 13 cuencas; con el centro sobre el Atlántico
   Norte a zoom 4 hay ≤ 133 líneas (una por ruta AN), ninguna de otra cuenca.
 
-Marcadores para `check-spec.sh` (Claude los agrega): `country-fill`, `country-line`,
 `country-label`, `city-dot`, `city-label`, `basin-label`, `moveend`, `countries.geojson`,
 `cities.geojson`.
 
@@ -91,7 +84,6 @@ información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
 5. **Importar** vuelve a ser visible sin scroll: fila fija bajo la búsqueda, texto
    `+ Importar GPX / KML / CSV`.
 
-Commit `W4.4 Lista informativa y panel de escritorio`, después de W4.3. Marcadores: `hn-row-title-en`,
 `hn-count`, `hn-ficha-dock`, `hn-variant-chips`.
 
 ## W4.5 — ficha sin scroll aberrante (Diego, 2026-10-13)
@@ -118,7 +110,6 @@ y referencias para llegar a los waypoints. Commit `W4.5 Ficha compacta`, despué
 5. Prueba: en 1366 × 768 con AN12 abierta, sin scrollear se ven cabecera, acciones, tira de meses,
    rejilla de datos, el consejo y el inicio de la tabla de waypoints.
 
-Marcadores: `hn-col-ficha`, `hn-facts`, `hn-acc`, `keydown`, `sticky`.
 
 ## W5.1 — arranque que nunca parece colgado (urgente, antes de E2)
 

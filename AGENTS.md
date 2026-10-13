@@ -8,9 +8,9 @@ Trabajás en la misma carpeta que Claude (arquitecto). Vos implementás; Claude 
 2. Si dice `ADELANTE`: `git status`. Si hay cambios sin commitear que no son tuyos, esperá.
 3. Tomá **la primera tarea de la cola** del semáforo. Su especificación está en
    `docs/05-cola-de-trabajo.md` (W4.x, W5.x) o en `docs/04-backlog-ux.md` (T n.m).
-4. Implementala completa. Corré `npm test` (en `web/`), `bash scripts/build-web.sh`,
-   `bash scripts/check-spec.sh`. Si check-spec marca FALTA en algo de tu tarea, no terminaste.
-5. Un commit con el nombre exacto de la tarea y la salida de check-spec pegada. `git push origin main`.
+4. Implementala completa. Corré `npm test` (en `web/`) y `bash scripts/build-web.sh`.
+5. Un commit con el nombre de la tarea y, en el mensaje, qué hiciste y qué verificaste.
+   `git push origin main`. El CI corre el smoke test en browser real; Claude revisa el diff.
 6. Borrá la tarea de la cola en `SEMAFORO.md` (commit `SEMAFORO: W4.2 hecha`). Volvé al paso 1.
 7. Cola vacía → escribí `ESPERAR` en la primera línea de `SEMAFORO.md`, commit, push, y reportá a
    Diego en 5 líneas. No empieces nada más.
@@ -26,7 +26,7 @@ proponés), saltá a la siguiente tarea de la cola. No inventes alternativas.
   `docs/04-backlog-ux.md`. No inventar otros.
 - UI en español rioplatense, términos náuticos correctos, sin siglas internas.
 - Reglas de usabilidad: `docs/03-ux-architecture.md` §6 ter (12 reglas). Presupuestos: §6 quater.
-- No tocar `AGENTS.md`, `docs/`, `scripts/check-spec.sh`: son de Claude. `SEMAFORO.md` solo para
+- No tocar `AGENTS.md` ni `docs/`: son de Claude. `SEMAFORO.md` solo para
   borrar tareas hechas o poner `ESPERAR`.
 - No commitear `__pycache__`, builds, PDF/EPUB. No crear ramas.
 - Un solo build a la vez; nada de browsers headless en WSL: el browser real corre en CI (smoke test).
