@@ -135,10 +135,12 @@ información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
    `Falmouth → Newport · 3011–3309 nm · 3 variantes` ·
    insignia de mes a la derecha. Región solo si el filtro es "Todas".
 2. **Contador** `133 de 400 rutas · Atlántico Norte` arriba de la lista, como antes.
-3. **Lista y ficha a la vez en escritorio.** En ≥ 700 px el panel izquierdo muestra la lista arriba
-   y la ficha de la ruta seleccionada abajo (acordeón "Consejos y datos · AN12" como el viejo, abierto
-   por defecto, ≤ 50 % del alto del panel con scroll propio). La lista no desaparece al elegir. En
-   móvil se mantiene la hoja con `‹ Rutas`.
+3. **Lista y ficha a la vez en escritorio, en dos columnas.** Diego: "en la compu es aberrante lo
+   que tenés que scrollear". En ≥ 1100 px: columna 1 = lista (320 px: tabs, búsqueda, chips,
+   contador, lista con scroll propio); columna 2 = ficha (440 px, `class="hn-col-ficha"`, solo
+   cuando hay ruta seleccionada, con scroll propio); el mapa ocupa el resto. Entre 700 y 1100 px:
+   una columna de 400 px con lista arriba y ficha abajo al 50 % cada una, scroll propio en cada
+   mitad. La lista nunca desaparece al elegir. En móvil se mantiene la hoja con `‹ Rutas`.
 4. **Variantes como chips** `Todas · A · B · C` encima de la lista cuando hay ruta seleccionada
    (como el panel viejo), además de las filas de variantes dentro de la ficha. Las dos cosas mueven
    `selectedVariant`.
@@ -147,6 +149,28 @@ información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
 
 Commit `W4.4 Lista informativa y panel de escritorio`, después de W4.3. Marcadores: `hn-row-title-en`,
 `hn-count`, `hn-ficha-dock`, `hn-variant-chips`.
+
+## ▶ W4.5 — ficha sin scroll aberrante (Diego, 2026-10-13)
+
+La ficha apila 9 bloques en una columna; en escritorio hay que pasar por consejos, cita, variantes
+y referencias para llegar a los waypoints. Commit `W4.5 Ficha compacta`, después de W4.4:
+
+1. **Cabecera y acciones fijas** (`position: sticky; top: 0`) dentro de la columna de ficha: código,
+   título, origen → destino, botones Seguir / Exportar GPX / Recorrer / Enlace. Siempre a la vista.
+2. **Datos en rejilla** (`class="hn-facts"`, 2 columnas en escritorio, 1 en móvil), justo debajo:
+   Cuenca · Millas (mín–máx) · Variantes · Mejor época (texto) · Ciclones (texto) · Veredicto del mes.
+   La tira de meses va encima de la rejilla. Esto reemplaza las líneas sueltas de hoy.
+3. **Acordeones** (`class="hn-acc"`, cabecera de 44 px con título y cuenta, chevron, estado
+   recordado en `hn.settings`): `Consejo` (tip + "Cómo encarar" de la cuenca) · `Variantes (3)` ·
+   `Waypoints (12)` · `Referencias` (cartas, guías, planificador en una línea cada una) ·
+   `Del libro` (cita + atribución). Estado por defecto: en escritorio abiertos Consejo y
+   Waypoints, cerrados los demás; en móvil todos abiertos como hoy (a Diego le funciona).
+4. **Teclado en escritorio** (regla 12 de §6 ter): `Esc` cierra la ficha, `/` enfoca la búsqueda,
+   `↑/↓` mueven la selección en la lista y `Enter` abre la ficha. Marcador: `keydown`.
+5. Prueba: en 1366 × 768 con AN12 abierta, sin scrollear se ven cabecera, acciones, tira de meses,
+   rejilla de datos, el consejo y el inicio de la tabla de waypoints.
+
+Marcadores: `hn-col-ficha`, `hn-facts`, `hn-acc`, `keydown`, `sticky`.
 
 ## ▶ W5.1 — arranque que nunca parece colgado (urgente, antes de E2)
 

@@ -59,6 +59,10 @@ need "hn-fab" "$SRC" "#12b botón ◉ centrar / arrancar GPS"
 echo "# W4.4 lista informativa"
 for m in hn-row-title-en hn-count hn-ficha-dock hn-variant-chips; do need "$m" "$SRC" "W4.4 $m"; done
 
+echo "# W4.5 ficha compacta"
+for m in hn-col-ficha hn-facts hn-acc keydown; do need "$m" "$SRC" "W4.5 $m"; done
+need "sticky" "$CSS" "W4.5 cabecera fija"
+
 echo "# W5"
 need "maplibre-gl-worker.mjs" "$SRC/main.ts" "worker de MapLibre fijado"
 need "hn-loading" "$SRC/main.ts" "pantalla de carga se oculta desde main"
