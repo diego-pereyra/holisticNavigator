@@ -339,6 +339,60 @@ y 1366 px, y comprobación de contraste en los tres temas.
 
 ---
 
+## 6 quater. Presupuesto de recursos (objetivo no menor)
+
+Diego fijó dos restricciones duras (2026-10-13): no forzar la máquina donde se compila, y una app
+ultraperformante con los mínimos recursos posibles. Se tratan como criterios de aceptación, no como
+deseos. La decisión de stack que las hace posibles está en [ADR-007](adr/007-web-ligero.md); las
+reglas de abajo valen con cualquier stack.
+
+### Presupuestos (los mide `scripts/budget.sh`; superarlos rompe el build)
+
+| Métrica | Límite |
+|---|---|
+| Transferencia de la primera carga (gzip, sin zonas de teselas) | ≤ 1,2 MB |
+| JS a parsear (bruto) | ≤ 1,5 MB |
+| Arranque frío hasta mapa con posición (móvil medio) | ≤ 1,5 s |
+| Memoria de la pestaña en móvil | ≤ 120 MB |
+| Precache offline completo (sin zonas) | ≤ 6 MB |
+| Catálogo (geojson + índice + facts, gzip) | ≤ 0,5 MB |
+| Zona de teselas descargable | ≤ 150 MB, con tamaño visible antes de descargar |
+| Build de producción | ≤ 5 s, ≤ 300 MB de RAM |
+| Tests | en Node, ≤ 3 s |
+
+### Reglas de rendimiento en tiempo de ejecución
+
+1. **Nada repinta si nada cambió.** La UI se actualiza por señales del store, no por bucles. Prohibido
+   `setInterval` para dibujar; el simulador usa `requestAnimationFrame` y se detiene si la pestaña no
+   está visible (`visibilitychange`).
+2. **El mapa recibe datos, no capas nuevas.** Las fuentes GeoJSON se crean una vez y se actualizan con
+   `setData`; el filtro del catálogo es una expresión `["in", ["get","code"], [...]]`, nunca una
+   reconstrucción de la colección. El catálogo completo se carga una vez y se mantiene en memoria
+   como `Float32Array` de coordenadas por variante para los cálculos (cercanía, navegación).
+3. **GPS con criterio.** `watchPosition` con `maximumAge` 5 s y `enableHighAccuracy` solo en modo
+   Navegar; en Planificar, 30 s y baja precisión. Ningún cálculo pesado (cercanía sobre 2 268
+   variantes) más de una vez cada 10 s o cuando la posición se movió > 0,5 nm.
+4. **Datos compactos.** Coordenadas a 4 decimales (≈ 11 m, suficiente para un libro de rutas
+   oceánicas); facts por capítulo bajo demanda; índice sin campos que la lista no muestra; nada de
+   texto duplicado entre índice y facts.
+5. **Sin dependencias por comodidad.** Cada dependencia nueva se justifica en el commit con su
+   tamaño gzip y por qué no se escribe en 50 líneas. Límite: MapLibre GL JS + `pmtiles` (E10) +
+   herramientas de build.
+6. **Fuentes del sistema**, sin webfonts. Iconos como SVG inline (≤ 20, ≤ 1 KB cada uno), sin
+   librerías de iconos.
+7. **Batería.** Wake Lock solo en Navegar/fondeo/MOB; sin animaciones continuas en Navegar (el
+   pulso de alarma es CSS, pausado al silenciar); el mapa en Navegar no rota salvo en proa arriba.
+
+### Reglas para no forzar la máquina de compilación
+
+- Un solo build a la vez; nunca dev y producción encadenados sin `pkill -f KotlinCompileDaemon`
+  entre medio (mientras exista Gradle). Con ADR-007 aceptado, Gradle desaparece del ciclo Web.
+- Tests en Node o Python, nunca en browser.
+- `free -m` antes de un build pesado; si hay < 2,5 GB disponibles, no se lanza.
+- La extracción de PMTiles y la batimetría se corren en GitHub Actions, nunca en la laptop.
+
+---
+
 ## 7. Fases y orden
 
 | Fase | Objetivo | Épicas del backlog | Resultado observable |

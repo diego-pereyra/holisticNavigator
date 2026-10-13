@@ -18,6 +18,30 @@ Las decisiones de producto están todas tomadas (ver `03-ux-architecture.md §9`
 si hacer algo del backlog: hacelo. Preguntá solo vía `BLOCKERS.md` cuando algo no se puede hacer
 como está escrito.
 
+## ⚠ PAUSA ANTES DE E1 (2026-10-13)
+
+E0 está cerrado (gracias). **No empieces T1.1 `BaseMap.kt`.** Hay una decisión de stack pendiente de
+Diego: [`docs/adr/007-web-ligero.md`](docs/adr/007-web-ligero.md) propone reemplazar la UI
+Compose/Skiko del target Web por un frontend DOM ligero (TypeScript + esbuild + MapLibre GL JS)
+para cumplir los presupuestos de recursos de `03-ux-architecture.md §6 quater`. Mientras Diego
+decide, hacé **solo** esto, en este orden:
+
+1. `tools/build_basemap.py` (parte Python de T1.1 + T10.0: costa, retícula y batimetría Natural
+   Earth → `data/basemap/*.geojson`, límites de tamaño del backlog). Es independiente del stack.
+2. `scripts/budget.sh` que mida el gzip de lo que haya en la distribución actual e imprima la tabla
+   de §6 quater (sin fallar todavía).
+3. Nada más. Si terminás, esperá.
+
+Si Diego acepta ADR-007, tu siguiente trabajo es el plan W1 → W5 del ADR, y después el backlog desde
+E2 con los archivos remapeados como dice el ADR. Si lo rechaza, seguís con T1.1 `BaseMap.kt`.
+
+## Reglas de máquina (siempre)
+
+- Un solo build a la vez. Antes de un build Gradle: `free -m`; con < 2,5 GB disponibles, no se lanza.
+- Después de cada build Gradle: `pkill -f KotlinCompileDaemon`.
+- Tests solo en Node o Python. No intentes levantar browsers headless.
+- Jobs pesados de datos (teselas, batimetría a 10m) van a GitHub Actions, no a la laptop.
+
 ## Tu primera sesión, paso a paso
 
 1. Leé `docs/04-backlog-ux.md` completo. Después `docs/03-ux-architecture.md` §3, §5 y §6 ter.
