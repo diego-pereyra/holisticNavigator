@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { computed, effect, signal } from "./store.ts";
+import { computed, effect, signal, untracked } from "./store.ts";
 
 test("signal guarda y notifica", () => {
   const s = signal(1);
@@ -36,4 +36,20 @@ test("effect corre al inicio y ante cambios; dispose lo detiene", () => {
   stop();
   s.set(2);
   assert.deepEqual(seen, [0, 1]);
+});
+
+test("untracked lee señales sin suscribir el effect", () => {
+  const tracked = signal(0);
+  const ignored = signal(10);
+  const seen: number[] = [];
+  const stop = effect(() => {
+    tracked();
+    seen.push(untracked(() => ignored()));
+  });
+  ignored.set(11);
+  assert.deepEqual(seen, [10]);
+  tracked.set(1);
+  assert.deepEqual(seen, [10, 11]);
+  stop();
+  assert.equal(untracked(() => ignored()), 11);
 });

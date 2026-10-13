@@ -53,6 +53,18 @@ function runTracked<T>(fn: () => T): { value: T; deps: Set<SignalNode> } {
   }
 }
 
+// Ejecuta fn sin registrar dependencias. Útil para leer señales dentro de un
+// effect sin que ese effect se vuelva a disparar por ellas.
+export function untracked<T>(fn: () => T): T {
+  const prev = currentObserver;
+  currentObserver = null;
+  try {
+    return fn();
+  } finally {
+    currentObserver = prev;
+  }
+}
+
 export function computed<T>(fn: () => T): ReadonlySignal<T> {
   const node: SignalNode = { subs: new Set() };
   let value: T;

@@ -29,7 +29,7 @@ if (bootParams.variant) selectedVariant = bootParams.variant;
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
 import type { Map as MlMap, GeoJSONSource, FilterSpecification } from "maplibre-gl";
-import { signal, effect, type Signal } from "../core/store.ts";
+import { signal, effect, untracked, type Signal } from "../core/store.ts";
 import {
   filterEntries,
   monthVerdict,
@@ -639,10 +639,13 @@ function positionLabel(ui: UiState): string {
 // --------------------------------------------------------------- hoja
 
 function renderSheet(ui: UiState, sheet: HTMLElement): void {
+  let cleanup: (() => void)[] = [];
   effect(() => {
     const state = ui.sheet();
     const tab = ui.tab();
     const sel = ui.selected();
+    for (const d of cleanup) d();
+    cleanup = [];
     sheet.className = `hn-sheet hn-sheet-${state}`;
     clear(sheet);
 
@@ -685,59 +688,82 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     const body = el("div", { class: "hn-sheet-body" });
     sheet.append(body);
 
-    if (sel) renderFicha(ui, body, sel.code, sel.chapter);
-    else if (tab === "aqui") renderAqui(ui, body);
-    else if (tab === "rutas") renderRutas(ui, body);
-    else renderTravesia(ui, body);
+    // El cuerpo se arma una vez por cambio de pestaña/ficha/estado de hoja.
+    // Lo que sí depende de la posición o el mes se actualiza con efectos
+    // locales (ver cleanup) que reemplazan solo su nodo, sin tocar el scroll.
+    untracked(() => {
+      if (sel) renderFicha(ui, body, sel.code, sel.chapter);
+      else if (tab === "aqui") renderAqui(ui, body, cleanup);
+      else if (tab === "rutas") renderRutas(ui, body, cleanup);
+      else renderTravesia(ui, body, cleanup);
+    });
   });
 }
 
 // ----------------------------------------------------------- pestaña Aquí
 
-function renderAqui(ui: UiState, body: HTMLElement): void {
-  const month = ui.month();
-  const pos = ui.position();
-  const ctx = pos ? resolveContext(pos.lat, pos.lon, month, ui.basins, ui.variants) : null;
-
+function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
   body.append(el("h2", { class: "hn-h2" }, "Aquí"));
-  const sentence = el("p", { class: "hn-sentence" });
-  sentence.textContent = ctx?.region
-    ? `Estás en ${ctx.region}, en ${MONTH_NAME[month - 1]}.`
-    : pos
-      ? `Estás en alta mar, en ${MONTH_NAME[month - 1]}.`
-      : "Todavía no hay posición.";
-  body.append(sentence);
 
-  if (ctx) body.append(stormCard(ctx, month));
+  const top = el("div", { class: "hn-aqui-top" });
+  body.append(top);
 
-  if (pos) {
-    const st = sunTimes(pos.lat, pos.lon, Date.now());
-    if (st) {
-      body.append(
-        el(
-          "div",
-          { class: "hn-card" },
-          el("div", { class: "hn-card-title" }, "Luz del día (UTC)"),
-          el("div", { class: "hn-sun-row" }, el("span", {}, `↑ ${clock(st.sunriseMs)}`), el("span", {}, `↓ ${clock(st.sunsetMs)}`)),
-        ),
-      );
-    }
-  }
+  cleanup.push(
+    effect(() => {
+      const month = ui.month();
+      const pos = ui.position();
+      const ctx = pos ? resolveContext(pos.lat, pos.lon, month, ui.basins, ui.variants) : null;
+      const nodes: Node[] = [];
 
-  body.append(el("h3", { class: "hn-h3" }, "Rutas que te pasan cerca"));
-  if (!ctx || ctx.nearby.length === 0) {
-    body.append(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm. Activá el GPS o poné tu posición a mano."));
-  } else {
-    const list = el("div", { class: "hn-list" });
-    for (const n of ctx.nearby) {
-      const e = entryOf(ui, n.code);
-      if (e) list.append(routeRow(ui, e, n.distanceNm, n.nearestWp));
-    }
-    body.append(list);
-  }
+      const sentence = el("p", { class: "hn-sentence" });
+      sentence.textContent = ctx?.region
+        ? `Estás en ${ctx.region}, en ${MONTH_NAME[month - 1]}.`
+        : pos
+          ? `Estás en alta mar, en ${MONTH_NAME[month - 1]}.`
+          : "Todavía no hay posición.";
+      nodes.push(sentence);
 
-  const active = ui.active();
-  if (active) renderActive(ui, body, active);
+      if (ctx) nodes.push(stormCard(ctx, month));
+
+      if (pos) {
+        const st = sunTimes(pos.lat, pos.lon, Date.now());
+        if (st) {
+          nodes.push(
+            el(
+              "div",
+              { class: "hn-card" },
+              el("div", { class: "hn-card-title" }, "Luz del día (UTC)"),
+              el("div", { class: "hn-sun-row" }, el("span", {}, `↑ ${clock(st.sunriseMs)}`), el("span", {}, `↓ ${clock(st.sunsetMs)}`)),
+            ),
+          );
+        }
+      }
+
+      nodes.push(el("h3", { class: "hn-h3" }, "Rutas que te pasan cerca"));
+      if (!ctx || ctx.nearby.length === 0) {
+        nodes.push(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm. Activá el GPS o poné tu posición a mano."));
+      } else {
+        const list = el("div", { class: "hn-list" });
+        for (const n of ctx.nearby) {
+          const e = entryOf(ui, n.code);
+          if (e) list.append(routeRow(ui, e, n.distanceNm, n.nearestWp));
+        }
+        nodes.push(list);
+      }
+
+      top.replaceChildren(...nodes);
+    }),
+  );
+
+  const activeSlot = el("div", { class: "hn-aqui-active" });
+  body.append(activeSlot);
+  cleanup.push(
+    effect(() => {
+      const active = ui.active();
+      activeSlot.replaceChildren();
+      if (active) renderActive(ui, activeSlot, active);
+    }),
+  );
 }
 
 function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void {
@@ -869,7 +895,7 @@ function monthBadge(e: IndexEntry, month: number): HTMLElement {
 
 // ---------------------------------------------------------- pestaña Rutas
 
-function renderRutas(ui: UiState, body: HTMLElement): void {
+function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
   body.append(el("h2", { class: "hn-h2" }, "Rutas"));
 
   const search = el("input", { class: "hn-search", type: "search", placeholder: "Puerto, zona o código…" });
@@ -954,7 +980,20 @@ function renderRutas(ui: UiState, body: HTMLElement): void {
   });
 
   buildChips();
-  refresh();
+
+  // La lista se redibuja al cambiar búsqueda, cuenca, importadas o "cerca de mí".
+  // Se reemplaza solo el contenedor de resultados y se conserva el scroll.
+  cleanup.push(
+    effect(() => {
+      ui.imported();
+      ui.region();
+      const near = ui.nearMe();
+      if (near) ui.position();
+      const top = body.scrollTop;
+      untracked(refresh);
+      body.scrollTop = top;
+    }),
+  );
 }
 
 function showImported(ui: UiState, r: ImportedRoute): void {
@@ -1184,23 +1223,36 @@ function monthStrip(ui: UiState, d: RouteDetail): HTMLElement {
 
 // ------------------------------------------------------------ pestaña Travesía
 
-function renderTravesia(ui: UiState, body: HTMLElement): void {
+function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
   body.append(el("h2", { class: "hn-h2" }, "Travesía"));
-  const log = ui.voyage();
 
   const card = el("div", { class: "hn-card" });
   card.append(el("div", { class: "hn-card-title" }, "Bitácora"));
-  if (!log || log.points.length === 0) {
-    card.append(el("p", { class: "hn-muted" }, "Sin puntos todavía. Empezá a grabar con el GPS."));
-  } else {
-    const grid = el("div", { class: "hn-nav-grid" });
-    grid.append(navCell("Puntos", String(log.points.length)), navCell("Recorrido", nm(voyageDistanceNm(log))));
-    card.append(grid);
-  }
+  const counters = el("div");
+  card.append(counters);
   body.append(card);
 
+  cleanup.push(
+    effect(() => {
+      const log = ui.voyage();
+      if (!log || log.points.length === 0) {
+        counters.replaceChildren(el("p", { class: "hn-muted" }, "Sin puntos todavía. Empezá a grabar con el GPS."));
+      } else {
+        const grid = el("div", { class: "hn-nav-grid" });
+        grid.append(navCell("Puntos", String(log.points.length)), navCell("Recorrido", nm(voyageDistanceNm(log))));
+        counters.replaceChildren(grid);
+      }
+    }),
+  );
+
   const actions = el("div", { class: "hn-actions" });
-  const rec = el("button", { class: `hn-btn${ui.recording() ? " hn-btn-primary" : ""}` }, ui.recording() ? "Pausar" : "Grabar");
+  const rec = el("button", { class: "hn-btn" }, ui.recording() ? "Pausar" : "Grabar");
+  cleanup.push(
+    effect(() => {
+      rec.className = `hn-btn${ui.recording() ? " hn-btn-primary" : ""}`;
+      rec.textContent = ui.recording() ? "Pausar" : "Grabar";
+    }),
+  );
   rec.addEventListener("click", () => {
     if (ui.recording()) {
       ui.recording.set(false);
