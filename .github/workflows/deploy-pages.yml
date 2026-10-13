@@ -27,6 +27,8 @@ jobs:
       - run: npm ci --prefix web
       - run: bash scripts/build-web.sh
       - run: bash scripts/budget.sh
+      - name: Verificación mecánica de la especificación
+        run: bash scripts/check-spec.sh
       - name: Smoke test en browser real (bloquea el deploy si la app no arranca)
         run: |
           cd web && npm i --no-save playwright && npx playwright install --with-deps chromium && cd ..

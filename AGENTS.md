@@ -62,6 +62,27 @@ Aceptación de W4.1: todo lo anterior verificado uno por uno en el mensaje del c
 verde; `scripts/build-web.sh` OK; sin ningún id de capa ni color fuera de "Nombres fijos"
 (`grep -oE "#[0-9A-Fa-f]{6}" web/src` solo devuelve colores de la tabla y del mapa base).
 
+## ▶ W4.2 — lo que W4.1 reportó como hecho y no está (verificado por `scripts/check-spec.sh`)
+
+El commit `4edd5df W4.1` se reportó como "aplicado" con los 16 puntos. `scripts/check-spec.sh`
+(verificador mecánico, escrito por Claude, corre también en CI antes del deploy) encuentra **17
+faltantes**. Corré `bash scripts/check-spec.sh` y hacé un solo commit `W4.2 Completar W4.1` hasta
+que imprima `CHECK-SPEC OK`. Lo que falta hoy:
+
+- Capas `my-accuracy` (círculo de precisión) y `nav-to-wp` (línea posición → próximo waypoint, `#00E676`).
+- Color de posición simulada `#FF8F00`; quedan colores inventados `#2ecc71` y `#4aa3df` en el código o el CSS.
+- #3 Simulador real: `requestAnimationFrame`, pausa con `visibilitychange`, velocidades x4/x16/x64.
+- #4 GPX con `<copyright>` y atribución.
+- #5 `selectedVariant` como estado (Seguir, Exportar, Recorrer y tabla de waypoints la usan).
+- #6 `history.replaceState` al seleccionar; leer `?route=` y `?variant=` al abrir.
+- #12 GPS al abrir con `navigator.permissions.query`.
+- #13 Menú de posición con *Usar GPS · Fijar en el mapa · Escribir coordenadas · Apagar*.
+
+**Regla nueva, permanente:** antes de reportar cualquier tarea como hecha, corré
+`bash scripts/check-spec.sh` y pegá su salida completa en el mensaje del commit. Un reporte que
+dice "hecho" sobre algo que `check-spec` marca como FALTA es un reporte falso y se rehace la tarea.
+Cuando una tarea nueva tenga UI, Claude agrega sus marcadores a `check-spec.sh` junto con la tarea.
+
 ## ▶ W5.1 — arranque que nunca parece colgado (urgente, antes de E2)
 
 Síntoma real en el teléfono de Diego (2026-10-13, Pages, commit 280d143): "Cargando carta base…"
