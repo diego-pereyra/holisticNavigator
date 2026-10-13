@@ -1,3 +1,27 @@
+let selectedVariant = "A";
+function updateUrlForSelection(routeCode?: string, variant: string = "A") {
+  try {
+    const sp = new URLSearchParams(location.search);
+    if (routeCode) {
+      sp.set("route", routeCode);
+      sp.set("variant", variant);
+      history.replaceState({}, "", location.pathname + "?" + sp.toString());
+    }
+  } catch {}
+}
+function readUrlParams() {
+  try {
+    const sp = new URLSearchParams(location.search);
+    const r = sp.get("route");
+    const v = sp.get("variant");
+    if (r) {
+      // will be applied after catalog loads? just store
+      (window as any).__hnRoute = r;
+      (window as any).__hnVariant = v || "A";
+    }
+  } catch {}
+}
+readUrlParams();
 // W4 — UI equivalente en DOM (ADR-007, sin framework):
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
