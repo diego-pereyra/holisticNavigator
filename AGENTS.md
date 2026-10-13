@@ -6,14 +6,11 @@ Trabajás en la misma carpeta que Claude (arquitecto). Vos implementás; Claude 
 
 1. Leé `SEMAFORO.md`. Si dice `ESPERAR`, terminá y commiteá lo que tengas a medias y **parate**.
 2. Si dice `ADELANTE`: `git status`. Si hay cambios sin commitear que no son tuyos, esperá.
-3. Tomá **la primera tarea de la cola** del semáforo. Su especificación está en
-   `docs/05-cola-de-trabajo.md` (W4.x, W5.x) o en `docs/04-backlog-ux.md` (T n.m).
-4. Implementala completa. Corré `npm test` (en `web/`) y `bash scripts/build-web.sh`.
-5. Un commit con el nombre de la tarea y, en el mensaje, qué hiciste y qué verificaste.
-   `git push origin main`. El CI corre el smoke test en browser real; Claude revisa el diff.
-6. Borrá la tarea de la cola en `SEMAFORO.md` (commit `SEMAFORO: W4.2 hecha`). Volvé al paso 1.
-7. Cola vacía → escribí `ESPERAR` en la primera línea de `SEMAFORO.md`, commit, push, y reportá a
-   Diego en 5 líneas. No empieces nada más.
+3. `SEMAFORO.md` tiene **una sola tarea**, escrita paso a paso. Hacé exactamente eso.
+4. Corré `npm test` (en `web/`) y `bash scripts/build-web.sh`.
+5. Un commit con el nombre que dice la tarea. `git push origin main`.
+6. **PARÁ.** No vuelvas al paso 1, no busques más tareas, no edites `SEMAFORO.md`. Reportá en
+   3 líneas qué hiciste. Claude escribe la siguiente tarea en `SEMAFORO.md`.
 
 Si algo no se puede hacer como está escrito: anotalo en `BLOCKERS.md` (tarea, qué falla, qué
 proponés), saltá a la siguiente tarea de la cola. No inventes alternativas.
