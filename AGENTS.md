@@ -18,22 +18,29 @@ Las decisiones de producto están todas tomadas (ver `03-ux-architecture.md §9`
 si hacer algo del backlog: hacelo. Preguntá solo vía `BLOCKERS.md` cuando algo no se puede hacer
 como está escrito.
 
-## ⚠ PAUSA ANTES DE E1 (2026-10-13)
+## ▶ AHORA: plan W1 → W5 de ADR-007 (decidido por Diego, 2026-10-13)
 
-E0 está cerrado (gracias). **No empieces T1.1 `BaseMap.kt`.** Hay una decisión de stack pendiente de
-Diego: [`docs/adr/007-web-ligero.md`](docs/adr/007-web-ligero.md) propone reemplazar la UI
-Compose/Skiko del target Web por un frontend DOM ligero (TypeScript + esbuild + MapLibre GL JS)
-para cumplir los presupuestos de recursos de `03-ux-architecture.md §6 quater`. Mientras Diego
-decide, hacé **solo** esto, en este orden:
+E0 cerrado. **ADR-007 está aceptado**: el target Web se reescribe como frontend DOM ligero
+(TypeScript estricto + esbuild + MapLibre GL JS, sin framework). Leé completo
+[`docs/adr/007-web-ligero.md`](docs/adr/007-web-ligero.md) y `03-ux-architecture.md §6 quater`
+(presupuestos). Después ejecutá, en orden y con un commit por paso:
 
-1. `tools/build_basemap.py` (parte Python de T1.1 + T10.0: costa, retícula y batimetría Natural
-   Earth → `data/basemap/*.geojson`, límites de tamaño del backlog). Es independiente del stack.
-2. `scripts/budget.sh` que mida el gzip de lo que haya en la distribución actual e imprima la tabla
-   de §6 quater (sin fallar todavía).
-3. Nada más. Si terminás, esperá.
+| Paso | Commit | Qué |
+|---|---|---|
+| **W1** | `W1 Esqueleto web/ con esbuild y mapa base` | `web/` con `package.json` (solo `esbuild`, `typescript`, `maplibre-gl`, versiones exactas), `tsconfig.json` estricto, `web/src/main.ts`, `web/index.html`, `manifest.webmanifest`, `scripts/build-web.sh` reescrito (esbuild → `web/dist/`), mapa base ADR-005 desde `data/basemap/*.geojson` (si `tools/build_basemap.py` no existe todavía, hacelo primero como parte de W1). Node: `.tools/node/bin`. Aceptación: `scripts/build-web.sh` < 5 s; `web/dist` muestra costa + retícula sin red. |
+| **W2** | `W2 Lógica pura en TypeScript con tests` | `web/src/core/{navigation,kinematics,coords,context,sun,gpx,voyage}.ts` portados de `shared/` y `composeApp/commonMain` con tests `node:test` (`npm test` < 3 s). Mismos casos de aceptación que el backlog (T2.3, T3.4, T9.1, T11.5). |
+| **W3** | `W3 Store reactivo y KeyValueStore` | `core/store.ts` (señales, ~60 líneas, con tests) con las tres entradas; `platform/store.ts` sobre IndexedDB con fallback a localStorage (claves de "Nombres fijos"). |
+| **W4** | `W4 UI equivalente y retiro de Compose` | Barra de contexto, hoja/panel, tab Rutas (lista, búsqueda, chips), ficha v3 completa (§5: Cuándo con tira de meses, variantes, waypoints, cartas, acciones Seguir/Exportar GPX/Recorrer/Enlace), importar GPX/KML/CSV, GPS/manual, bitácora básica. Checklist §8. **En este mismo commit** se borran `composeApp/`, `shared/`, `build.gradle.kts`, `settings.gradle.kts`, `gradle/`, `gradlew*`, `gradle.properties`, `kotlin-js-store/`, `.kotlin/`; `scripts/sync-catalog.sh` copia a `web/public/catalog/`. |
+| **W5** | `W5 Presupuestos y CI` | `scripts/budget.sh` (gzip de `web/dist`; falla si supera §6 quater), `.github/workflows/deploy-pages.yml` apuntando a `web/dist` (sin Java ni Gradle), SW con manifiesto de precache (T1.2) y aviso de versión (T1.3), chip de conexión (T1.4). |
 
-Si Diego acepta ADR-007, tu siguiente trabajo es el plan W1 → W5 del ADR, y después el backlog desde
-E2 con los archivos remapeados como dice el ADR. Si lo rechaza, seguís con T1.1 `BaseMap.kt`.
+Reglas específicas de este plan:
+- **Sin framework ni librerías de UI.** Si creés que lo necesitás, `BLOCKERS.md`.
+- **Nombres fijos** del backlog se respetan igual (ids de capas, colores, claves, umbrales).
+- **Remapeo de archivos** para el resto del backlog (desde E2): `commonMain/X.kt` → `web/src/ui/x.ts`;
+  `shared/.../X.kt` → `web/src/core/x.ts`; `jsMain/Platform.js.kt` → `web/src/platform/*.ts`.
+- Las tareas E1 (T1.1–T1.4) quedan absorbidas por W1 y W5; E3 por W4. Después de W5 seguís con
+  **T2.1** y el orden del backlog.
+- Reportá al cerrar W2 (tests verdes) y al cerrar W4 (checklist §8), con el resumen de cinco líneas.
 
 ## Reglas de máquina (siempre)
 

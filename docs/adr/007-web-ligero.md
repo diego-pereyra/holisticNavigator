@@ -1,6 +1,6 @@
 # ADR-007: Frontend Web ligero (DOM + MapLibre GL JS) en lugar de Compose/Skiko para el target Web
 
-**Estado:** Propuesto — requiere decisión de Diego · **Fecha:** 2026-10-13 · **Fase:** antes de E1
+**Estado:** **Aceptado** (Diego, 2026-10-13: "firme") · **Fecha:** 2026-10-13 · **Fase:** W1–W5, antes de E2
 
 ## Contexto
 
@@ -30,7 +30,7 @@ frontend propio"*. El spike no falló técnicamente; falla contra los objetivos 
 ya decidió que Android e iOS se empaquetan con **Capacitor sobre el bundle Web**: el frontend Web *es*
 la app en los tres targets. No hay segunda UI que mantener.
 
-## Decisión (propuesta)
+## Decisión
 
 1. **El target Web se reescribe como frontend DOM ligero**: TypeScript estricto, **sin framework**
    (módulos ES nativos, un *store* reactivo propio de ~60 líneas, componentes como funciones que
