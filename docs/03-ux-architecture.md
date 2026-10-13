@@ -380,7 +380,12 @@ reglas de abajo valen con cualquier stack.
    herramientas de build.
 6. **Fuentes del sistema**, sin webfonts. Iconos como SVG inline (≤ 20, ≤ 1 KB cada uno), sin
    librerías de iconos.
-7. **Batería.** Wake Lock solo en Navegar/fondeo/MOB; sin animaciones continuas en Navegar (el
+7. **Arranque progresivo, siempre.** El orden de carga es fijo: carta base → mapa visible y pantalla
+   de carga fuera → posición → índice y cuencas → geometría de rutas → facts bajo demanda. Ninguna
+   descarga posterior bloquea una anterior. La pantalla de carga muestra progreso por paso, tiene un
+   máximo de 8 s y escribe en pantalla cualquier error. (Regla añadida el 2026-10-13 tras un
+   arranque bloqueado en Pages; lección: el peso no sirve de nada si el orden es malo.)
+8. **Batería.** Wake Lock solo en Navegar/fondeo/MOB; sin animaciones continuas en Navegar (el
    pulso de alarma es CSS, pausado al silenciar); el mapa en Navegar no rota salvo en proa arriba.
 
 ### Reglas para no forzar la máquina de compilación
