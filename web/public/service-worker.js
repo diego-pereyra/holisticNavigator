@@ -1,4 +1,20 @@
-const HN_CACHE = "hn-__HN_BUILD__";
+const HN_VERSION = "__HN_BUILD__";
+const HN_CACHE = "hn-offline-" + HN_VERSION;
+
+const PRECACHE_URLS = [
+  "./",
+  "./index.html",
+  "./app.css",
+  "./main.js",
+  "./manifest.webmanifest",
+  "./icon.svg",
+  "./basemap/land.geojson",
+  "./basemap/graticule.geojson",
+  "./catalog/index.json",
+  "./catalog/routes.geojson",
+  "./catalog/basins.json"
+];
+
 
 const HN_CORE = [
   "./",
