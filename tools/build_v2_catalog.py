@@ -186,6 +186,70 @@ ERRATA = {
     ("IS13C", "Normanby W"): (-10.575, 142.133),     # libro: 10°34.5'S,142°08.0'E
     ("AT21A", "Devil N"): (5.29, -52.58),            # Isla del Diablo (Guayana Fr.); libro: 15°17.5'N (lat 15 por 5)
     ("AN106B", "Cayman S"): (19.25, -81.35),         # libro arrastró 38°40'N,9°18'W (coordenada de Lisboa)
+    # --- Barrido sistemático: coord. copiada del topónimo vecino/salida ---
+    # El OCR arrastró a un topónimo la coordenada de otro de la misma tabla
+    # (salida o vecino). El valor correcto se ancla al mismo nombre en otra
+    # variante de la misma ruta o en otra ruta del catálogo.
+    ("AN11B", "Terra"): (47.65, -52.5167),            # Terranova; copió 56°24'N,5°29'W (Oban)
+    ("AN11B", "St John’s"): (47.5667, -52.7),         # Terranova; copió 56°05'N,6°35'W (Artach)
+    ("AN22B", "Isleta"): (28.15, -15.3833),           # Canarias; copió 37°04'N,8°08'W (Vilamoura)
+    ("AN22B", "Las Palmas"): (28.1217, -15.4),
+    ("AN24B", "Faial E"): (38.5417, -28.5917),        # Azores; copió 37°04'N,8°09'W (Sagres)
+    ("AN24B", "Horta"): (38.535, -28.6167),
+    ("AN36B", "Gibraltar"): (36.125, -5.383),         # copió 37°44'N,25°39'W (Ponta Delgada)
+    ("AN36B", "Paloma"): (36.0, -5.7083),             # copió 37°41'N,30°50'W (Miguel S)
+    ("AN36C", "Gibraltar"): (36.125, -5.383),         # copió 36°56'N,25°09'W (Vila do Porto)
+    ("AN36C", "Paloma"): (36.0, -5.7083),             # copió 36°55'N,25°00'W (Maria)
+    ("AN37B", "St George’s"): (32.3783, -64.6633),    # Bermuda; copió 32°48'N,17°20'W (Funchal)
+    ("AN37C", "St George’s"): (32.3783, -64.6633),
+    ("AN55B", "St George’s"): (32.3783, -64.6633),    # Bermuda; copió 28°26'N,17°50'W (La Palma)
+    ("AN56B", "Maria S"): (36.9167, -25.1333),        # Azores; copió 28°31'N,16°06'W (Tenerife)
+    ("AN56B", "Vila do Porto"): (36.9383, -25.1483),
+    ("AN56C", "Maria S"): (36.9167, -25.1333),        # Azores; copió 28°40'N,17°45'W (La Palma)
+    ("AN56C", "Vila do Porto"): (36.9383, -25.1483),
+    ("AN57B", "Madeira S"): (32.5833, -16.9),         # Madeira; copió 28°31'N,16°06'W (Tenerife)
+    ("AN57B", "Funchal"): (32.6417, -16.9),
+    ("AN66C", "Estaca"): (27.7833, -17.9),            # El Hierro; copió 16°59'N,23°17'W (Praia)
+    ("AN68C", "Noronha NW"): (-3.8167, -32.405),      # Brasil; copió 14°54'N,23°30'W (Praia)
+    ("AN68C", "Fernando de Noronha"): (-3.8317, -32.405),
+    ("AN87C", "Bermuda E"): (32.3667, -64.6333),      # Bermuda; copió 18°28'N,66°08'W (San Juan)
+    ("AN87C", "St George’s"): (32.3783, -64.6633),
+    ("AN107B", "Cristobal"): (9.3883, -79.9183),      # Panamá; copió 17°03'N,77°08'W (Jamaica)
+    ("AN127B", "Cayman S"): (19.25, -81.35),          # copió 38°40'N,9°18'W (Lisboa)
+    ("AN133B", "Channel S"): (38.6, -9.4),            # Portugal; copió Azores
+    ("AN133B", "Lisbon"): (38.6733, -9.3067),
+    ("AN133C", "Channel S"): (38.6, -9.4),
+    ("AN133C", "Lisbon"): (38.6733, -9.3067),
+    ("AN137B", "Bermuda E"): (32.3667, -64.6333),     # Bermuda; copió 31°10'N,39°22'W
+    ("AN137B", "St George’s"): (32.3783, -64.6633),
+    ("AN145B", "Morehead City"): (34.6783, -76.68),   # Carolina del Norte; copió 18°30'N,64°31'W (Tórtola)
+    ("AN145B", "Lookout"): (34.5617, -76.7),
+    ("AN145C", "Morehead City"): (34.6783, -76.68),   # copió 18°36'N,63°36'W (Anguila)
+    ("AN146B", "Man of War"): (26.635, -77.0117),     # Bahamas; copió 34°41'N,76°41'W (Morehead City)
+    ("AN146B", "Marsh Harbour"): (26.54, -77.0667),
+    ("AN148A", "Cayman S"): (19.25, -81.35),          # copió 38°40'N,9°18'W (Lisboa)
+    ("AN148B", "Morehead City"): (34.6783, -76.68),   # copió 22°16'N,72°22'W (Caicos)
+    ("AN153D", "Alesund W"): (62.5333, 5.0667),       # Noruega; copió 58°43'N,2°56'W (Orcadas)
+    ("AN153D", "Alesund"): (62.525, 5.8333),
+    ("AN157B", "Ammassalik"): (65.5833, -37.5833),    # Groenlandia; copió 57°44'N,13°39'W (Rockall)
+    ("AT15B", "Noronha NW"): (-3.8167, -32.405),      # Brasil; copió 16°59'N,61°46'W (Antigua)
+    ("AT15B", "Fernando de Noronha"): (-3.8317, -32.405),
+    ("PN12B", "San Diego"): (32.6867, -117.23),       # California; copió 29°19'N,118°09'W
+    ("PN25B", "Kiritimati NW"): (2.1, -157.5333),     # Line Islands; copió 22°53'N,109°54'W (Cabo San Lucas)
+    ("PN25B", "Kiritimati W"): (1.975, -157.5),
+    ("PN39B", "Hong Kong"): (22.2917, 114.1667),      # copió 20°34'N,121°11'E (Bashi)
+    ("PN52B", "Macau"): (22.1667, 113.5917),          # copió 14°42'N,119°38'E (Luzón SW)
+    ("PN64B", "Apra"): (13.45, 144.625),              # Guam; copió 18°45'N,122°20'E (Luzón NE)
+    ("PN85B", "Mino W"): (33.85, 134.9833),           # Japón; copió 28°05'N,129°23'E (Koniya)
+    ("PN87B", "Mino W"): (33.85, 134.9833),
+    ("IT12B", "Benoa"): (-8.745, 115.2117),           # Bali; copió 10°22'S,105°36'E (Christmas)
+    ("IS15C", "Darwin"): (-12.5, 130.8667),           # Australia; copió 10°23'S,105°42'E (Christmas)
+    ("IS15C", "Darwin NW"): (-12.3667, 130.7333),
+    ("IS42B", "Victoria"): (-4.625, 55.4583),         # Mahé (Seychelles); copió 10°16'S,56°26'E
+    ("IS63B", "Fremantle W"): (-32.02, 115.6167),     # Australia; copió 29°52'S,31°04'E (Durban)
+    ("IS63B", "Fremantle"): (-32.055, 115.7333),
+    ("MW1", "Port Said"): (31.25, 32.3167),           # Egipto; copió 35°57'N,14°34'E (Malta)
+    ("MW1", "Port Said N"): (31.6167, 32.3167),
 }
 # Nombres que el OCR fundió (dos topones en una celda sin coordenada entre
 # ellos); se separan al nombre correcto que sí casa con su coordenada.

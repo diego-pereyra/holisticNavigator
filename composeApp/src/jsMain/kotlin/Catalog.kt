@@ -52,7 +52,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-const val CATALOG_VERSION = 8
+const val CATALOG_VERSION = 9
 
 private val json = Json { ignoreUnknownKeys = true }
 
