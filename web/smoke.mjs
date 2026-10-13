@@ -13,7 +13,7 @@ page.on("requestfailed", (r) => problems.push(`request failed: ${r.url()} ${r.fa
 page.on("response", (r) => { if (r.status() >= 400) problems.push(`HTTP ${r.status()}: ${r.url()}`); });
 
 await page.goto(url, { waitUntil: "load" });
-const ok = await page.waitForSelector("#hn-loading.done", { timeout: 15_000 }).then(() => true, () => false);
+const ok = await page.waitForSelector("#hn-loading.done", { timeout: 15_000, state: "attached" }).then(() => true, () => false);
 if (!ok) problems.push("la pantalla de carga sigue visible a los 15 s: " + (await page.textContent("#hn-loading").catch(() => "")));
 if (!(await page.$(".hn-context"))) problems.push("no existe .hn-context (la UI no se montó)");
 await page.screenshot({ path: "smoke.png" }).catch(() => undefined);
