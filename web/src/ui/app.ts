@@ -238,7 +238,7 @@ function persist(ui: UiState, key: string, value: string): void {
 function installMapLayers(map: MlMap, routesGeoJson: string): void {
   const empty = featureCollection([]);
   map.addSource("catalog", { type: "geojson", data: JSON.parse(routesGeoJson) as object });
-  for (const id of ["selected", "active", "imported", "voyage", "me"]) {
+  for (const id of ["selected", "active", "imported", "voyage", "me", "navline"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
 
@@ -268,6 +268,12 @@ function installMapLayers(map: MlMap, routesGeoJson: string): void {
     paint: { "line-color": "#4FC3F7", "line-width": 2.5 },
   });
   map.addLayer({
+    id: "nav-to-wp",
+    type: "line",
+    source: "navline",
+    paint: { "line-color": "#00E676", "line-width": 1.5, "line-dasharray": [2, 1.5] },
+  });
+  map.addLayer({
     id: "route-wps",
     type: "circle",
     source: "active",
@@ -286,10 +292,16 @@ function installMapLayers(map: MlMap, routesGeoJson: string): void {
     paint: { "line-color": "#4FC3F7", "line-opacity": 0.6, "line-width": 2.2 },
   });
   map.addLayer({
+    id: "my-accuracy",
+    type: "circle",
+    source: "me",
+    paint: { "circle-radius": 12, "circle-color": ["case", ["==", ["get", "source"], "simulated"], "#FF8F00", ["==", ["get", "source"], "manual"], "#B388FF", "#2979FF"], "circle-opacity": 0.12, "circle-stroke-color": "#2979FF", "circle-stroke-opacity": 0.4, "circle-stroke-width": 0.5 },
+  });
+  map.addLayer({
     id: "my-halo",
     type: "circle",
     source: "me",
-    paint: { "circle-radius": 12, "circle-color": "#2979FF", "circle-opacity": 0.18 },
+    paint: { "circle-radius": 12, "circle-color": ["case", ["==", ["get", "source"], "simulated"], "#FF8F00", ["==", ["get", "source"], "manual"], "#B388FF", "#2979FF"], "circle-opacity": 0.18 },
   });
   map.addLayer({
     id: "my-dot",
@@ -297,7 +309,7 @@ function installMapLayers(map: MlMap, routesGeoJson: string): void {
     source: "me",
     paint: {
       "circle-radius": 5,
-      "circle-color": "#2979FF",
+      "circle-color": ["case", ["==", ["get", "source"], "simulated"], "#FF8F00", ["==", ["get", "source"], "manual"], "#B388FF", "#2979FF"],
       "circle-stroke-color": "#0b1626",
       "circle-stroke-width": 1.5,
     },
