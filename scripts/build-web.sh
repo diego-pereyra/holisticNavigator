@@ -22,6 +22,11 @@ mkdir -p web/dist
   --outfile=web/dist/main.js
 
 cp -R web/public/. web/dist/
+# Worker de MapLibre (archivo aparte, ver main.ts)
+cp web/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs web/dist/
+if grep -q "maplibre-gl-shared.mjs" web/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs; then
+  cp web/node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs web/dist/
+fi
 sed "s/__HN_BUILD__/$SHA/g" web/public/service-worker.js > web/dist/service-worker.js
 
 echo "web/dist listo ($(du -sh web/dist | cut -f1), sw=hn-$SHA)"

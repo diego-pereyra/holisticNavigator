@@ -1,4 +1,4 @@
-import { Map, NavigationControl } from "maplibre-gl";
+import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -55,6 +55,11 @@ export function baseMapStyle(): StyleSpecification {
     ],
   };
 }
+
+// MapLibre 6 corre en un Web Worker servido como archivo aparte (esbuild no lo
+// incluye en el bundle). build-web.sh lo copia a dist/; acá se fija su URL
+// relativa a la base de la app (funciona en Pages bajo /holisticNavigator/).
+setWorkerUrl(new URL("maplibre-gl-worker.mjs", document.baseURI).toString());
 
 const map = new Map({
   container: "map",
