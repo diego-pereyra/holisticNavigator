@@ -108,6 +108,7 @@
   box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
   transition: height 0.22s ease;
   padding-bottom: env(safe-area-inset-bottom);
+  touch-action: pan-y;
 }
 .hn-sheet-peek {
   height: 96px;
@@ -119,17 +120,18 @@
   height: 92vh;
 }
 .hn-handle {
-  height: 18px;
+  height: 44px;
   flex: 0 0 auto;
   position: relative;
   cursor: grab;
+  touch-action: none;
 }
 .hn-handle::after {
   content: "";
   position: absolute;
-  top: 7px;
+  top: 50%;
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   width: 40px;
   height: 4px;
   border-radius: 2px;
@@ -163,6 +165,7 @@
   padding: 4px 14px 24px;
   flex: 1;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
 }
 
 .hn-h2 {
@@ -609,3 +612,5 @@
   }
 }
 .hn-error { color: #e05a4a; font-size: 13px; }
+
+#hn-loading.done { display: none; }

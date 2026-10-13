@@ -28,7 +28,7 @@ if (bootParams.variant) selectedVariant = bootParams.variant;
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
-import type { Map as MlMap, GeoJSONSource } from "maplibre-gl";
+import type { Map as MlMap, GeoJSONSource, FilterSpecification } from "maplibre-gl";
 import { signal, effect, type Signal } from "../core/store.ts";
 import {
   filterEntries,
@@ -139,9 +139,20 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
     navFixes: [],
   };
 
-  installMapLayers(map, deps.routesGeoJson);
+  installMapLayers(map, deps.routesGeoJson, deps.basins);
   wireMap(ui);
   wireGps(ui);
+  let moveTimer: number | undefined;
+  map.on("moveend", () => {
+    if (moveTimer !== undefined) window.clearTimeout(moveTimer);
+    moveTimer = window.setTimeout(() => applyCatalogFilter(ui), 300);
+  });
+  effect(() => {
+    ui.query();
+    ui.region();
+    ui.nearMe();
+    applyCatalogFilter(ui);
+  });
   try {
     navigator.permissions?.query({ name: "geolocation" as PermissionName }).then((p: any) => {
       if (p.state === "granted") wireGpsStart();
@@ -279,19 +290,28 @@ function persist(ui: UiState, key: string, value: string): void {
 
 // --------------------------------------------------------------- capas
 
-function installMapLayers(map: MlMap, routesGeoJson: string): void {
+function installMapLayers(map: MlMap, routesGeoJson: string, basins: Record<string, Basin>): void {
   const empty = featureCollection([]);
   map.addSource("catalog", { type: "geojson", data: JSON.parse(routesGeoJson) as object });
   for (const id of ["selected", "active", "imported", "voyage", "me", "navline"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
+  map.addSource("basins", { type: "geojson", data: basinsFeatureCollection(basins) });
 
   map.addLayer({
     id: "catalog-lines",
     type: "line",
     source: "catalog",
-    filter: ["==", ["geometry-type"], "LineString"],
+    filter: ["==", ["get", "variant"], ""],
     paint: { "line-color": "#4FC3F7", "line-opacity": 0.25, "line-width": 1 },
+  });
+  map.addLayer({
+    id: "basin-label",
+    type: "symbol",
+    source: "basins",
+    maxzoom: 3,
+    layout: { "text-field": ["get", "name"], "text-size": 12 },
+    paint: { "text-color": "#4FC3F7", "text-halo-color": "#0b1626", "text-halo-width": 1.5 },
   });
   map.addLayer({
     id: "imported-lines",
@@ -377,6 +397,54 @@ function featureCollection(features: object[]): object {
   return { type: "FeatureCollection", features };
 }
 
+function basinsFeatureCollection(basins: Record<string, Basin>): object {
+  const features: object[] = [];
+  for (const [name, b] of Object.entries(basins)) {
+    for (const box of b.boxes) {
+      if (box.length < 4) continue;
+      const lon = (box[0]! + box[2]!) / 2;
+      const lat = (box[1]! + box[3]!) / 2;
+      features.push(pointFeature(lon, lat, { name }));
+    }
+  }
+  return featureCollection(features);
+}
+
+function basinAt(ui: UiState, lon: number, lat: number): string | null {
+  for (const [name, b] of Object.entries(ui.basins)) {
+    for (const box of b.boxes) {
+      if (box.length < 4) continue;
+      if (box[0]! <= lon && lon <= box[2]! && box[1]! <= lat && lat <= box[3]!) return name;
+    }
+  }
+  return null;
+}
+
+const CATALOG_EMPTY_FILTER: FilterSpecification = ["==", ["get", "variant"], ""];
+
+function applyCatalogFilter(ui: UiState): void {
+  if (ui.map.getZoom() < 3) {
+    ui.map.setFilter("catalog-lines", CATALOG_EMPTY_FILTER);
+    return;
+  }
+  const c = ui.map.getCenter();
+  let region = basinAt(ui, c.lng, c.lat);
+  if (!region && ui.region()) region = ui.region();
+  if (!region) {
+    ui.map.setFilter("catalog-lines", CATALOG_EMPTY_FILTER);
+    return;
+  }
+  const codes = filterEntries(ui.index, { query: ui.query(), region: ui.region() || region }).map((e) => e.code);
+  const firstByCode = new Map<string, string>();
+  for (const v of ui.variants) if (!firstByCode.has(v.code)) firstByCode.set(v.code, v.variant);
+  const ids: string[] = [];
+  for (const code of codes) {
+    const id = firstByCode.get(code);
+    if (id) ids.push(id);
+  }
+  ui.map.setFilter("catalog-lines", ["in", ["get", "variant"], ["literal", ids]]);
+}
+
 function fitTo(ui: UiState, coords: [number, number][]): void {
   if (coords.length === 0) return;
   let minLon = coords[0]![0];
@@ -451,6 +519,13 @@ function wireMap(ui: UiState): void {
     const f = e.features?.[0];
     const code = f?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
+  });
+  ui.map.on("click", "basin-label", (e) => {
+    const name = e.features?.[0]?.properties?.["name"];
+    if (typeof name === "string") {
+      ui.region.set(name);
+      goTo(ui, "rutas");
+    }
   });
   ui.map.on("mouseenter", "catalog-lines", () => {
     ui.map.getCanvas().style.cursor = "pointer";
@@ -547,7 +622,7 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
 function goTo(ui: UiState, tab: TabName): void {
   ui.selected.set(null);
   ui.tab.set(tab);
-  ui.sheet.set("half");
+  if (ui.sheet() === "peek") ui.sheet.set("half");
 }
 
 function positionLabel(ui: UiState): string {
@@ -572,8 +647,25 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     clear(sheet);
 
     const handle = el("div", { class: "hn-handle" });
-    handle.addEventListener("click", () => {
-      ui.sheet.set(state === "full" ? "half" : state === "half" ? "peek" : "half");
+    let startY = 0;
+    let dragging = false;
+    handle.addEventListener("pointerdown", (ev) => {
+      dragging = true;
+      startY = ev.clientY;
+      handle.setPointerCapture(ev.pointerId);
+    });
+    handle.addEventListener("pointerup", (ev) => {
+      if (!dragging) return;
+      dragging = false;
+      const dy = ev.clientY - startY;
+      if (dy > -24 && dy < 24) return;
+      const order: SheetState[] = ["peek", "half", "full"];
+      const i = order.indexOf(state);
+      const next = dy < 0 ? Math.min(order.length - 1, i + 1) : Math.max(0, i - 1);
+      ui.sheet.set(order[next]!);
+    });
+    handle.addEventListener("pointercancel", () => {
+      dragging = false;
     });
     sheet.append(handle);
 
@@ -918,7 +1010,7 @@ function openRoute(ui: UiState, code: string): void {
   if (!e) return;
   ui.selected.set({ code, chapter: e.chapter });
   updateUrlForSelection(code, selectedVariant);
-  ui.sheet.set("full");
+  if (ui.sheet() === "peek") ui.sheet.set("half");
   drawSelected(ui, code, null);
   const g = firstGeometry(ui, code);
   if (g) fitTo(ui, g.coords);
