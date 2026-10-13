@@ -1161,10 +1161,11 @@ function clock(ms: number): string {
 
 function trackToGpx(name: string, g: Geometry): string {
   const parts = ['<?xml version="1.0" encoding="UTF-8"?>\n<gpx version="1.1" creator="Holistic Navigator">'];
+  parts.push(`<metadata><copyright author="Jimmy & Doina Cornell"><license>World Cruising Routes, 8.ª ed. — uso personal</license></copyright></metadata>`);
   parts.push(`<rte><name>${escapeXml(name)}</name>`);
   for (let i = 0; i < g.coords.length; i++) {
     const c = g.coords[i]!;
-    parts.push(`<rtept lat="${c[1]}" lon="${c[0]}"><name>${escapeXml(g.names[i] ?? "")}</name></rtept>`);
+    parts.push(`<rtept lat="${c[1]}" lon="${c[0]}"><name>${escapeXml(g.names[i] ?? "")}</name><desc>${escapeXml(g.names[i] ?? "")}</desc></rtept>`);
   }
   parts.push("</rte></gpx>");
   return parts.join("");
