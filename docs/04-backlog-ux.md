@@ -430,7 +430,7 @@ y el mapa la dibuja.
 
 ## E8 · Viento y corriente mensual (solo diseño en este ciclo)
 
-### T8.1 ADR-007 "Climatología empaquetada"
+### T8.1 ADR-009 "Pilot charts y clima descargable" — escrita; tareas E8.1–E8.4 y E13.1–E13.2 en el ADR
 **Archivos:** `docs/adr/007-climatology.md` (nuevo)
 **Qué:** proponer fuente abierta (candidatas: medias mensuales ERA5 de viento a 10 m, Copernicus, con
 atribución; climatología de corrientes OSCAR, NASA, dominio público), rejilla 2°, 12 meses, `u/v` en
@@ -601,7 +601,7 @@ seguridad, carta) va antes que el tab Aquí.
 10. T7.1 → T7.3 (avisos NHC reales)
 11. T10.1 → T10.4 (PMTiles por zonas, balizas)
 12. T11.1 → T11.5 (proa arriba, vector, medir, rutas propias, modo noche)
-13. T8.1 (ADR climatología) · **ADR-009 Empaquetado Capacitor** (P-H, decidido; se escribe al cerrar E9)
+13. T8.1 (ADR climatología) · **ADR-010 Empaquetado Capacitor** (P-H, decidido; se escribe al cerrar E9)
 14. **E12 Motor de enrutado** (ADR-008: máscara de tierra, arreglo de rutas que tocan tierra, polar, pronóstico Open-Meteo, isócronas en Web Worker, UI "Optimizar con el viento"). Depende de E8 y E11. Las capas de tiempo (T12.7) se adelantan justo después de E8.
 
 Cada bloque termina con build de producción, prueba offline y prueba móvil (§8 del documento de
