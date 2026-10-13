@@ -404,7 +404,8 @@ reglas de abajo valen con cualquier stack.
 | **P-E Seguir y seguridad** | Capas 1–2 de §6 bis | E9 | ETA, SOG/COG, alarmas, fondeo, MOB, pantalla "Navegando", Wake Lock |
 | **P-F Carta de detalle** | Capa 3 de §6 bis · ADR-005 fase 2 | E10 | Batimetría en el piso, PMTiles por zona, balizas OpenSeaMap |
 | **P-G Herramientas de carta** | Capa 4 de §6 bis | E11 | Proa arriba, vector de rumbo, medir, waypoints y rutas propias editables |
-| **P-H Nativo** | ADR-004 | — | APK Capacitor con servicio en segundo plano para alarmas y track |
+| **P-H Nativo** | ADR-004 / ADR-009 | — | APK Capacitor con servicio en segundo plano para alarmas y track |
+| **P-I Enrutado** | ADR-008 | E12 | Rutas sin tierra, ruta del mes por climatología, ruta óptima con el viento (isócronas), ceñida resuelta |
 
 P-A y P-B pueden ir en paralelo por archivos distintos (datos/ficha vs. motor de contexto), pero
 **E0 va primero**: todo lo demás consume el contrato de datos v3.
