@@ -141,6 +141,10 @@ información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
    cuando hay ruta seleccionada, con scroll propio); el mapa ocupa el resto. Entre 700 y 1100 px:
    una columna de 400 px con lista arriba y ficha abajo al 50 % cada una, scroll propio en cada
    mitad. La lista nunca desaparece al elegir. En móvil se mantiene la hoja con `‹ Rutas`.
+   *Criterio:* es el patrón establecido de las apps de mapas (Google Maps en escritorio: lista a la
+   izquierda, detalle al lado, mapa siempre visible; en móvil, hoja inferior que se despliega) y el
+   de savvy navvy (panel de información de ruta lateral en tablet/escritorio, hoja en teléfono).
+   No inventar otro.
 4. **Variantes como chips** `Todas · A · B · C` encima de la lista cuando hay ruta seleccionada
    (como el panel viejo), además de las filas de variantes dentro de la ficha. Las dos cosas mueven
    `selectedVariant`.
@@ -165,6 +169,10 @@ y referencias para llegar a los waypoints. Commit `W4.5 Ficha compacta`, despué
    `Waypoints (12)` · `Referencias` (cartas, guías, planificador en una línea cada una) ·
    `Del libro` (cita + atribución). Estado por defecto: en escritorio abiertos Consejo y
    Waypoints, cerrados los demás; en móvil todos abiertos como hoy (a Diego le funciona).
+3 bis. **Waypoint seleccionado = waypoint resaltado en la carta** (patrón savvy navvy): tocar una
+   fila de la tabla de waypoints centra la carta en ese punto, lo agranda (`route-wp-selected`,
+   8 px `#FFCC80` con halo) y muestra bajo la fila su posición y la distancia al siguiente waypoint.
+   Tocar un waypoint en la carta selecciona su fila y la trae a la vista.
 4. **Teclado en escritorio** (regla 12 de §6 ter): `Esc` cierra la ficha, `/` enfoca la búsqueda,
    `↑/↓` mueven la selección en la lista y `Enter` abre la ficha. Marcador: `keydown`.
 5. Prueba: en 1366 × 768 con AN12 abierta, sin scrollear se ven cabecera, acciones, tira de meses,

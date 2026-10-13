@@ -60,6 +60,7 @@ echo "# W4.4 lista informativa"
 for m in hn-row-title-en hn-count hn-ficha-dock hn-variant-chips; do need "$m" "$SRC" "W4.4 $m"; done
 
 echo "# W4.5 ficha compacta"
+need "route-wp-selected" "$SRC" "W4.5 waypoint seleccionado en la carta"
 for m in hn-col-ficha hn-facts hn-acc keydown; do need "$m" "$SRC" "W4.5 $m"; done
 need "sticky" "$CSS" "W4.5 cabecera fija"
 
