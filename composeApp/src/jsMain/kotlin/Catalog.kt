@@ -52,7 +52,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
-const val CATALOG_VERSION = 9
+const val CATALOG_VERSION = 10
 
 private val json = Json { ignoreUnknownKeys = true }
 
@@ -351,6 +351,16 @@ fun CatalogOverlay(
         }
     }
 
+    LaunchedEffect(Unit) {
+        try {
+            basinRegions = json.decodeFromString<BasinsDoc>(
+                fetchText("catalog/basins.json?v=$CATALOG_VERSION"),
+            ).regions
+        } catch (t: Throwable) {
+            println("HN: ERR basins.json: ${t.message}")
+        }
+    }
+
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isNarrow = maxWidth < 480.dp
         val panelMaxHeight = maxHeight
@@ -449,7 +459,9 @@ fun CatalogOverlay(
                             route.code.contains(query, true) ||
                             route.title.contains(query, true) ||
                             route.region.contains(query, true) ||
-                            route.ports.any { it.contains(query, true) }
+                            route.from.contains(query, true) ||
+                            route.to.contains(query, true) ||
+                            route.searchNames.any { it.contains(query, true) }
                     byRegion && matches
                 }
                 .sortedWith(
@@ -674,7 +686,7 @@ private fun RouteDetailView(
             )
         }
 
-        val months = detail.monthsMentioned.map { MONTH_ABBR.getOrElse(it - 1) { "$it" } }
+        val months = detail.whenInfo.bestMonths.map { MONTH_ABBR.getOrElse(it - 1) { "$it" } }
         DetailLine("Cuenca", detail.region.ifBlank { "—" })
         DetailLine("Temporada", months.joinToString(", ").ifBlank { "—" })
 
@@ -700,8 +712,9 @@ private fun RouteDetailView(
                 )
             }
         }
-        DetailLine("Waypoints", if (detail.waypointCodes.isEmpty()) "—" else "${detail.waypointCodes.size} (${detail.waypointCodes.take(3).joinToString(", ")}…)")
-        DetailLine("Millas", detail.miles.joinToString(", ").ifBlank { "—" })
+        val wpNames = detail.variants.firstOrNull()?.waypoints?.map { it.name }.orEmpty()
+        DetailLine("Waypoints", if (wpNames.isEmpty()) "—" else "${wpNames.size} (${wpNames.take(3).joinToString(", ")}…)")
+        DetailLine("Millas", detail.variants.map { it.nm }.joinToString(", ").ifBlank { "—" })
 
         if (detail.needsReview) {
             Text(

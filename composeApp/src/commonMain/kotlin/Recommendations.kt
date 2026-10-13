@@ -6,26 +6,33 @@ data class Season(
     val note: String = "",
 )
 
-private val ATL_N = setOf(6, 7, 8, 9, 10, 11)
-private val PAC_N = setOf(5, 6, 7, 8, 9, 10, 11)
-private val S_HALF = setOf(11, 12, 1, 2, 3, 4)
-private val IND_N = setOf(4, 5, 10, 11, 12)
+@Serializable
+data class Basin(
+    val boxes: List<List<Double>> = emptyList(),
+    val nhcBasins: String = "",
+    val rsmc: String = "",
+    val stormMonths: List<Int> = emptyList(),
+)
 
-fun seasonFor(region: String): Season? = when (region) {
-    "Atlántico Norte" -> Season("jun–nov (pico ago–oct)", ATL_N)
-    "Atlántico Tropical" -> Season("jun–nov", ATL_N, "cerca del ecuador, riesgo menor")
-    "Atlántico Sur" -> Season("muy raro", emptySet(), "ciclones casi inexistentes en el Atlántico Sur")
-    "Pacífico Norte" -> Season("may–nov (Este); tifones todo el año (Oeste)", PAC_N)
-    "Pacífico Tropical" -> Season("may–nov", PAC_N)
-    "Pacífico Sur" -> Season("nov–abr", S_HALF)
-    "Índico Norte" -> Season("abr–dic (picos may y oct–nov)", IND_N)
-    "Índico Sur" -> Season("nov–abr", S_HALF)
-    "Índico Tropical" -> Season("nov–abr", S_HALF)
-    "Mar Rojo (norte)", "Mar Rojo (sur)" -> Season("sin ciclones tropicales", emptySet())
-    "Mediterráneo Este", "Mediterráneo Oeste" ->
-        Season("raro (medicanes)", emptySet(), "ocasionales tormentas tipo tropical")
-    else -> null
+@Serializable
+data class BasinsDoc(
+    val schema: Int = 1,
+    val regions: Map<String, Basin> = emptyMap(),
+)
+
+var basinRegions: Map<String, Basin> = emptyMap()
+
+private fun monthSpanLabel(months: List<Int>): String {
+    if (months.isEmpty()) return "sin temporada de ciclones"
+    return "${monthName(months.first())}–${monthName(months.last())}"
 }
+
+fun seasonFor(region: String): Season? {
+    val b = basinRegions[region] ?: return null
+    val months = b.stormMonths.toSet()
+    return Season(monthSpanLabel(b.stormMonths), months, b.rsmc)
+}
+
 
 fun inSeason(season: Season, month: Int): Boolean = month in season.months
 
