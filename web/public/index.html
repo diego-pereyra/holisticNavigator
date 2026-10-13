@@ -30,6 +30,34 @@
     <div class="t">Holistic Navigator</div>
     <div class="s">Cargando carta base…</div>
   </div>
+  <script>
+    // Diagnóstico de arranque en pantalla (temporal, W5.1): sin consola en el teléfono.
+    (function () {
+      var box = document.getElementById("hn-loading");
+      var line = box && box.querySelector(".s");
+      var t0 = Date.now();
+      function say(msg) { if (line) line.textContent = msg; }
+      function fail(msg) {
+        if (!box) return;
+        box.classList.remove("done");
+        var p = document.createElement("div");
+        p.className = "s"; p.style.color = "#ff8a80"; p.style.maxWidth = "90vw"; p.style.textAlign = "center";
+        p.textContent = String(msg).slice(0, 220);
+        box.appendChild(p);
+      }
+      window.addEventListener("error", function (e) { fail("Error: " + (e.message || e.type) + (e.filename ? " @" + e.filename.split("/").pop() + ":" + e.lineno : "")); });
+      window.addEventListener("unhandledrejection", function (e) { var r = e.reason; fail("Promesa: " + (r && r.message ? r.message : r)); });
+      var gl = null; try { gl = document.createElement("canvas").getContext("webgl2"); } catch (x) {}
+      if (!gl) fail("Este navegador no tiene WebGL2: el mapa no puede dibujarse.");
+      var want = ["main.js", "land.geojson", "graticule.geojson", "index.json", "basins.json", "routes.geojson"];
+      var tick = setInterval(function () {
+        if (!box || box.classList.contains("done")) { clearInterval(tick); return; }
+        var done = performance.getEntriesByType("resource").map(function (r) { return r.name.split("/").pop().split("?")[0]; });
+        var st = want.map(function (f) { return (done.indexOf(f) >= 0 ? "✓ " : "… ") + f; }).join("  ");
+        say("Cargando " + Math.round((Date.now() - t0) / 1000) + " s  ·  " + st);
+      }, 1000);
+    })();
+  </script>
   <script type="module" src="main.js"></script>
 </body>
 </html>
