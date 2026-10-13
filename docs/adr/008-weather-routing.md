@@ -105,6 +105,35 @@ Componentes:
    ceñida marcados, y comparación contra la ruta de Cornell ("12 h menos, 310 nm más, viento máx. 28 kn
    vs 34 kn"). Se puede seguir, exportar y recalcular con un toque cuando llega un pronóstico nuevo.
 
+## Capas de tiempo sobre el mapa (misma base o carta de detalle)
+
+El mapa base (ADR-005) y la carta de detalle PMTiles (E10) son capas de MapLibre; el tiempo se
+**mezcla encima** como capas más, entre la carta y las rutas, y es idéntico con cualquier base. No
+hay un "mapa del tiempo" aparte: es el mismo mapa con capas que se encienden.
+
+| Capa (id fijo) | Qué muestra | Cómo se dibuja | Coste |
+|---|---|---|---|
+| `wx-field` | color por intensidad de viento (o altura de ola) | la rejilla del pronóstico se pinta en un `<canvas>` oculto (una celda = un píxel, interpolación bilineal) y se agrega como `ImageSource` con sus 4 esquinas; cambiar la hora = repintar el canvas (< 10 ms) | mínimo |
+| `wx-arrows` | flechas/barbas de viento por celda, giradas por dirección y coloreadas por nudos | `SymbolLayer` sobre una fuente GeoJSON de puntos con `icon-rotate` y `icon-color` data-driven; densidad por zoom | mínimo |
+| `wx-isobars` | isobaras cada 4 hPa | *marching squares* en TS (~80 líneas) sobre la rejilla de presión → `LineLayer` con etiquetas | bajo |
+| `wx-waves` | altura/dirección de ola | igual que `wx-field` / `wx-arrows` con los datos del Marine API | mínimo |
+| `wx-particles` | animación tipo Windy | canvas superpuesto con partículas advectadas; **solo** en modo Planificar, con red, y apagado por defecto (batería) | alto; opcional |
+| `wx-isochrones` | isócronas del enrutado | `LineLayer` desde el Worker, una por paso | mínimo |
+
+Control de tiempo: un **deslizador de hora** en la hoja (0 → 16 días, paso 3 h) que mueve todas las
+capas `wx-*` a la vez y la posición prevista del barco sobre la ruta optimizada. En climatología
+(E8) el deslizador es el **mes de planificación** (T2.5): misma UI, otro campo.
+
+Datos: Open-Meteo no sirve GRIB, sirve puntos; se pide la rejilla de la caja de la travesía con
+varias coordenadas por llamada (1° en océano, 0,5° a < 200 nm de la ruta, cada 3 h, 16 días) y se
+guarda en IndexedDB como `Float32Array` por variable. Una caja Canarias–Caribe a 1° / 3 h pesa
+≈ 0,5 MB comprimida. Es la misma descarga que usa el enrutado: **una descarga, dos usos** (dibujar y
+optimizar). Sin red se dibuja el último pronóstico guardado con su edad visible.
+
+Orden de apilado (ampliación de la tabla "Nombres fijos"): `… detail-* · seamarks · wx-field ·
+wx-waves · wx-isobars · wx-arrows · wx-isochrones · catalog-lines · …`. Las capas `wx-*` nunca
+tapan rutas, posición ni avisos.
+
 ## Datos y licencias
 
 | Dato | Fuente | Licencia | Tamaño |
@@ -136,6 +165,11 @@ Componentes:
 | T12.4 | `core/forecast.ts`: descarga por bbox desde Open-Meteo, IndexedDB, edad, empalme con climatología | sin red usa el último guardado y lo dice |
 | T12.5 | `core/routing/isochrones.ts` + Worker + restricciones + coste de virada | travesía Canarias → Barbados con GFS: ruta en < 5 s en móvil medio; prueba contra qtVlm con la misma polar y GRIB: ETA dentro del 5 % |
 | T12.6 | UI: en la ficha y en Mis rutas, botón "Optimizar con el viento" / "Ruta del mes"; isócronas en el mapa; comparación; recalcular | reglas §6 ter; cancelable; progreso visible |
+| T12.7 | Capas `wx-field` + `wx-arrows` + deslizador de hora (pronóstico) / mes (climatología) | cambiar la hora repinta en < 50 ms; sin red muestra el último pronóstico con edad |
+| T12.8 | `wx-isobars`, `wx-waves`; `wx-particles` opcional solo Planificar + red | isobaras coinciden con la rejilla ±1 hPa; partículas apagadas por defecto |
+
+Nota de orden: T12.7 puede adelantarse a E12 y ejecutarse justo después de E8 (climatología), porque
+solo necesita el campo de viento y el deslizador; el enrutado (T12.5) llega después.
 
 ## Alternativas descartadas
 

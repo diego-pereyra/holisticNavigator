@@ -22,7 +22,7 @@ Convenciones:
 | Cosa | Nombre |
 |---|---|
 | Claves del store | `hn.imported`, `hn.seenHelp`, `hn.position`, `hn.month`, `hn.active`, `hn.voyage.current`, `hn.voyage.archive`, `hn.nhc`, `hn.settings`, `hn.myRoutes`, `hn.tiles.<zona>` |
-| Ids de capas del mapa (orden de abajo arriba) | `background`, `bathy-fill`, `land-fill`, `coast-line`, `graticule-line`, `graticule-label`, `detail-*` (PMTiles), `seamarks`, `catalog-lines`, `route-lines`, `route-active`, `route-wps`, `route-wp-labels`, `voyage-line`, `measure-line`, `cog-vector`, `range-rings`, `nav-to-wp`, `nav-wp-halo`, `nav-wp`, `storms`, `storm-labels`, `my-accuracy`, `my-halo`, `my-dot`, `mob` |
+| Ids de capas del mapa (orden de abajo arriba) | `background`, `bathy-fill`, `land-fill`, `coast-line`, `graticule-line`, `graticule-label`, `detail-*` (PMTiles), `seamarks`, `wx-field`, `wx-waves`, `wx-isobars`, `wx-arrows`, `wx-isochrones`, `catalog-lines`, `route-lines`, `route-active`, `route-wps`, `route-wp-labels`, `voyage-line`, `measure-line`, `cog-vector`, `range-rings`, `nav-to-wp`, `nav-wp-halo`, `nav-wp`, `storms`, `storm-labels`, `my-accuracy`, `my-halo`, `my-dot`, `mob` |
 | Colores | océano `#0b1626` · tierra `#1c2733` · costa `#3a4a5a` · retícula `#17202b` · catálogo `#4FC3F7` α0,25 · ruta seleccionada `#4FC3F7` α0,6 · ruta activa `#4FC3F7` 2,5 px · waypoint `#FFCC80` · navegación `#00E676` · track `#FFD54F` · GPS `#2979FF` · manual `#B388FF` · simulada `#FF8F00` · alarma/MOB `#FF1744` · info `#80CBC4` · texto secundario `#9FB0C0` · mejor época `#2E7D32` · tormentas `#C62828` |
 | Estados | `PositionSource { Gps, Manual, Simulated }` · `PositionStatus { Off, Searching, Fixed, Denied, Unavailable }` · `UiMode { Plan, Navigate }` · `Theme { Day, Night, Red, Auto }` · `SheetState { Peek, Half, Full }` |
 | Composables | `ContextBar`, `Sheet`, `HereTab`, `CatalogTab`, `RouteSheet`, `VoyageTab`, `NavStrip`, `MonthStrip`, `MapControls`, `Help`, `UndoBar`, `AlarmBand` |
@@ -602,7 +602,7 @@ seguridad, carta) va antes que el tab Aquí.
 11. T10.1 → T10.4 (PMTiles por zonas, balizas)
 12. T11.1 → T11.5 (proa arriba, vector, medir, rutas propias, modo noche)
 13. T8.1 (ADR climatología) · **ADR-009 Empaquetado Capacitor** (P-H, decidido; se escribe al cerrar E9)
-14. **E12 Motor de enrutado** (ADR-008: máscara de tierra, arreglo de rutas que tocan tierra, polar, pronóstico Open-Meteo, isócronas en Web Worker, UI "Optimizar con el viento"). Depende de E8 y E11.
+14. **E12 Motor de enrutado** (ADR-008: máscara de tierra, arreglo de rutas que tocan tierra, polar, pronóstico Open-Meteo, isócronas en Web Worker, UI "Optimizar con el viento"). Depende de E8 y E11. Las capas de tiempo (T12.7) se adelantan justo después de E8.
 
 Cada bloque termina con build de producción, prueba offline y prueba móvil (§8 del documento de
 arquitectura).
