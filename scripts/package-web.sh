@@ -5,11 +5,11 @@
 set -uo pipefail
 source "$(dirname "$0")/env.sh"
 
-SRC="$HN_ROOT/composeApp/build/dist/js/productionExecutable"
+SRC="$HN_ROOT/web/dist"
 OUT="$HN_ROOT/build/publish"
 
 if [ "${HN_SKIP_BUILD:-0}" != "1" ]; then
-  "$HN_ROOT/scripts/build-web.sh" jsBrowserDistribution || exit 1
+  "$HN_ROOT/scripts/build-web.sh" || exit 1
 fi
 
 if [ ! -d "$SRC" ]; then
@@ -22,9 +22,7 @@ cp -r "$SRC/." "$OUT/"
 find "$OUT" -name '*.map' -delete
 touch "$OUT/.nojekyll"
 cat > "$OUT/_headers" <<'EOF'
-/*.wasm
-  Cache-Control: public, max-age=31536000, immutable
-/composeApp.js
+/*.js
   Cache-Control: public, max-age=31536000, immutable
 /catalog/*
   Cache-Control: public, max-age=300

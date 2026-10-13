@@ -2,6 +2,10 @@ import { Map, NavigationControl } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
+import { mountApp } from "./ui/app.ts";
+import { loadBasins, loadIndex, loadRoutesGeoJson } from "./platform/catalog.ts";
+import { openStore } from "./platform/store.ts";
+
 const LAND = "basemap/land.geojson";
 const GRATICULE = "basemap/graticule.geojson";
 
@@ -64,10 +68,24 @@ const map = new Map({
 
 map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
 
-map.on("load", () => {
-  const el = document.getElementById("hn-loading");
-  if (el) el.classList.add("done");
-});
+async function boot(): Promise<void> {
+  try {
+    const [index, basins, routesGeoJson, store] = await Promise.all([
+      loadIndex(),
+      loadBasins(),
+      loadRoutesGeoJson(),
+      openStore(),
+    ]);
+    mountApp(map, { index, basins, routesGeoJson, store });
+  } catch (err) {
+    console.error("No pude iniciar la app:", err);
+  } finally {
+    document.getElementById("hn-loading")?.classList.add("done");
+  }
+}
+
+if (map.loaded()) void boot();
+else map.on("load", () => void boot());
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

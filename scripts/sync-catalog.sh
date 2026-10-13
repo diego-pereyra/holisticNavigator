@@ -3,7 +3,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SRC="$ROOT/data/catalog/v3"
-DST="$ROOT/composeApp/src/jsMain/resources/catalog"
+DST="$ROOT/web/public/catalog"
 
 mkdir -p "$DST/facts"
 rm -f "$DST/routes.jsonl" "$DST/route_facts.jsonl"

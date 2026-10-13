@@ -6,6 +6,7 @@ source "$(dirname "$0")/env.sh"
 cd "$HN_ROOT"
 
 python3 tools/build_basemap.py
+bash "$HN_ROOT/scripts/sync-catalog.sh"
 
 SHA="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
 ESBUILD="$HN_ROOT/web/node_modules/.bin/esbuild"
