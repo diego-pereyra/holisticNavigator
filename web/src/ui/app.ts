@@ -247,65 +247,60 @@ function installMapLayers(map: MlMap, routesGeoJson: string): void {
     type: "line",
     source: "catalog",
     filter: ["==", ["geometry-type"], "LineString"],
-    paint: { "line-color": "#2a3b4d", "line-width": ["interpolate", ["linear"], ["zoom"], 1, 0.4, 6, 1.4] },
-  });
-  map.addLayer({
-    id: "catalog-points",
-    type: "circle",
-    source: "catalog",
-    filter: ["==", ["geometry-type"], "Point"],
-    minzoom: 4,
-    paint: { "circle-radius": 1.8, "circle-color": "#33475c" },
+    paint: { "line-color": "#4FC3F7", "line-opacity": 0.25, "line-width": 1 },
   });
   map.addLayer({
     id: "imported-lines",
     type: "line",
     source: "imported",
-    paint: { "line-color": "#9b59b6", "line-width": 2, "line-dasharray": [2, 1.5] },
+    paint: { "line-color": "#B388FF", "line-width": 2, "line-dasharray": [2, 1.5] },
   });
   map.addLayer({
     id: "voyage-line",
     type: "line",
     source: "voyage",
-    paint: { "line-color": "#2ecc71", "line-width": 2.5 },
+    paint: { "line-color": "#FFD54F", "line-width": 2.5 },
   });
   map.addLayer({
-    id: "active-line",
+    id: "route-active",
     type: "line",
     source: "active",
-    paint: { "line-color": "#f0c419", "line-width": 2.5 },
+    paint: { "line-color": "#4FC3F7", "line-width": 2.5 },
   });
   map.addLayer({
-    id: "active-points",
+    id: "route-wps",
     type: "circle",
     source: "active",
     filter: ["==", ["geometry-type"], "Point"],
-    paint: { "circle-radius": 3.2, "circle-color": "#f0c419", "circle-stroke-color": "#0b1626", "circle-stroke-width": 1 },
+    paint: {
+      "circle-radius": 3.2,
+      "circle-color": "#FFCC80",
+      "circle-stroke-color": "#0b1626",
+      "circle-stroke-width": 1,
+    },
   });
   map.addLayer({
-    id: "selected-line",
+    id: "route-lines",
     type: "line",
     source: "selected",
-    paint: { "line-color": "#4aa3df", "line-width": 2.2 },
+    paint: { "line-color": "#4FC3F7", "line-opacity": 0.6, "line-width": 2.2 },
   });
   map.addLayer({
-    id: "selected-points",
-    type: "circle",
-    source: "selected",
-    filter: ["==", ["geometry-type"], "Point"],
-    paint: { "circle-radius": 3.4, "circle-color": "#4aa3df", "circle-stroke-color": "#0b1626", "circle-stroke-width": 1 },
-  });
-  map.addLayer({
-    id: "me-halo",
+    id: "my-halo",
     type: "circle",
     source: "me",
-    paint: { "circle-radius": 12, "circle-color": "#2ecc71", "circle-opacity": 0.18 },
+    paint: { "circle-radius": 12, "circle-color": "#2979FF", "circle-opacity": 0.18 },
   });
   map.addLayer({
-    id: "me-point",
+    id: "my-dot",
     type: "circle",
     source: "me",
-    paint: { "circle-radius": 5, "circle-color": "#2ecc71", "circle-stroke-color": "#0b1626", "circle-stroke-width": 1.5 },
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#2979FF",
+      "circle-stroke-color": "#0b1626",
+      "circle-stroke-width": 1.5,
+    },
   });
 }
 
@@ -343,7 +338,7 @@ function fitTo(ui: UiState, coords: [number, number][]): void {
       [minLon, minLat],
       [maxLon, maxLat],
     ],
-    { padding: { top: 90, bottom: 260, left: 40, right: 40 }, maxZoom: 7, duration: 600 },
+    { padding: { top: 90, bottom: getBottomPadding(ui), left: getLeftPadding(ui), right: 40 }, maxZoom: 7, duration: 600 },
   );
 }
 
@@ -396,14 +391,15 @@ function drawVoyage(ui: UiState, log: VoyageLog | null): void {
 }
 
 function wireMap(ui: UiState): void {
-  ui.map.on("click", "catalog-points", (e) => {
-    const code = e.features?.[0]?.properties?.["code"];
+  ui.map.on("click", "catalog-lines", (e) => {
+    const f = e.features?.[0];
+    const code = f?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
-  ui.map.on("mouseenter", "catalog-points", () => {
+  ui.map.on("mouseenter", "catalog-lines", () => {
     ui.map.getCanvas().style.cursor = "pointer";
   });
-  ui.map.on("mouseleave", "catalog-points", () => {
+  ui.map.on("mouseleave", "catalog-lines", () => {
     ui.map.getCanvas().style.cursor = "";
   });
 }
@@ -585,7 +581,8 @@ function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void
       navCell("Próximo", nav.fix.nextName || `${formatLat(nav.fix.nextLat)} ${formatLon(nav.fix.nextLon)}`),
       navCell("Rumbo", `${Math.round(nav.fix.bearingDeg)}°`),
       navCell("Distancia", nmDecimal(nav.fix.distanceNm)),
-      navCell("Desvío", nmDecimal(nav.fix.xteNm)),
+      navCell("Desvío", xteLabel(nav.fix.xteNm)),
+      navCell("Tramo", `${nav.fix.legIndex + 1} de ${maxLeg(nav.track)}`),
       navCell("Velocidad", nav.kin.sogKn === null ? "—" : `${nav.kin.sogKn.toFixed(1)} kn`),
       navCell("VMG", nav.kin.vmgKn === null ? "—" : `${nav.kin.vmgKn.toFixed(1)} kn`),
       navCell("ETA próximo", nav.kin.etaNextMs === null ? "—" : clock(nav.kin.etaNextMs)),
@@ -636,7 +633,7 @@ function navCell(label: string, value: string): HTMLElement {
   return c;
 }
 
-function activeNav(ui: UiState): { fix: NavFix; kin: Kinematics } | null {
+function activeNav(ui: UiState): { fix: NavFix; kin: Kinematics; track: RouteTrack } | null {
   const a = ui.active();
   const p = ui.position();
   if (!a || !p) return null;
@@ -650,7 +647,19 @@ function activeNav(ui: UiState): { fix: NavFix; kin: Kinematics } | null {
   };
   const fix = navigate(track, p.lat, p.lon);
   if (!fix) return null;
-  return { fix, kin: kinematics(ui.navFixes, fix, remainingToDest(g.coords, fix), Date.now()) };
+  return { fix, kin: kinematics(ui.navFixes, fix, remainingToDest(g.coords, fix), Date.now()), track };
+}
+
+
+function xteLabel(xteNm: number): string {
+  const v = Math.abs(xteNm).toFixed(1).replace('.', ',');
+  if (xteNm > 0) return `${v} nm a estribor`;
+  if (xteNm < 0) return `${v} nm a babor`;
+  return '0,0 nm';
+}
+
+function maxLeg(track: RouteTrack): number {
+  return Math.max(0, track.coords.length - 1);
 }
 
 function remainingToDest(coords: [number, number][], fix: NavFix): number {
@@ -802,7 +811,16 @@ async function importFile(ui: UiState): Promise<void> {
   if (!file) return;
   const route = parseRouteFile(file.name, file.text);
   if (!route) {
-    alert("No pude leer ese archivo. Probá con GPX, KML o CSV con columnas lat/lon.");
+    const msg = el("p", { class: "hn-error" }, "No pude leer ese archivo. Probá con GPX, KML o CSV con columnas lat/lon.");
+    const actions = el("div", { class: "hn-actions" });
+    actions.append(el("button", { class: "hn-btn hn-btn-primary" }, "OK"));
+    const box = el("div", { class: "hn-modal-box" });
+    box.append(el("h3", { class: "hn-h3" }, "Error de importación"), msg, actions);
+    const dialog = el("div", { class: "hn-modal" });
+    dialog.append(box);
+    dialog.addEventListener("click", (ev) => { if (ev.target === dialog) dialog.remove(); });
+    document.body.append(dialog);
+    actions.querySelector("button")!.addEventListener("click", () => dialog.remove());
     return;
   }
   const next = [...ui.imported(), route];
@@ -916,7 +934,7 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
           el("div", { class: "hn-row-sub" }, `${nm(v.nm)}${v.coastal ? " · costera" : ""}`),
         ),
       );
-      if (v.needsReview) item.append(el("span", { class: "hn-tag" }, "revisar"));
+      if (v.needsReview) item.append(el("span", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
       item.addEventListener("click", () => {
         drawSelected(ui, d.code, v.id);
         const g = ui.geometry.get(`${d.code}|${v.id}`);
@@ -953,13 +971,13 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
   if (d.quoteEs || d.quoteEn) {
     const q = el("blockquote", { class: "hn-quote" });
     if (d.quoteEs) q.append(el("p", {}, d.quoteEs));
-    if (d.quoteEn) q.append(el("p", { class: "hn-quote-en" }, d.quoteEn));
+    else if (d.quoteEn) q.append(el("p", { class: "hn-quote-en" }, d.quoteEn));
     if (d.quoteSource) q.append(el("cite", {}, d.quoteSource));
     host.append(q);
   }
 
   if (d.attribution) host.append(el("p", { class: "hn-attrib" }, d.attribution));
-  if (d.needsReview) host.append(el("p", { class: "hn-review" }, "Datos por revisar (no es un error)."));
+  if (d.needsReview) host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
 }
 
 function plainList(title: string, items: string[]): HTMLElement {
@@ -1064,7 +1082,16 @@ function openManualPosition(ui: UiState): void {
   ok.addEventListener("click", () => {
     const parsed = parseCoords(input.value);
     if (!parsed) {
-      alert("No pude leer esas coordenadas.");
+      const msg = el("p", { class: "hn-error" }, "No pude leer esas coordenadas.");
+      const act = el("div", { class: "hn-actions" });
+      act.append(el("button", { class: "hn-btn hn-btn-primary" }, "OK"));
+      const box = el("div", { class: "hn-modal-box" });
+      box.append(el("h3", { class: "hn-h3" }, "Coordenadas inválidas"), msg, act);
+      const dialog = el("div", { class: "hn-modal" });
+      dialog.append(box);
+      dialog.addEventListener("click", (ev) => { if (ev.target === dialog) dialog.remove(); });
+      document.body.append(dialog);
+      act.querySelector("button")!.addEventListener("click", () => dialog.remove());
       return;
     }
     const pos: Position = { lat: parsed.lat, lon: parsed.lon, accuracyM: 0, source: "manual", t: Date.now() };
@@ -1109,4 +1136,14 @@ function trackToGpx(name: string, g: Geometry): string {
 
 function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+function getLeftPadding(_ui: UiState): number {
+  if (typeof window === "undefined") return 40;
+  return window.innerWidth >= 700 ? 400 : 40;
+}
+
+function getBottomPadding(_ui: UiState): number {
+  if (typeof window === "undefined") return 260;
+  return window.innerWidth >= 700 ? 20 : 260;
 }
