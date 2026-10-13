@@ -1,3 +1,20 @@
+# Semáforo (leer ANTES de empezar cada tarea y DESPUÉS de terminarla)
+
+Claude y vos trabajan **en la misma carpeta**. Para no ejecutar instrucciones a medio escribir:
+
+1. **`SEMAFORO.md`** manda. Primera línea `ADELANTE` = ejecutá la cola que lista, en orden.
+   Primera línea `ESPERAR` = Claude está escribiendo instrucciones o tocando archivos: terminá la
+   tarea en curso, commiteá, y **no empieces otra**. Volvé a leerlo cuando termines la actual.
+2. **Antes de empezar una tarea**: `git status`. Si hay cambios sin commitear que no son tuyos,
+   es Claude en medio de algo: ESPERAR aunque el semáforo diga ADELANTE.
+3. **Nunca leas `AGENTS.md` como instrucción en curso** si el semáforo dice ESPERAR: la versión
+   válida es la del último commit (`git show HEAD:AGENTS.md`).
+4. Claude solo toca `AGENTS.md`, `SEMAFORO.md`, `docs/`, `scripts/check-spec.sh`, y los commitea
+   enseguida. Si Claude necesita tocar código (`web/`, `scripts/build-web.sh`), antes pone ESPERAR.
+5. Vos solo tocás lo que la tarea en curso lista. Si una tarea te exige tocar `AGENTS.md` o
+   `check-spec.sh`, no lo hagas: anotalo en `BLOCKERS.md`.
+6. Al terminar la cola del semáforo: ESPERAR, reportá, y no hagas nada más hasta nueva cola.
+
 # EMPEZÁ ACÁ — Big Pickle
 
 ## Qué cambió en este repo (2026-10-13)
