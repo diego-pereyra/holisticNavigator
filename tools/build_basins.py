@@ -22,13 +22,17 @@ PAC_N = [5, 6, 7, 8, 9, 10, 11]
 S_HALF = [11, 12, 1, 2, 3, 4]
 IND_N = [4, 5, 10, 11, 12]
 
+# El orden importa: `resolveContext` (T2.3) devuelve la PRIMERA región cuyas
+# cajas contienen el punto, así que las cuencas más específicas van antes que las
+# generales con las que solapan (p. ej. Atlántico Tropical antes que Atlántico
+# Norte y Pacífico Sur antes que Pacífico Tropical). Ver BLOCKERS.md (T2.3).
 REGIONS = {
-    "Atlántico Norte": {
-        "boxes": [[-100, 8, 30, 82]],
+    "Atlántico Tropical": {
+        "boxes": [[-85, -20, 30, 30]],
         "nhcBasins": "AT", "rsmc": "NHC Miami", "stormMonths": ATL_N,
     },
-    "Atlántico Tropical": {
-        "boxes": [[-85, -45, 30, 45]],
+    "Atlántico Norte": {
+        "boxes": [[-100, 8, 30, 82]],
         "nhcBasins": "AT", "rsmc": "NHC Miami", "stormMonths": ATL_N,
     },
     "Atlántico Sur": {
@@ -39,13 +43,13 @@ REGIONS = {
         "boxes": [[100, 0, 180, 70], [-180, 0, -70, 70]],
         "nhcBasins": "EP,CP", "rsmc": "JTWC / JMA", "stormMonths": PAC_N,
     },
-    "Pacífico Tropical": {
-        "boxes": [[120, -45, 180, 60], [-180, -45, -60, 60]],
-        "nhcBasins": "EP,CP", "rsmc": "JTWC / JMA", "stormMonths": PAC_N,
-    },
     "Pacífico Sur": {
         "boxes": [[120, -60, 180, 5], [-180, -60, -60, 5]],
         "nhcBasins": "", "rsmc": "RSMC Nadi (Fiji)", "stormMonths": S_HALF,
+    },
+    "Pacífico Tropical": {
+        "boxes": [[120, -45, 180, 60], [-180, -45, -60, 60]],
+        "nhcBasins": "EP,CP", "rsmc": "JTWC / JMA", "stormMonths": PAC_N,
     },
     "Índico Norte": {
         "boxes": [[25, 0, 110, 35]],

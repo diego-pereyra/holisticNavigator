@@ -1,13 +1,13 @@
 {
  "schema": 1,
  "regions": {
-  "Atlántico Norte": {
+  "Atlántico Tropical": {
    "boxes": [
     [
-     -100,
-     8,
+     -85,
+     -20,
      30,
-     82
+     30
     ]
    ],
    "nhcBasins": "AT",
@@ -21,13 +21,13 @@
     11
    ]
   },
-  "Atlántico Tropical": {
+  "Atlántico Norte": {
    "boxes": [
     [
-     -85,
-     -45,
+     -100,
+     8,
      30,
-     45
+     82
     ]
    ],
    "nhcBasins": "AT",
@@ -81,6 +81,32 @@
     11
    ]
   },
+  "Pacífico Sur": {
+   "boxes": [
+    [
+     120,
+     -60,
+     180,
+     5
+    ],
+    [
+     -180,
+     -60,
+     -60,
+     5
+    ]
+   ],
+   "nhcBasins": "",
+   "rsmc": "RSMC Nadi (Fiji)",
+   "stormMonths": [
+    11,
+    12,
+    1,
+    2,
+    3,
+    4
+   ]
+  },
   "Pacífico Tropical": {
    "boxes": [
     [
@@ -106,32 +132,6 @@
     9,
     10,
     11
-   ]
-  },
-  "Pacífico Sur": {
-   "boxes": [
-    [
-     120,
-     -60,
-     180,
-     5
-    ],
-    [
-     -180,
-     -60,
-     -60,
-     5
-    ]
-   ],
-   "nhcBasins": "",
-   "rsmc": "RSMC Nadi (Fiji)",
-   "stormMonths": [
-    11,
-    12,
-    1,
-    2,
-    3,
-    4
    ]
   },
   "Índico Norte": {
