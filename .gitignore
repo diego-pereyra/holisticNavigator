@@ -9,6 +9,12 @@ out/
 # --- Kotlin/JS ---
 node_modules/
 
+# --- Web (ADR-007) ---
+web/dist/
+web/public/basemap/
+web/public/catalog/
+web/public/sw-manifest.json
+
 # --- Catálogo generado (se reconstruye con scripts/sync-catalog.sh) ---
 composeApp/src/jsMain/resources/catalog/
 

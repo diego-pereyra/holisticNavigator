@@ -1,17 +1,26 @@
 #!/bin/bash
-# Build liviano para WSL: compila y empaqueta el target Web sin daemon residual.
-# Uso:  scripts/build-web.sh [tarea-gradle]
-set -uo pipefail
+# Build del frontend Web ligero (ADR-007): esbuild → web/dist/. Sin Gradle ni daemon.
+# Uso: scripts/build-web.sh
+set -euo pipefail
 source "$(dirname "$0")/env.sh"
-
-TASK="${1:-jsBrowserDevelopmentExecutableDistribution}"
-
 cd "$HN_ROOT"
-"$(dirname "$0")/sync-catalog.sh"
-gradle ":composeApp:$TASK" --no-daemon
-STATUS=$?
 
-pkill -f "KotlinCompileDaemon" 2>/dev/null
-echo "memoria tras build:"
-free -m | head -2
-exit $STATUS
+python3 tools/build_basemap.py
+
+SHA="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
+ESBUILD="$HN_ROOT/web/node_modules/.bin/esbuild"
+if [ ! -x "$ESBUILD" ]; then
+  echo "falta esbuild: corré 'npm ci' en web/ (usá .tools/node)." >&2
+  exit 1
+fi
+
+rm -rf web/dist
+mkdir -p web/dist
+
+"$ESBUILD" web/src/main.ts --bundle --minify --format=esm --target=es2020 \
+  --outfile=web/dist/main.js
+
+cp -R web/public/. web/dist/
+sed "s/__HN_BUILD__/$SHA/g" web/public/service-worker.js > web/dist/service-worker.js
+
+echo "web/dist listo ($(du -sh web/dist | cut -f1), sw=hn-$SHA)"

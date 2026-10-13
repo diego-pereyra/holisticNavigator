@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Holistic Navigator</title>
+  <meta name="description" content="Planificación de travesías oceánicas: rutas de World Cruising Routes, waypoints GPS, navegación y bitácora. Offline.">
+  <meta name="theme-color" content="#0b1626">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <style>
+    :root { color-scheme: dark; }
+    html, body { margin: 0; height: 100%; background: #0b1626; }
+    #map { position: fixed; inset: 0; }
+    #hn-loading {
+      position: fixed; inset: 0; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px;
+      background: #0b1626; color: #e8f1fa;
+      font-family: system-ui, sans-serif; transition: opacity .4s ease;
+    }
+    #hn-loading .t { font-size: 20px; letter-spacing: .06em; }
+    #hn-loading .s { font-size: 12px; color: #6b7f96; }
+    #hn-loading.done { opacity: 0; pointer-events: none; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div id="hn-loading">
+    <div class="t">Holistic Navigator</div>
+    <div class="s">Cargando carta base…</div>
+  </div>
+  <script type="module" src="main.js"></script>
+</body>
+</html>
