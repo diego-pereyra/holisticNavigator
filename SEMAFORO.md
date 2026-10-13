@@ -1,38 +1,34 @@
 ADELANTE
 
-TAREA ÚNICA: W4.6 — móvil usable: sin tela de araña y con la hoja que se arrastra.
+TAREA ÚNICA: W4.7 — la hoja no se reconstruye con cada fix de GPS.
 
-Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
 
-A. Rutas en el mapa (decisión cerrada: nunca todas)
-1. En installMapLayers, catalog-lines arranca con filter ["==", ["get","variant"], ""] (vacío).
-2. Nueva función applyCatalogFilter(ui):
-   - zoom = ui.map.getZoom(). Si zoom < 3 → setFilter("catalog-lines", ["==", ["get","variant"], ""]) y return.
-   - center = ui.map.getCenter(). region = la cuenca de basins.json cuya caja contiene center
-     (si ninguna, la de ui.region() si hay chip; si no, ninguna → filtro vacío).
-   - codes = filterEntries(ui.index, { query: ui.query(), region: ui.region() || region })
-     .map(e => e.code).
-   - ids = por cada code, la PRIMERA variante de ui.variants con ese code (una línea por ruta).
-   - setFilter("catalog-lines", ["in", ["get","variant"], ["literal", ids]]).
-3. Llamar applyCatalogFilter: al montar, en ui.map.on("moveend") con debounce de 300 ms,
-   y cada vez que cambian query, region o nearMe.
-4. Etiquetas de cuenca a zoom < 3: source "basins" (puntos en el centro de cada caja de
-   basins.json, propiedad name) + SymbolLayer "basin-label" (text-field name, 12 px,
-   color #4FC3F7, halo #0b1626, maxzoom 3). Click en basin-label → ui.region.set(name),
-   goTo(ui, "rutas").
-5. La ruta seleccionada se sigue dibujando en route-lines (todas sus variantes) y route-active.
+Causa (verificada en `web/src/ui/app.ts`): `renderSheet` corre dentro de un `effect` que borra y
+reconstruye todo el cuerpo de la hoja. Dentro, `renderRutas` / `renderAqui` leen señales como
+`ui.position`, `ui.month`, `ui.imported`, `ui.query`: el efecto se suscribe a todas. Cada fix del
+GPS (cada pocos segundos) reconstruye la hoja entera → el scroll vuelve arriba ("salta / se
+refresca"). El mismo mecanismo destruye el campo de búsqueda en cada tecla (pierde el foco).
 
-B. Hoja arrastrable y lista scrolleable
-6. En renderSheet, sobre .hn-handle: pointerdown/pointermove/pointerup (setPointerCapture).
-   Al soltar: desplazamiento > 24 px hacia arriba → estado siguiente (peek→half→full);
-   hacia abajo → anterior; menor → sin cambio. CSS .hn-handle { touch-action: none; }
-   y área de arrastre de 44 px de alto.
-7. CSS: .hn-sheet { touch-action: pan-y; } .hn-sheet-body { overflow-y: auto;
-   -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
-   #hn-loading.done { display: none; } (además de opacity 0).
-8. goTo(ui, "rutas") y openRoute ponen la hoja en "half" como mínimo (si está en peek).
+Archivos: `web/src/core/store.ts`, `web/src/ui/app.ts`. Un commit `W4.7: la hoja no se reconstruye con cada fix`.
 
-9. npm test (web/), bash scripts/build-web.sh. Commit "W4.6: rutas por cuenca visible, etiquetas
-   de cuenca, hoja arrastrable". git push origin main. PARÁ.
+1. `store.ts`: agregar `export function untracked<T>(fn: () => T): T` que ejecuta `fn` sin
+   registrar dependencias (guardar y restaurar el "efecto actual" alrededor de la llamada). Test.
+2. `renderSheet`: el `effect` exterior lee **solo** `ui.sheet()`, `ui.tab()` y `ui.selected()`.
+   Todo lo demás (`renderAqui`, `renderRutas`, `renderTravesia`, `renderFicha`) se llama dentro de
+   `untracked(() => …)`.
+3. Dentro de cada pestaña, lo que depende de otras señales se actualiza con **efectos locales que
+   reemplazan solo su nodo**:
+   - `renderAqui`: la tarjeta "Ruta en curso" (rumbo, distancia, ETA) y la frase "Estás en…" se
+     redibujan en un `effect` propio que hace `replaceChildren` de esa tarjeta, no del cuerpo.
+   - `renderRutas`: la lista se redibuja solo al cambiar `query`, `region` o `nearMe` (ya pasa por
+     `refresh()`); `position` se lee con `untracked` salvo cuando `nearMe` está activo, y en ese
+     caso el efecto local guarda `body.scrollTop` antes y lo restaura después.
+   - `renderTravesia`: los contadores (puntos, millas) en un efecto local sobre su tarjeta.
+4. El campo de búsqueda no se destruye nunca: se crea una vez por montaje de la pestaña; `ui.query`
+   se actualiza con `input` sin disparar reconstrucción (ya no la dispara tras el paso 2).
+5. Prueba manual: pestaña Rutas, scrollear hasta la mitad, esperar 30 s con el GPS activo → el
+   scroll no se mueve; escribir en la búsqueda → el teclado no se cierra, el foco se mantiene.
+
+6. npm test (web/), bash scripts/build-web.sh. Commit "W4.7: la hoja no se reconstruye con cada fix". git push origin main.
 
 Cuando termines: PARÁ. Claude escribe la siguiente tarea acá.
