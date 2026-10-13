@@ -1,5 +1,6 @@
 let selectedVariant = "A";
-function updateUrlForSelection(routeCode?: string, variant: string = "A") {
+
+function updateUrlForSelection(routeCode?: string, variant: string = "A"): void {
   try {
     const sp = new URLSearchParams(location.search);
     if (routeCode) {
@@ -9,19 +10,20 @@ function updateUrlForSelection(routeCode?: string, variant: string = "A") {
     }
   } catch {}
 }
-function readUrlParams() {
+
+interface BootParams { route: string | null; variant: string | null; }
+
+function readUrlParams(): BootParams {
   try {
     const sp = new URLSearchParams(location.search);
-    const r = sp.get("route");
-    const v = sp.get("variant");
-    if (r) {
-      // will be applied after catalog loads? just store
-      (window as any).__hnRoute = r;
-      (window as any).__hnVariant = v || "A";
-    }
-  } catch {}
+    return { route: sp.get("route"), variant: sp.get("variant") };
+  } catch {
+    return { route: null, variant: null };
+  }
 }
-readUrlParams();
+
+const bootParams = readUrlParams();
+if (bootParams.variant) selectedVariant = bootParams.variant;
 // W4 — UI equivalente en DOM (ADR-007, sin framework):
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
@@ -140,6 +142,11 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
   installMapLayers(map, deps.routesGeoJson);
   wireMap(ui);
   wireGps(ui);
+  try {
+    navigator.permissions?.query({ name: "geolocation" as PermissionName }).then((p: any) => {
+      if (p.state === "granted") wireGpsStart();
+    }).catch(() => {});
+  } catch {}
 
   const root = el("div", { id: "hn-ui" });
   document.body.appendChild(root);
@@ -147,8 +154,21 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
   const sheet = el("div", { class: "hn-sheet" });
   root.append(contextBar, sheet);
 
+  const fab = el("button", { class: "hn-fab", "aria-label": "Centrar" }, "◉");
+  fab.addEventListener("click", () => {
+    const p = ui.position();
+    if (!p) {
+      wireGpsStart();
+      return;
+    }
+    ui.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(ui.map.getZoom(), 6) });
+  });
+  root.append(fab);
+
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
+
+  if (bootParams.route && entryOf(ui, bootParams.route)) openRoute(ui, bootParams.route);
 
   effect(() => persist(ui, KEYS.month, String(ui.month())));
   effect(() => {
@@ -441,11 +461,10 @@ function wireMap(ui: UiState): void {
 }
 
 function wireGps(ui: UiState): void {
-  let started = false;
+  let stop: (() => void) | null = null;
   const start = (): void => {
-    if (started) return;
-    started = true;
-    watchGps((u) => {
+    if (stop) return;
+    stop = watchGps((u) => {
       ui.gpsStatus.set(u.status);
       if (u.position) {
         ui.position.set(u.position);
@@ -455,6 +474,10 @@ function wireGps(ui: UiState): void {
     });
   };
   (window as unknown as { hnStartGps: () => void }).hnStartGps = start;
+  (window as unknown as { hnStopGps: () => void }).hnStopGps = () => {
+    stop?.();
+    stop = null;
+  };
 }
 
 function pushFix(ui: UiState, p: Position): void {
@@ -496,7 +519,26 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
 
     const chip = el("button", { class: "hn-ctx-pos" });
     chip.append(el("span", { class: `hn-dot hn-dot-${status}` }), el("span", {}, positionLabel(ui)));
-    chip.addEventListener("click", () => openManualPosition(ui));
+    chip.addEventListener("click", () => {
+      const p = ui.position();
+      const s = ui.gpsStatus();
+      if (!p && s === "off") {
+        wireGpsStart();
+        return;
+      }
+      // menú simple
+      const m = el("div", { class: "hn-menu" });
+      const useGps = el("button", { class: "hn-btn" }, "Usar GPS");
+      useGps.addEventListener("click", () => { m.remove(); wireGpsStart(); });
+      const write = el("button", { class: "hn-btn" }, "Escribir coordenadas");
+      write.addEventListener("click", () => { m.remove(); openManualPosition(ui); });
+      const ap = el("button", { class: "hn-btn" }, "Apagar");
+      ap.addEventListener("click", () => { m.remove(); ui.position.set(null); ui.gpsStatus.set("off"); (window as unknown as { hnStopGps?: () => void }).hnStopGps?.(); });
+      m.append(useGps, write, ap);
+      document.body.appendChild(m);
+      const rm = (ev: Event) => { if (!m.contains(ev.target as Node)) { m.remove(); document.removeEventListener("click", rm); } };
+      setTimeout(() => document.addEventListener("click", rm), 0);
+    });
 
     bar.append(where, when, chip);
   });
@@ -515,6 +557,7 @@ function positionLabel(ui: UiState): string {
   if (s === "searching") return "ubicando…";
   if (s === "denied") return "GPS denegado";
   if (s === "unavailable") return "sin GPS";
+  if (!p && s === "off") return "Usar GPS";
   return "poner posición";
 }
 
@@ -874,6 +917,7 @@ function openRoute(ui: UiState, code: string): void {
   const e = entryOf(ui, code);
   if (!e) return;
   ui.selected.set({ code, chapter: e.chapter });
+  updateUrlForSelection(code, selectedVariant);
   ui.sheet.set("full");
   drawSelected(ui, code, null);
   const g = firstGeometry(ui, code);

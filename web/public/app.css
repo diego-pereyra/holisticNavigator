@@ -557,7 +557,39 @@
   font-size: 11px;
   color: #80CBC4;
 }
-echo "ok"
+
+.hn-fab {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--hn-sheet-h, 96px) + 16px);
+  z-index: 30;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid var(--hn-line);
+  background: var(--hn-panel, #11202e);
+  color: #2979FF;
+  font-size: 24px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.hn-menu {
+  position: fixed;
+  right: 16px;
+  bottom: calc(var(--hn-sheet-h, 96px) + 16px);
+  z-index: 31;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--hn-line);
+  border-radius: 10px;
+  background: var(--hn-panel, #11202e);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+.hn-menu .hn-btn { min-width: 180px; justify-content: flex-start; }
 
 @media (min-width: 700px) {
   .hn-sheet {
