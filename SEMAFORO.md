@@ -1,25 +1,38 @@
 ADELANTE
 
-TAREA ÚNICA: W4.2-GPS — que la app use el GPS al abrir, y botón ◉ para centrar.
+TAREA ÚNICA: W4.6 — móvil usable: sin tela de araña y con la hoja que se arrastra.
 
 Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
 
-1. En mountApp, después de wireGps(ui), agregá:
-     navigator.permissions?.query({ name: "geolocation" as PermissionName })
-       .then((p) => { if (p.state === "granted") wireGpsStart(); })
-       .catch(() => undefined);
-2. En positionLabel: si no hay posición y el estado es "off", devolvé "Usar GPS".
-   En el click del chip de posición (hn-ctx-pos): si no hay posición y el estado es "off",
-   llamá wireGpsStart() en vez de abrir el diálogo de coordenadas. Si hay posición o el GPS
-   está denegado, abrí un menú simple (div class="hn-menu") con 3 botones:
-   "Usar GPS" → wireGpsStart();  "Escribir coordenadas" → openManualPosition(ui);
-   "Apagar" → ui.position.set(null), ui.gpsStatus.set("off") y parar el watch.
-3. Botón flotante: en mountApp creá <button class="hn-fab" aria-label="Centrar">◉</button>,
-   agregalo a root, abajo a la derecha, 56×56 px, por encima de la hoja (CSS en app.css:
-   position: fixed; right: 16px; bottom: calc(var(--hn-sheet-h, 96px) + 16px); z-index 30).
-   Click: si no hay posición → wireGpsStart(); si hay → ui.map.flyTo({ center: [lon, lat],
-   zoom: Math.max(ui.map.getZoom(), 6) }).
-4. Probá: npm test en web/, bash scripts/build-web.sh. Commit "W4.2-GPS: GPS al abrir, chip
-   Usar GPS, menú de posición y botón ◉". git push origin main.
+A. Rutas en el mapa (decisión cerrada: nunca todas)
+1. En installMapLayers, catalog-lines arranca con filter ["==", ["get","variant"], ""] (vacío).
+2. Nueva función applyCatalogFilter(ui):
+   - zoom = ui.map.getZoom(). Si zoom < 3 → setFilter("catalog-lines", ["==", ["get","variant"], ""]) y return.
+   - center = ui.map.getCenter(). region = la cuenca de basins.json cuya caja contiene center
+     (si ninguna, la de ui.region() si hay chip; si no, ninguna → filtro vacío).
+   - codes = filterEntries(ui.index, { query: ui.query(), region: ui.region() || region })
+     .map(e => e.code).
+   - ids = por cada code, la PRIMERA variante de ui.variants con ese code (una línea por ruta).
+   - setFilter("catalog-lines", ["in", ["get","variant"], ["literal", ids]]).
+3. Llamar applyCatalogFilter: al montar, en ui.map.on("moveend") con debounce de 300 ms,
+   y cada vez que cambian query, region o nearMe.
+4. Etiquetas de cuenca a zoom < 3: source "basins" (puntos en el centro de cada caja de
+   basins.json, propiedad name) + SymbolLayer "basin-label" (text-field name, 12 px,
+   color #4FC3F7, halo #0b1626, maxzoom 3). Click en basin-label → ui.region.set(name),
+   goTo(ui, "rutas").
+5. La ruta seleccionada se sigue dibujando en route-lines (todas sus variantes) y route-active.
 
-Cuando termines: PARÁ. No hagas nada más. Claude escribe la siguiente tarea acá.
+B. Hoja arrastrable y lista scrolleable
+6. En renderSheet, sobre .hn-handle: pointerdown/pointermove/pointerup (setPointerCapture).
+   Al soltar: desplazamiento > 24 px hacia arriba → estado siguiente (peek→half→full);
+   hacia abajo → anterior; menor → sin cambio. CSS .hn-handle { touch-action: none; }
+   y área de arrastre de 44 px de alto.
+7. CSS: .hn-sheet { touch-action: pan-y; } .hn-sheet-body { overflow-y: auto;
+   -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+   #hn-loading.done { display: none; } (además de opacity 0).
+8. goTo(ui, "rutas") y openRoute ponen la hoja en "half" como mínimo (si está en peek).
+
+9. npm test (web/), bash scripts/build-web.sh. Commit "W4.6: rutas por cuenca visible, etiquetas
+   de cuenca, hoja arrastrable". git push origin main. PARÁ.
+
+Cuando termines: PARÁ. Claude escribe la siguiente tarea acá.
