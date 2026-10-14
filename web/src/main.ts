@@ -1,5 +1,6 @@
-import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
-import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
+import { Map, NavigationControl, addProtocol, setWorkerUrl } from "maplibre-gl";
+import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
+import { Protocol } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { mountApp, type AppHandle } from "./ui/app.ts";
@@ -16,6 +17,55 @@ const BATHY = "basemap/bathy.geojson";
 const COUNTRIES = "basemap/countries.geojson";
 const CITIES = "basemap/cities.geojson";
 const GRATICULE = "basemap/graticule.geojson";
+
+// Carta de detalle mundial (PMTiles de OSM, E10.1). El archivo `world-z6.pmtiles`
+// lo publica el workflow `tiles.yml` como asset de la release `tiles-latest`.
+const TILES_WORLD_URL =
+  "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles";
+
+const ATTRIBUTION = "© OpenStreetMap contributors · Protomaps · Natural Earth";
+
+// Fuente con los cuatro layers de la carta de detalle, apagados con minzoom para
+// que salgan recién a zoom ≥ 4 (donde se apagan las capas de Natural Earth).
+const DETAIL_LAYERS: LayerSpecification[] = [
+  {
+    id: "detail-water",
+    type: "fill",
+    source: "detail",
+    "source-layer": "water",
+    minzoom: 4,
+    paint: { "fill-color": "#0b1626" },
+  },
+  {
+    id: "detail-earth",
+    type: "fill",
+    source: "detail",
+    "source-layer": "earth",
+    minzoom: 4,
+    paint: { "fill-color": "#1c2733" },
+  },
+  {
+    id: "detail-boundary",
+    type: "line",
+    source: "detail",
+    "source-layer": "boundaries",
+    minzoom: 4,
+    filter: ["==", ["get", "kind"], "country"],
+    paint: { "line-color": "#3a4a5a", "line-width": 0.6 },
+  },
+  {
+    id: "detail-place",
+    type: "symbol",
+    source: "detail",
+    "source-layer": "places",
+    minzoom: 3,
+    layout: {
+      "text-field": ["get", "name"],
+      "text-size": ["match", ["get", "kind"], "country", 12, "region", 11, "locality", 10, 10],
+    },
+    paint: { "text-color": "#9FB0C0", "text-halo-color": "#0b1626", "text-halo-width": 1 },
+  },
+];
 
 // Siete tonos apagados (índices 1..7 de `mapcolor7`) para que los países se
 // distingan sobre el fondo oscuro sin gritar.
@@ -49,6 +99,7 @@ export function baseMapStyle(): StyleSpecification {
       countries: { type: "geojson", data: COUNTRIES },
       cities: { type: "geojson", data: CITIES },
       graticule: { type: "geojson", data: GRATICULE },
+      detail: { type: "vector", url: "pmtiles://" + TILES_WORLD_URL, maxzoom: 6 },
     },
     layers: [
       {
@@ -78,18 +129,21 @@ export function baseMapStyle(): StyleSpecification {
         id: "country-fill",
         type: "fill",
         source: "countries",
+        maxzoom: 4,
         paint: { "fill-color": fillColor },
       },
       {
         id: "country-line",
         type: "line",
         source: "countries",
+        maxzoom: 4,
         paint: { "line-color": "#3a4a5a", "line-width": 0.6 },
       },
       {
         id: "coast-line",
         type: "line",
         source: "countries",
+        maxzoom: 4,
         paint: { "line-color": "#3a4a5a", "line-width": 0.8 },
       },
       {
@@ -110,11 +164,13 @@ export function baseMapStyle(): StyleSpecification {
         },
         paint: { "text-color": "#44546a" },
       },
+      ...DETAIL_LAYERS,
       {
         id: "country-label",
         type: "symbol",
         source: "countries",
         minzoom: 2,
+        maxzoom: 4,
         layout: { "text-field": ["get", "name"], "text-size": 11 },
         paint: { "text-color": "#6b7f96", "text-halo-color": "#0b1626", "text-halo-width": 1 },
       },
@@ -123,6 +179,7 @@ export function baseMapStyle(): StyleSpecification {
         type: "circle",
         source: "cities",
         minzoom: 3,
+        maxzoom: 4,
         filter: [">=", ["get", "pop_max"], CITY_MIN_POP],
         paint: { "circle-radius": 2, "circle-color": "#9FB0C0" },
       },
@@ -131,7 +188,7 @@ export function baseMapStyle(): StyleSpecification {
         type: "symbol",
         source: "cities",
         minzoom: 3,
-        filter: [">=", ["get", "pop_max"], CITY_MIN_POP],
+        maxzoom: 4,
         layout: { "text-field": ["get", "name"], "text-size": 10 },
         paint: { "text-color": "#9FB0C0", "text-halo-color": "#0b1626", "text-halo-width": 1 },
       },
@@ -144,6 +201,11 @@ export function baseMapStyle(): StyleSpecification {
 // relativa a la base de la app (funciona en Pages bajo /holisticNavigator/).
 setWorkerUrl(new URL("maplibre-gl-worker.mjs", document.baseURI).toString());
 
+// Protocolo pmtiles (E10.1): se registra una sola vez, antes de crear el mapa,
+// para que la fuente `detail` resuelva las URLs `pmtiles://…`.
+const pmtilesProtocol = new Protocol();
+addProtocol("pmtiles", pmtilesProtocol.tile);
+
 const map = new Map({
   container: "map",
   style: baseMapStyle(),
@@ -151,10 +213,18 @@ const map = new Map({
   zoom: 1.2,
   minZoom: 0,
   maxZoom: 12,
-  attributionControl: false,
+  attributionControl: { compact: true, customAttribution: ATTRIBUTION },
 });
 
 map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
+
+// La carta de detalle puede faltar (sin red, o si la release todavía no se
+// publicó): el mapa sigue con el piso y no se le muestra nada al usuario.
+map.on("error", (e) => {
+  const msg = e.error instanceof Error ? e.error.message : String(e.error);
+  if (/pmtiles|world-z6/i.test(msg)) return;
+  console.warn("mapa:", e.error);
+});
 
 // ------------------------------------------------------------------- arranque
 

@@ -1,0 +1,60 @@
+name: Build PMTiles (world z6)
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "tools/tiles/**"
+
+permissions:
+  contents: write
+
+jobs:
+  tiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar pmtiles
+        run: |
+          set -euo pipefail
+          url=$(curl -sL https://api.github.com/repos/protomaps/go-pmtiles/releases/latest \
+            | grep -o 'https://[^"]*go-pmtiles_[^"]*_Linux_x86_64\.tar\.gz' | head -1)
+          echo "binario: $url"
+          curl -sL "$url" -o pmtiles.tar.gz
+          tar xzf pmtiles.tar.gz pmtiles
+          sudo mv pmtiles /usr/local/bin/pmtiles
+          pmtiles version
+
+      - name: Extraer el mundo hasta zoom 6
+        run: |
+          set -euo pipefail
+          for d in 0 1 2; do
+            day=$(date -u -d "-$d day" +%Y%m%d)
+            echo "probando build $day"
+            if pmtiles extract "https://build.protomaps.com/$day.pmtiles" world-z6.pmtiles --maxzoom=6; then
+              echo "built=$day" >> "$GITHUB_ENV"
+              break
+            fi
+          done
+          test -f world-z6.pmtiles
+
+      - name: Escribir tiles.json
+        run: |
+          set -euo pipefail
+          bytes=$(stat -c%s world-z6.pmtiles)
+          sha=$(sha256sum world-z6.pmtiles | cut -d' ' -f1)
+          url="${{ github.server_url }}/${{ github.repository }}/releases/download/tiles-latest/world-z6.pmtiles"
+          printf '{\n  "world": {\n    "url": "%s",\n    "bytes": %s,\n    "sha256": "%s",\n    "built": "%s"\n  }\n}\n' \
+            "$url" "$bytes" "$sha" "$built" > tiles.json
+          cat tiles.json
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: tiles-latest
+          name: "PMTiles (última)"
+          make_latest: false
+          overwrite_files: true
+          files: |
+            world-z6.pmtiles
+            tiles.json
