@@ -56,6 +56,13 @@ import { sunTimes } from "../core/sun.ts";
 import { loadFact } from "../platform/catalog.ts";
 import { beep } from "../platform/sound.ts";
 import { KEYS, type KeyValueStore } from "../platform/store.ts";
+import {
+  deleteZone,
+  downloadZone,
+  listZones,
+  type ZoneHooks,
+  type ZoneState,
+} from "../platform/tiles.ts";
 import { downloadText, pickTextFile } from "../platform/download.ts";
 import { watchGps, type Position, type PositionStatus } from "../platform/position.ts";
 import {
@@ -141,10 +148,12 @@ interface UiState {
   helpSeen: Signal<boolean | null>;
   navFixes: Fix[];
   settings: Settings;
+  zones?: ZoneHooks;
 }
 
 export interface AppDeps {
   store: KeyValueStore;
+  zones?: ZoneHooks;
 }
 
 // El mapa y la UI se montan apenas carga el mapa base; el catálogo llega después
@@ -188,6 +197,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     helpSeen: signal<boolean | null>(null),
     navFixes: [],
     settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS } },
+    zones: deps.zones,
   };
 
   installBaseLayers(map);
@@ -1026,6 +1036,7 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
   );
 
   body.append(alarmsCard(ui));
+  body.append(offlineCard(ui));
 }
 
 // Ayuda de primer uso (UX-1): tarjeta, no modal, máx. cuatro renglones.
@@ -1139,6 +1150,103 @@ function alarmsCard(ui: UiState): HTMLElement {
   );
   card.append(row);
   return card;
+}
+
+// --------------------------------------------------------- Sin conexión (E10.2)
+
+// Panel "Sin conexión" en Aquí: qué se ve sin red y qué zonas de la carta
+// detallada están descargadas. Cada zona se baja a IndexedDB y queda disponible
+// en modo avión.
+function offlineCard(ui: UiState): HTMLElement {
+  const card = el("div", { class: "hn-card" });
+  card.append(el("div", { class: "hn-card-title" }, "Sin conexión"));
+  card.append(offlineRow("Carta base", "siempre"));
+  card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
+
+  const zonesBox = el("div", { class: "hn-offline-zones" });
+  card.append(zonesBox);
+
+  void (async () => {
+    const states = await listZones(ui.store).catch(() => [] as ZoneState[]);
+    const nodes: HTMLElement[] =
+      states.length === 0
+        ? [el("p", { class: "hn-muted" }, "Sin zonas disponibles por ahora.")]
+        : states.map((st) => zoneRow(ui, st));
+    zonesBox.replaceChildren(...nodes);
+  })();
+  return card;
+}
+
+function offlineRow(name: string, info: string): HTMLElement {
+  const row = el("div", { class: "hn-offline-row" });
+  row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info));
+  return row;
+}
+
+function fmtMb(bytes: number): string {
+  return `${Math.round(bytes / 1048576)} MB`;
+}
+
+function fmtDay(date: string): string {
+  const d = new Date(date + "T00:00:00Z");
+  if (Number.isNaN(d.getTime())) return date;
+  return `${d.getUTCDate()} ${(MONTH_NAME[d.getUTCMonth()] ?? "").slice(0, 3)}`;
+}
+
+function zoneRow(ui: UiState, state: ZoneState): HTMLElement {
+  const { id, meta } = state;
+  const row = el("div", { class: "hn-offline-row" });
+  const info = el("span", { class: "hn-offline-info" });
+  const action = el("span", { class: "hn-offline-action" });
+  row.append(el("span", { class: "hn-offline-name" }, meta.nombre), info, action);
+
+  const showAbsent = (): void => {
+    info.textContent = fmtMb(meta.bytes);
+    clear(action);
+    action.append(downloadButton());
+  };
+
+  const showReady = (bytes: number, date?: string): void => {
+    info.textContent = date ? `✓ ${fmtDay(date)} · ${fmtMb(bytes)}` : `✓ ${fmtMb(bytes)}`;
+    clear(action);
+    const del = el("button", { class: "hn-btn", type: "button" }, "Borrar");
+    del.addEventListener("click", () => {
+      void deleteZone(ui.store, id).then(() => {
+        ui.zones?.remove(id);
+        showAbsent();
+      });
+    });
+    action.append(del);
+  };
+
+  const downloadButton = (): HTMLElement => {
+    const btn = el("button", { class: "hn-btn", type: "button" }, "Descargar");
+    btn.addEventListener("click", () => {
+      const conn = (navigator as unknown as { connection?: { type?: string } }).connection;
+      const warning = `Vas a usar datos móviles para bajar ${meta.nombre} (${fmtMb(meta.bytes)}). ¿Seguir?`;
+      if (conn?.type === "cellular" && !window.confirm(warning)) return;
+      clear(action);
+      info.textContent = "0 %";
+      void downloadZone(ui.store, id, (ratio) => {
+        info.textContent = `${Math.round(ratio * 100)} %`;
+      })
+        .then((res) => {
+          ui.zones?.add(id, res.blob, meta);
+          showReady(res.bytes, res.date);
+        })
+        .catch((err) => {
+          console.error("No pude descargar la zona:", err);
+          info.textContent = "no se pudo";
+          clear(action);
+          action.append(downloadButton());
+        });
+    });
+    return btn;
+  };
+
+  if (state.saved) showReady(state.bytes ?? meta.bytes, state.date);
+  else showAbsent();
+  return row;
 }
 
 function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void {

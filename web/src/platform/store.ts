@@ -18,10 +18,19 @@ export interface KeyValueStore {
   get(key: string): Promise<string | null>;
   put(key: string, value: string): Promise<void>;
   remove(key: string): Promise<void>;
+  // Blobs (E10.2): las zonas de la carta de detalle son archivos grandes; se
+  // guardan en el mismo object store que el resto de las claves.
+  putBlob(key: string, blob: Blob): Promise<void>;
+  getBlob(key: string): Promise<Blob | null>;
+  removeBlob(key: string): Promise<void>;
 }
 
 const DB_NAME = "hn";
 const STORE = "kv";
+
+// Cuando no hay IndexedDB, los blobs no caben en localStorage: se guardan en
+// memoria, así la sesión funciona (aunque no sobrevivan a una recarga).
+const blobFallback = new Map<string, Blob>();
 
 function request<T>(req: IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
@@ -78,6 +87,16 @@ function idbStore(db: IDBDatabase): KeyValueStore {
     async remove(key) {
       tx("readwrite").delete(key);
     },
+    async putBlob(key, blob) {
+      tx("readwrite").put(blob, key);
+    },
+    async getBlob(key) {
+      const v = await request<unknown>(tx("readonly").get(key));
+      return v instanceof Blob ? v : null;
+    },
+    async removeBlob(key) {
+      tx("readwrite").delete(key);
+    },
   };
 }
 
@@ -91,6 +110,15 @@ function localStore(): KeyValueStore {
     },
     async remove(key) {
       localStorage.removeItem(key);
+    },
+    async putBlob(key, blob) {
+      blobFallback.set(key, blob);
+    },
+    async getBlob(key) {
+      return blobFallback.get(key) ?? null;
+    },
+    async removeBlob(key) {
+      blobFallback.delete(key);
     },
   };
 }
@@ -106,6 +134,15 @@ function memoryStore(): KeyValueStore {
     },
     async remove(key) {
       map.delete(key);
+    },
+    async putBlob(key, blob) {
+      blobFallback.set(key, blob);
+    },
+    async getBlob(key) {
+      return blobFallback.get(key) ?? null;
+    },
+    async removeBlob(key) {
+      blobFallback.delete(key);
     },
   };
 }

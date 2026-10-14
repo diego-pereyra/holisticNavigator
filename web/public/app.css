@@ -1093,3 +1093,38 @@
 }
 
 #hn-loading.done { display: none; }
+
+/* Panel "Sin conexión" (E10.2): disponibilidad y descarga de zonas. */
+.hn-offline-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 40px;
+  padding: 6px 2px;
+  border-top: 1px solid var(--hn-line);
+  font-size: 14px;
+}
+.hn-offline-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hn-offline-info {
+  flex: 0 0 auto;
+  color: var(--hn-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hn-offline-action {
+  flex: 0 0 auto;
+}
+.hn-offline-action .hn-btn {
+  min-height: 32px;
+  padding: 4px 12px;
+}
+.hn-offline-zones {
+  display: flex;
+  flex-direction: column;
+}

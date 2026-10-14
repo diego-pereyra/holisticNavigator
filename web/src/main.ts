@@ -1,11 +1,22 @@
-import { Map, NavigationControl, addProtocol, setWorkerUrl } from "maplibre-gl";
+import { Map as MlMap, NavigationControl, addProtocol, setWorkerUrl } from "maplibre-gl";
 import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
-import { Protocol } from "pmtiles";
+import { Protocol, PMTiles, FileSource } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { mountApp, type AppHandle } from "./ui/app.ts";
 import { loadBasins, loadIndex, loadRoutesGeoJson } from "./platform/catalog.ts";
 import { openStore, type KeyValueStore } from "./platform/store.ts";
+import {
+  bboxTouches,
+  getZone,
+  loadTilesIndex,
+  zoneLayerIds,
+  zoneLayers,
+  zoneProtocolName,
+  zoneSourceId,
+  type ZoneHooks,
+  type ZoneMeta,
+} from "./platform/tiles.ts";
 
 declare global {
   interface Window {
@@ -208,7 +219,7 @@ setWorkerUrl(new URL("maplibre-gl-worker.mjs", document.baseURI).toString());
 const pmtilesProtocol = new Protocol();
 addProtocol("pmtiles", pmtilesProtocol.tile);
 
-const map = new Map({
+const map = new MlMap({
   container: "map",
   style: baseMapStyle(),
   center: [0, 20],
@@ -227,6 +238,55 @@ map.on("error", (e) => {
   if (/pmtiles|world-z6/i.test(msg)) return;
   console.warn("mapa:", e.error);
 });
+
+// Zonas descargables (E10.2). Cada zona bajada se registra en el protocolo
+// pmtiles como `zone-<id>` y se agrega al mapa como fuente vectorial
+// `detail-<id>` con las capas de detalle; solo se dibuja si el viewport toca su
+// bbox (así una zona del Caribe no hace trabajo estando en el Río de la Plata).
+const zoneBounds = new Map<string, [number, number, number, number]>();
+const registeredZones = new Set<string>();
+
+function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta): void {
+  const name = zoneProtocolName(id);
+  if (!registeredZones.has(name)) {
+    pmtilesProtocol.add(new PMTiles(new FileSource(new File([blob], name))));
+    registeredZones.add(name);
+  }
+  const srcId = zoneSourceId(id);
+  if (!map.getSource(srcId)) {
+    map.addSource(srcId, { type: "vector", url: `pmtiles://${name}`, minzoom: 7, maxzoom: 10 });
+    const before = map.getLayer("country-label") ? "country-label" : undefined;
+    for (const layer of zoneLayers(id)) map.addLayer(layer, before);
+  }
+  zoneBounds.set(id, meta.bbox);
+  updateZoneVisibility();
+}
+
+function removeZoneFromMap(id: string): void {
+  for (const lid of zoneLayerIds(id)) if (map.getLayer(lid)) map.removeLayer(lid);
+  const srcId = zoneSourceId(id);
+  if (map.getSource(srcId)) map.removeSource(srcId);
+  pmtilesProtocol.tiles.delete(zoneProtocolName(id));
+  zoneBounds.delete(id);
+}
+
+function updateZoneVisibility(): void {
+  if (zoneBounds.size === 0) return;
+  const b = map.getBounds();
+  const viewport: [number, number, number, number] = [
+    b.getWest(), b.getSouth(), b.getEast(), b.getNorth(),
+  ];
+  const farEnough = map.getZoom() >= 6.9;
+  for (const [id, box] of zoneBounds) {
+    const visible = farEnough && bboxTouches(viewport, box);
+    for (const lid of zoneLayerIds(id)) {
+      if (map.getLayer(lid)) map.setLayoutProperty(lid, "visibility", visible ? "visible" : "none");
+    }
+  }
+}
+
+const zoneHooks: ZoneHooks = { add: addZoneToMap, remove: removeZoneFromMap };
+map.on("moveend", updateZoneVisibility);
 
 // ------------------------------------------------------------------- arranque
 
@@ -255,6 +315,9 @@ function lazyStore(): KeyValueStore {
     get: (k) => ready.then((s) => s.get(k)),
     put: (k, v) => ready.then((s) => s.put(k, v)),
     remove: (k) => ready.then((s) => s.remove(k)),
+    putBlob: (k, b) => ready.then((s) => s.putBlob(k, b)),
+    getBlob: (k) => ready.then((s) => s.getBlob(k)),
+    removeBlob: (k) => ready.then((s) => s.removeBlob(k)),
   };
 }
 
@@ -281,14 +344,27 @@ async function loadRoutes(app: AppHandle): Promise<void> {
   }
 }
 
+// Al arrancar, registra en el mapa las zonas ya descargadas (E10.2). El índice
+// de zonas queda guardado, así que sin red igual sabemos nombre y bbox.
+async function restoreZones(store: KeyValueStore): Promise<void> {
+  const idx = await loadTilesIndex(store).catch(() => null);
+  const zones = idx?.zones ?? {};
+  for (const [id, meta] of Object.entries(zones)) {
+    const blob = await getZone(store, id);
+    if (blob) addZoneToMap(id, blob, meta);
+  }
+}
+
 function start(): void {
   // El mapa base ya está en pantalla: se monta la UI y se oculta la carga.
   boot.step("base", true);
   boot.hide();
-  const app = mountApp(map, { store: lazyStore() });
+  const store = lazyStore();
+  const app = mountApp(map, { store, zones: zoneHooks });
   window.hnRetryCatalog = () => void loadCatalog(app);
   void loadCatalog(app);
   void loadRoutes(app);
+  void restoreZones(store);
 }
 
 if (map.loaded()) start();
