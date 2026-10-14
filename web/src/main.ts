@@ -12,6 +12,7 @@ declare global {
   }
 }
 
+const BATHY = "basemap/bathy.geojson";
 const COUNTRIES = "basemap/countries.geojson";
 const CITIES = "basemap/cities.geojson";
 const GRATICULE = "basemap/graticule.geojson";
@@ -44,6 +45,7 @@ export function baseMapStyle(): StyleSpecification {
   return {
     version: 8,
     sources: {
+      bathy: { type: "geojson", data: BATHY },
       countries: { type: "geojson", data: COUNTRIES },
       cities: { type: "geojson", data: CITIES },
       graticule: { type: "geojson", data: GRATICULE },
@@ -52,7 +54,25 @@ export function baseMapStyle(): StyleSpecification {
       {
         id: "background",
         type: "background",
-        paint: { "background-color": "#0b1626" },
+        paint: { "background-color": "#15263f" },
+      },
+      {
+        id: "bathy-fill",
+        type: "fill",
+        source: "bathy",
+        paint: {
+          "fill-color": [
+            "match",
+            ["get", "depth"],
+            200, "#13223a",
+            1000, "#0f1d33",
+            2000, "#0c182b",
+            3000, "#0a1425",
+            4000, "#081120",
+            5000, "#060d1a",
+            "#060d1a",
+          ],
+        },
       },
       {
         id: "country-fill",

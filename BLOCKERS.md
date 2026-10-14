@@ -63,3 +63,7 @@ props `name`+`pop_max`, 4 KB gzip. La descarga se cachea en el temporal del sist
 
 **Decisión pendiente:** si preferís que sea `shapely` de verdad, hay que agregarlo
 al entorno/CI; avisame y lo cambio.
+
+## E10.0 · batimetría (resuelto, 2026-10-14)
+
+**Resuelto (E10.0 corregida).** El bloqueo era correcto: redondear decimales no reduce puntos (24,8 MB a 2 decimales). Se resolvió simplificando la geometría con Douglas-Peucker (`simplify`, sin dependencias) en `tools/build_basemap.py`: `bathy.geojson` con tol 0.15 → 1 740 148 → 92 274 puntos (5,3 %), **1579 KB bruto / 452 KB gzip** (≤ 2 MB). No hay `50m`/`110m` de bathymetry en NE (HTTP 403), así que la única vía era simplificar los 10m.

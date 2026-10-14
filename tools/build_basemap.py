@@ -15,6 +15,7 @@ para no repetirla en cada build.
 
 Uso: python3 tools/build_basemap.py
 """
+import gzip
 import io
 import json
 import os
@@ -42,6 +43,22 @@ DATASETS = {
         "props": {"name": "name", "pop_max": "pop_max"},
     },
 }
+
+# Batimetría (E10.0). Natural Earth 10m: una capa por franja de profundidad, que
+# se fusionan en un solo archivo con la propiedad `depth` (metros). Sólo existe a
+# 10m (50m/110m no tienen bathymetry), así que se simplifica con Douglas-Peucker.
+PHYS = "https://naciscdn.org/naturalearth/10m/physical/"
+BATHY = [
+    ("ne_10m_bathymetry_K_200", 200),
+    ("ne_10m_bathymetry_J_1000", 1000),
+    ("ne_10m_bathymetry_I_2000", 2000),
+    ("ne_10m_bathymetry_H_3000", 3000),
+    ("ne_10m_bathymetry_G_4000", 4000),
+    ("ne_10m_bathymetry_F_5000", 5000),
+]
+BATHY_TOLS = (0.15, 0.25, 0.4)
+BATHY_MAX = 2 * 1024 * 1024
+BATHY_MIN_BOX = 0.5
 
 
 # --------------------------------------------------------------- descarga
@@ -105,18 +122,53 @@ def read_shp(blob):
         off += 8 + clen * 2
 
 
-def poly_rings(content):
+def poly_rings(content, round_to=2):
     numparts, numpoints = struct.unpack("<ii", content[36:44])
     parts = struct.unpack("<%di" % numparts, content[44:44 + 4 * numparts])
     off = 44 + 4 * numparts
     pts = struct.unpack("<%dd" % (numpoints * 2), content[off:off + 16 * numpoints])
-    coords = [(round(pts[2 * i], 2), round(pts[2 * i + 1], 2)) for i in range(numpoints)]
+    if round_to is None:
+        coords = [(pts[2 * i], pts[2 * i + 1]) for i in range(numpoints)]
+    else:
+        coords = [(round(pts[2 * i], round_to), round(pts[2 * i + 1], round_to)) for i in range(numpoints)]
     rings = []
     for pi in range(numparts):
         start = parts[pi]
         end = parts[pi + 1] if pi + 1 < numparts else numpoints
         rings.append(coords[start:end])
     return rings
+
+
+def simplify(ring, tol):
+    """Douglas-Peucker sobre una lista de (lon, lat). tol en grados."""
+    if len(ring) < 5:
+        return ring
+    def dist(p, a, b):
+        (x, y), (x1, y1), (x2, y2) = p, a, b
+        dx, dy = x2 - x1, y2 - y1
+        if dx == 0 and dy == 0:
+            return ((x - x1) ** 2 + (y - y1) ** 2) ** 0.5
+        t = max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)))
+        px, py = x1 + t * dx, y1 + t * dy
+        return ((x - px) ** 2 + (y - py) ** 2) ** 0.5
+    stack = [(0, len(ring) - 1)]
+    keep = [False] * len(ring)
+    keep[0] = keep[-1] = True
+    while stack:
+        i, j = stack.pop()
+        if j <= i + 1:
+            continue
+        k, dmax = i, 0.0
+        for m in range(i + 1, j):
+            d = dist(ring[m], ring[i], ring[j])
+            if d > dmax:
+                k, dmax = m, d
+        if dmax > tol:
+            keep[k] = True
+            stack.append((i, k))
+            stack.append((k, j))
+    out = [p for p, k in zip(ring, keep) if k]
+    return out if len(out) >= 4 else ring[:1] + [ring[len(ring) // 3], ring[2 * len(ring) // 3]] + ring[-1:]
 
 
 def coerce(value, key):
@@ -158,6 +210,63 @@ def convert(zip_blob, spec):
                     else {"type": "MultiPolygon", "coordinates": [[r] for r in rings]})
         features.append({"type": "Feature", "properties": props, "geometry": geom})
     return {"type": "FeatureCollection", "features": features}
+
+
+# --------------------------------------------------------------- batimetría
+
+def ring_bbox(ring):
+    xs = [p[0] for p in ring]
+    ys = [p[1] for p in ring]
+    return max(xs) - min(xs), max(ys) - min(ys)
+
+
+def load_bathy():
+    """Anillos crudos (sin redondear) de las 6 capas de profundidad."""
+    raw = []
+    for name, depth in BATHY:
+        blob = download(name, PHYS + name + ".zip")
+        with zipfile.ZipFile(io.BytesIO(blob)) as z:
+            shp = z.read(next(n for n in z.namelist() if n.endswith(".shp")))
+        for stype, content in read_shp(shp):
+            if stype != 5:
+                continue
+            rings = poly_rings(content, None)
+            if rings:
+                raw.append((depth, rings))
+    return raw
+
+
+def bathy_geojson(raw, tol):
+    """Fusiona las capas simplificadas; devuelve (geojson, puntos_antes, puntos_despues)."""
+    features = []
+    before = after = 0
+    for depth, rings in raw:
+        out = []
+        for ring in rings:
+            before += len(ring)
+            pts = []
+            for p in simplify(ring, tol):
+                q = (round(p[0], 2), round(p[1], 2))
+                if not pts or pts[-1] != q:
+                    pts.append(q)
+            if len(pts) < 4:
+                continue
+            w, h = ring_bbox(pts)
+            if w < BATHY_MIN_BOX and h < BATHY_MIN_BOX:
+                continue
+            out.append(pts)
+            after += len(pts)
+        if not out:
+            continue
+        geom = ({"type": "Polygon", "coordinates": out[0]} if len(out) == 1
+                else {"type": "MultiPolygon", "coordinates": [[r] for r in out]})
+        features.append({"type": "Feature", "properties": {"depth": depth}, "geometry": geom})
+    return {"type": "FeatureCollection", "features": features}, before, after
+
+
+def gzip_size(path):
+    with open(path, "rb") as f:
+        return len(gzip.compress(f.read(), 9))
 
 
 # --------------------------------------------------------------- retícula
@@ -210,6 +319,19 @@ def main():
         out = os.path.join(DST_DIR, spec["out"])
         write_compact(out, geo)
         sizes.append((spec["out"], os.path.getsize(out), len(geo["features"])))
+
+    # E10.0: batimetría en un solo archivo, simplificada hasta caber en 2 MB.
+    raw = load_bathy()
+    dst = os.path.join(DST_DIR, "bathy.geojson")
+    for tol in BATHY_TOLS:
+        geo, before, after = bathy_geojson(raw, tol)
+        write_compact(dst, geo)
+        size = os.path.getsize(dst)
+        if size <= BATHY_MAX or tol == BATHY_TOLS[-1]:
+            print(f"bathy → bathy.geojson tol={tol} puntos {before}→{after} "
+                  f"({after / before * 100:.1f}%) {size // 1024} KB bruto, "
+                  f"{gzip_size(dst) // 1024} KB gzip")
+            break
 
     grat = graticule()
     write_compact(os.path.join(DST_DIR, "graticule.geojson"), grat)
