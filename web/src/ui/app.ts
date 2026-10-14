@@ -125,6 +125,7 @@ interface UiState {
   routes: Signal<LoadState>;
   position: Signal<Position | null>;
   gpsStatus: Signal<PositionStatus>;
+  gpsStop: (() => void) | null;
   month: Signal<number>;
   tab: Signal<TabName>;
   sheet: Signal<SheetState>;
@@ -171,6 +172,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     routes: signal<LoadState>("loading"),
     position: signal<Position | null>(null),
     gpsStatus: signal<PositionStatus>("off"),
+    gpsStop: null,
     month: signal(currentMonthUtc()),
     tab: signal<TabName>("aqui"),
     sheet: signal<SheetState>("half"),
@@ -202,11 +204,6 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     ui.catalog();
     applyCatalogFilter(ui);
   });
-  try {
-    navigator.permissions?.query({ name: "geolocation" as PermissionName }).then((p: any) => {
-      if (p.state === "granted") wireGpsStart();
-    }).catch(() => {});
-  } catch {}
 
   const root = el("div", { id: "hn-ui" });
   document.body.appendChild(root);
@@ -218,7 +215,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   fab.addEventListener("click", () => {
     const p = ui.position();
     if (!p) {
-      wireGpsStart();
+      startGps(ui);
       return;
     }
     ui.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(ui.map.getZoom(), 6) });
@@ -242,7 +239,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     drawVoyage(ui, ui.voyage());
   });
 
-  void restore(ui);
+  // UX-2: recién después de restaurar se decide arrancar el GPS, para no pisar
+  // una posición manual persistida aunque el permiso esté concedido.
+  void restore(ui).then(() => autoStartGps(ui));
 
   let bootOpened = false;
   return {
@@ -693,10 +692,11 @@ function drawVoyage(ui: UiState, log: VoyageLog | null): void {
 }
 
 function wireGps(ui: UiState): void {
-  let stop: (() => void) | null = null;
   const start = (): void => {
-    if (stop) return;
-    stop = watchGps((u) => {
+    if (ui.gpsStop) return;
+    ui.gpsStop = watchGps((u) => {
+      // UX-2: mientras la posición sea manual, ningún fix de GPS se aplica.
+      if (ui.position()?.source === "manual") return;
       ui.gpsStatus.set(u.status);
       if (u.position) {
         ui.position.set(u.position);
@@ -706,10 +706,12 @@ function wireGps(ui: UiState): void {
     });
   };
   (window as unknown as { hnStartGps: () => void }).hnStartGps = start;
-  (window as unknown as { hnStopGps: () => void }).hnStopGps = () => {
-    stop?.();
-    stop = null;
-  };
+  (window as unknown as { hnStopGps: () => void }).hnStopGps = () => stopGps(ui);
+}
+
+function stopGps(ui: UiState): void {
+  ui.gpsStop?.();
+  ui.gpsStop = null;
 }
 
 function pushFix(ui: UiState, p: Position): void {
@@ -726,6 +728,28 @@ function pushFix(ui: UiState, p: Position): void {
 
 function wireGpsStart(): void {
   (window as unknown as { hnStartGps?: () => void }).hnStartGps?.();
+}
+
+// UX-2: "Usar GPS" cambia de manual a GPS. Descartamos la posición manual (y su
+// persistencia) para que el primer fix del watch la reemplace.
+function startGps(ui: UiState): void {
+  if (ui.position()?.source === "manual") {
+    ui.position.set(null);
+    setSource(ui.map, "me", featureCollection([]));
+    persist(ui, KEYS.position, "");
+  }
+  ui.gpsStatus.set("searching");
+  wireGpsStart();
+}
+
+// Arranque automático al abrir: no si hay una posición manual persistida (UX-2).
+function autoStartGps(ui: UiState): void {
+  if (ui.position()?.source === "manual") return;
+  try {
+    navigator.permissions?.query({ name: "geolocation" as PermissionName }).then((p: any) => {
+      if (p.state === "granted") wireGpsStart();
+    }).catch(() => {});
+  } catch {}
 }
 
 // --------------------------------------------------------- barra de contexto
@@ -755,19 +779,19 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
       const p = ui.position();
       const s = ui.gpsStatus();
       if (!p && s === "off") {
-        wireGpsStart();
+        startGps(ui);
         return;
       }
       // menú simple
       const m = el("div", { class: "hn-menu" });
       const useGps = el("button", { class: "hn-btn" }, "Usar GPS");
-      useGps.addEventListener("click", () => { m.remove(); wireGpsStart(); });
+      useGps.addEventListener("click", () => { m.remove(); startGps(ui); });
       const fix = el("button", { class: "hn-btn" }, "Fijar en el mapa");
       fix.addEventListener("click", () => { m.remove(); armFixOnMap(ui); });
       const write = el("button", { class: "hn-btn" }, "Escribir coordenadas");
       write.addEventListener("click", () => { m.remove(); openManualPosition(ui); });
       const ap = el("button", { class: "hn-btn" }, "Apagar");
-      ap.addEventListener("click", () => { m.remove(); ui.position.set(null); ui.gpsStatus.set("off"); (window as unknown as { hnStopGps?: () => void }).hnStopGps?.(); });
+      ap.addEventListener("click", () => { m.remove(); stopGps(ui); ui.position.set(null); ui.gpsStatus.set("off"); persist(ui, KEYS.position, ""); });
       m.append(useGps, fix, write, ap);
       document.body.appendChild(m);
       const rm = (ev: Event) => { if (!m.contains(ev.target as Node)) { m.remove(); document.removeEventListener("click", rm); } };
@@ -1032,7 +1056,7 @@ function positionCard(ui: UiState): HTMLElement {
   card.append(el("div", { class: "hn-card-title" }, "Tu posición manda"));
   const actions = el("div", { class: "hn-pos-actions" });
   const gps = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Usar GPS");
-  gps.addEventListener("click", () => wireGpsStart());
+  gps.addEventListener("click", () => startGps(ui));
   const fix = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Fijar en el mapa");
   fix.addEventListener("click", () => armFixOnMap(ui));
   const write = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Escribir coordenadas");
@@ -1065,6 +1089,8 @@ function armFixOnMap(ui: UiState): void {
   };
   const onMap = (e: MapMouseEvent): void => {
     const pos: Position = { lat: e.lngLat.lat, lon: e.lngLat.lng, accuracyM: 0, source: "manual", t: Date.now() };
+    // UX-2: la posición manual manda; no dejar el watch del GPS pisándola.
+    stopGps(ui);
     ui.position.set(pos);
     ui.gpsStatus.set("off");
     persist(ui, KEYS.position, JSON.stringify(pos));
@@ -2050,6 +2076,8 @@ function openManualPosition(ui: UiState): void {
       return;
     }
     const pos: Position = { lat: parsed.lat, lon: parsed.lon, accuracyM: 0, source: "manual", t: Date.now() };
+    // UX-2: la posición manual manda; no dejar el watch del GPS pisándola.
+    stopGps(ui);
     ui.position.set(pos);
     ui.gpsStatus.set("off");
     persist(ui, KEYS.position, JSON.stringify(pos));
