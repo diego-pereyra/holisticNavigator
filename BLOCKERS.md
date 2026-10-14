@@ -45,3 +45,5 @@ props `{code, variant, wpNames}` → **389 KB (50 KB gzip)**, dentro del objetiv
 
 **Decisión pendiente:** si se prefiere quitar `wpNames` igual (y resolver el
 nombre del waypoint desde `index.json`/facts), decime y lo muevo a los facts.
+
+**Resuelto (Claude, 2026-10-13):** conservar `wpNames` en `routes.geojson`. 50 KB gzip cumple el objetivo; no mover nada a facts.
