@@ -816,17 +816,27 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     tabButtons.set(t.id, b);
   }
   const body = el("div", { class: "hn-sheet-body" });
-  listCol.append(tabs, body);
+  const navStrip = el("div", { class: "hn-navstrip" });
+  listCol.append(tabs, navStrip, body);
   const fichaCol = el("div", { class: "hn-col-ficha hn-ficha-dock" });
   cols.append(listCol, fichaCol);
   sheet.append(handle, cols);
+  renderNavStrip(ui, navStrip);
 
-  // La forma de la hoja depende del estado y de si hay ficha abierta.
+  // La forma de la hoja depende del estado y de si hay ficha abierta. La tira
+  // de navegación (E9.1) sube el peek a 160 px: --hn-sheet-h lo lee el botón ◉.
   effect(() => {
     const state = ui.sheet();
     const sel = ui.selected();
-    sheet.className = `hn-sheet hn-sheet-${state}${sel ? " hn-ficha-open" : ""}`;
+    const hasNav = activeNav(ui) !== null;
+    sheet.className = `hn-sheet hn-sheet-${state}${sel ? " hn-ficha-open" : ""}${hasNav ? " hn-nav" : ""}`;
     document.body.classList.toggle("hn-has-ficha", !!sel);
+    const root = document.documentElement;
+    if (!window.matchMedia("(min-width: 700px)").matches && state === "peek") {
+      root.style.setProperty("--hn-sheet-h", hasNav ? "160px" : "96px");
+    } else {
+      root.style.removeProperty("--hn-sheet-h");
+    }
   });
 
   effect(() => {
@@ -1005,6 +1015,68 @@ function stormCard(
   }
   if (ctx.rsmc) card.append(el("p", { class: "hn-muted" }, `Avisos: ${ctx.rsmc}.`));
   return card;
+}
+
+// Tira de navegación (E9.1): con ruta activa y posición, el peek de la hoja
+// (y el tope del panel en escritorio) muestran los datos grandes de navegación.
+function renderNavStrip(ui: UiState, host: HTMLElement): void {
+  host.hidden = true;
+  host.addEventListener("click", () => goTo(ui, "aqui"));
+  let autoPeekDone = false;
+  let lastActiveKey: string | null = null;
+  effect(() => {
+    const active = ui.active();
+    const key = active ? `${active.code}|${active.variant ?? ""}` : null;
+    if (key !== lastActiveKey) {
+      autoPeekDone = false;
+      lastActiveKey = key;
+    }
+    const nav = activeNav(ui);
+    if (!nav) {
+      host.hidden = true;
+      clear(host);
+      return;
+    }
+    const state = ui.sheet();
+    if (!autoPeekDone && (state === "half" || state === "full") && sustainedSog(ui.navFixes, Date.now())) {
+      autoPeekDone = true;
+      ui.sheet.set("peek");
+    }
+    host.hidden = false;
+    const { fix, kin, track } = nav;
+    const next = fix.nextName || `${formatLat(fix.nextLat)} ${formatLon(fix.nextLon)}`;
+    const dest = track.names[track.names.length - 1] || "destino";
+    const eta = kin.etaNextMs === null ? "—" : clock(kin.etaNextMs);
+    const sog = kin.sogKn === null ? "—" : `${kin.sogKn.toFixed(1)} kn`;
+    const dev = fix.xteNm === 0 ? "en rumbo" : xteLabel(fix.xteNm);
+    const row1 = el("div", { class: "hn-navstrip-row1" });
+    row1.append(
+      el("span", { class: "hn-navstrip-next" }, next),
+      el("span", { class: "hn-navstrip-bearing" }, `${Math.round(fix.bearingDeg)}°`),
+    );
+    const row2 = el(
+      "div",
+      { class: "hn-navstrip-row2" },
+      `${nm(fix.distanceNm)} · ETA ${eta} · SOG ${sog} · desvío ${dev}`,
+    );
+    const row3 = el(
+      "div",
+      { class: "hn-navstrip-row3" },
+      `tramo ${fix.legIndex + 1} de ${maxLeg(track)} · ${dest} a ${nm(remainingToDest(track.coords, fix))}`,
+    );
+    host.replaceChildren(row1, row2, row3);
+  });
+}
+
+// SOG ≥ 0,5 kn sostenida por 2 minutos seguidos sobre la ventana de fijas.
+function sustainedSog(fixes: Fix[], nowMs: number): boolean {
+  const win = fixes.filter((f) => nowMs - f.t <= 120_000);
+  if (win.length < 2) return false;
+  const first = win[0]!;
+  const last = win[win.length - 1]!;
+  const span = last.t - first.t;
+  if (span < 120_000) return false;
+  return haversineNm(first.lat, first.lon, last.lat, last.lon) / (span / 3_600_000) >= 0.5;
 }
 
 function navCell(label: string, value: string): HTMLElement {

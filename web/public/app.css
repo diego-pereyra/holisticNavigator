@@ -109,9 +109,64 @@
   transition: height 0.22s ease;
   padding-bottom: env(safe-area-inset-bottom);
   touch-action: pan-y;
+  overflow: hidden;
 }
 .hn-sheet-peek {
   height: 96px;
+}
+
+/* Tira de navegación (E9.1): datos grandes y legibles en el peek. */
+.hn-navstrip {
+  order: -1;
+  flex: 0 0 auto;
+  background: var(--hn-panel-2);
+  border-bottom: 1px solid var(--hn-line);
+  padding: 6px 14px 10px;
+  color: var(--hn-text);
+  cursor: pointer;
+}
+.hn-navstrip[hidden] {
+  display: none;
+}
+.hn-navstrip-row1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+.hn-navstrip-next,
+.hn-navstrip-bearing {
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.05;
+}
+.hn-navstrip-next {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hn-navstrip-bearing {
+  flex: 0 0 auto;
+}
+.hn-navstrip-row2 {
+  font-size: 24px;
+  line-height: 1.15;
+  color: var(--hn-text);
+}
+.hn-navstrip-row3 {
+  font-size: 13px;
+  line-height: 1.2;
+  color: var(--hn-muted);
+}
+
+@media (max-width: 699px) {
+  .hn-sheet.hn-nav.hn-sheet-peek {
+    height: 160px;
+  }
+  .hn-sheet.hn-nav.hn-sheet-peek .hn-tabs {
+    display: none;
+  }
 }
 .hn-sheet-half {
   height: 50vh;
@@ -721,6 +776,8 @@
     right: 0;
   }
   .hn-handle { display: none; }
+  /* La tira de navegación va arriba del panel, debajo de las pestañas. */
+  .hn-navstrip { order: 0; }
   /* Lista arriba y ficha abajo, 50% cada una, con scroll propio (W4.4 #3). */
   .hn-sheet.hn-ficha-open .hn-col-list {
     display: flex;
