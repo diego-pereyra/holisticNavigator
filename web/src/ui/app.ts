@@ -45,7 +45,16 @@ import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
 import { navigate, haversineNm, type RouteTrack, type NavFix } from "../core/navigation.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
-import { evalAlarms, DEFAULT_ALARMS, type AlarmSettings, type AlarmState } from "../core/alarms.ts";
+import {
+  evalAlarms,
+  DEFAULT_ALARMS,
+  anchorAlarm,
+  anchorDistanceM,
+  mobFix,
+  type AlarmSettings,
+  type AnchorWatch,
+  type Mob,
+} from "../core/alarms.ts";
 import {
   voyageToGpx,
   voyageDistanceNm,
@@ -65,6 +74,7 @@ import {
 } from "../platform/tiles.ts";
 import { downloadText, pickTextFile } from "../platform/download.ts";
 import { watchGps, type Position, type PositionStatus } from "../platform/position.ts";
+import { keepAwake } from "../platform/wakelock.ts";
 import {
   MONTH_ABBR,
   MONTH_INITIAL,
@@ -86,12 +96,21 @@ interface Geometry {
   names: string[];
 }
 
-// Estado de los acordeones de la ficha (W4.5 #3) y de las alarmas (E9.2),
-// recordado en `hn.settings`.
+// Estado de los acordeones de la ficha (W4.5 #3), de las alarmas (E9.2) y del
+// fondeo/MOB (E9.3), recordado en `hn.settings`.
 interface Settings {
   acc: Record<string, boolean>;
   alarms: AlarmSettings;
+  anchor: AnchorSettings;
+  mob: Mob | null;
 }
+
+// Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
+interface AnchorSettings extends AnchorWatch {
+  active: boolean;
+}
+
+const DEFAULT_ANCHOR: AnchorSettings = { active: false, lat: 0, lon: 0, radiusM: 50 };
 
 // Por defecto en escritorio (dos columnas) se abren Consejo y Waypoints; en
 // móvil, donde Diego ya está acostumbrado a todo abierto, se abren todos.
@@ -146,6 +165,8 @@ interface UiState {
   voyage: Signal<VoyageLog | null>;
   recording: Signal<boolean>;
   helpSeen: Signal<boolean | null>;
+  anchor: Signal<AnchorSettings>;
+  mob: Signal<Mob | null>;
   navFixes: Fix[];
   settings: Settings;
   zones?: ZoneHooks;
@@ -196,8 +217,10 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     voyage: signal<VoyageLog | null>(null),
     recording: signal(false),
     helpSeen: signal<boolean | null>(null),
+    anchor: signal<AnchorSettings>({ ...DEFAULT_ANCHOR }),
+    mob: signal<Mob | null>(null),
     navFixes: [],
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS } },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null },
     zones: deps.zones,
   };
 
@@ -240,6 +263,44 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   scaleNote.hidden = true;
   root.append(scaleNote);
 
+  // E9.3: botón flotante de hombre al agua. Mantener apretado 600 ms marca la
+  // caída con la posición actual (un toque suelto no hace nada).
+  const mobBtn = el("button", { class: "hn-mob", type: "button", "aria-label": "Hombre al agua: mantener apretado" }, "MOB");
+  mobBtn.append(el("span", { class: "hn-mob-ring" }));
+  root.append(mobBtn);
+  let mobPress: number | undefined;
+  const mobCancel = (): void => {
+    if (mobPress !== undefined) window.clearTimeout(mobPress);
+    mobPress = undefined;
+    mobBtn.classList.remove("hn-mob-press");
+  };
+  mobBtn.addEventListener("pointerdown", (ev) => {
+    if (ui.mob() || !ui.position()) return;
+    ev.preventDefault();
+    mobBtn.classList.add("hn-mob-press");
+    mobPress = window.setTimeout(() => {
+      mobPress = undefined;
+      mobBtn.classList.remove("hn-mob-press");
+      const p = ui.position();
+      if (!p) return;
+      ui.mob.set({ lat: p.lat, lon: p.lon, t: Date.now() });
+      try {
+        navigator.vibrate?.(150);
+      } catch {
+        /* sin vibración */
+      }
+    }, 600);
+  });
+  mobBtn.addEventListener("pointerup", mobCancel);
+  mobBtn.addEventListener("pointercancel", mobCancel);
+  mobBtn.addEventListener("pointerleave", mobCancel);
+  effect(() => {
+    const has = ui.position() !== null;
+    const on = ui.mob() !== null;
+    mobBtn.hidden = !has;
+    mobBtn.classList.toggle("hn-mob-on", on);
+  });
+
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
   renderAlarmBand(ui);
@@ -255,6 +316,27 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   effect(() => {
     if (!ui.recording()) return;
     drawVoyage(ui, ui.voyage());
+  });
+
+  // E9.3: círculo del fondeo y marca de MOB en el mapa.
+  effect(() => drawAnchor(ui));
+  effect(() => drawMob(ui));
+
+  // E9.3: pantalla encendida mientras haya ruta activa, fondeo o MOB.
+  effect(() => {
+    const on = ui.active() !== null || ui.anchor().active || ui.mob() !== null;
+    void keepAwake(on);
+  });
+
+  // Fondeo y MOB sobreviven la recarga: se guardan al cambiar (no en el arranque,
+  // para no pisar lo que `restore` todavía no leyó).
+  ui.anchor.subscribe((a) => {
+    ui.settings.anchor = a;
+    saveSettings(ui);
+  });
+  ui.mob.subscribe((m) => {
+    ui.settings.mob = m;
+    saveSettings(ui);
   });
 
   // UX-2: recién después de restaurar se decide arrancar el GPS, para no pisar
@@ -325,6 +407,8 @@ async function restore(ui: UiState): Promise<void> {
   if (s) {
     if (s.acc) ui.settings.acc = { ...defaultAcc(), ...s.acc };
     if (s.alarms) ui.settings.alarms = { ...DEFAULT_ALARMS, ...s.alarms };
+    if (s.anchor) ui.anchor.set({ ...DEFAULT_ANCHOR, ...s.anchor });
+    if (s.mob) ui.mob.set(s.mob);
   }
   const pos = readJson<Position | null>(position, null);
   if (pos) {
@@ -445,7 +529,7 @@ function installBaseLayers(map: MlMap): void {
     paint: { "raster-opacity": 0.9 },
   });
 
-  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp"]) {
+  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp", "anchor", "mob"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
 
@@ -544,6 +628,40 @@ function installBaseLayers(map: MlMap): void {
       "circle-stroke-color": "#0b1626",
       "circle-stroke-width": 1.5,
     },
+  });
+
+  // Fondeo (E9.3): círculo del radio y punto del ancla.
+  map.addLayer({
+    id: "anchor-ring",
+    type: "line",
+    source: "anchor",
+    filter: ["==", ["geometry-type"], "Polygon"],
+    paint: { "line-color": "#FFD54F", "line-width": 1.5 },
+  });
+  map.addLayer({
+    id: "anchor-dot",
+    type: "circle",
+    source: "anchor",
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#FFD54F",
+      "circle-stroke-color": "#0b1626",
+      "circle-stroke-width": 1.5,
+    },
+  });
+  // Hombre al agua (E9.3): marca la caída con el nombre de la hora.
+  map.addLayer({
+    id: "mob",
+    type: "symbol",
+    source: "mob",
+    layout: {
+      "text-field": ["concat", "✖\n", ["get", "name"]],
+      "text-size": 16,
+      "text-line-height": 1.1,
+      "text-allow-overlap": true,
+    },
+    paint: { "text-color": "#FF1744", "text-halo-color": "#0b1626", "text-halo-width": 1.5 },
   });
 }
 
@@ -736,6 +854,41 @@ function drawVoyage(ui: UiState, log: VoyageLog | null): void {
     "voyage",
     featureCollection([lineFeature(log.points.map((p) => [p.lon, p.lat] as [number, number]))]),
   );
+}
+
+// E9.3: círculo del radio de fondeo (avisado en metros) y punto del ancla.
+const DEM_CIRCLE_STEPS = 64;
+
+function circleFeature(lon: number, lat: number, radiusM: number): object {
+  const earth = 6378137;
+  const dLat = (radiusM / earth) * (180 / Math.PI);
+  const dLon = dLat / Math.max(0.01, Math.cos((lat * Math.PI) / 180));
+  const ring: [number, number][] = [];
+  for (let i = 0; i <= DEM_CIRCLE_STEPS; i++) {
+    const a = (i / DEM_CIRCLE_STEPS) * Math.PI * 2;
+    ring.push([lon + dLon * Math.sin(a), lat + dLat * Math.cos(a)]);
+  }
+  return { type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } };
+}
+
+function drawAnchor(ui: UiState): void {
+  const a = ui.anchor();
+  if (!a.active) {
+    setSource(ui.map, "anchor", featureCollection([]));
+    return;
+  }
+  setSource(ui.map, "anchor", featureCollection([circleFeature(a.lon, a.lat, a.radiusM), pointFeature(a.lon, a.lat)]));
+}
+
+function drawMob(ui: UiState): void {
+  const m = ui.mob();
+  setSource(ui.map, "mob", m ? featureCollection([pointFeature(m.lon, m.lat, { name: mobName(m) })]) : featureCollection([]));
+}
+
+function mobName(m: Mob): string {
+  const d = new Date(m.t);
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `MOB ${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
 }
 
 function wireGps(ui: UiState): void {
@@ -1073,6 +1226,7 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
   );
 
   body.append(alarmsCard(ui));
+  body.append(anchorCard(ui, cleanup));
   body.append(offlineCard(ui));
 }
 
@@ -1083,6 +1237,7 @@ function helpCard(ui: UiState): HTMLElement {
     ["📍", "Tu posición manda"],
     ["▸", "Elegí una ruta"],
     ["⚑", "Tocá Seguir"],
+    ["🆘", "Mantené apretado MOB si alguien cae al agua"],
   ];
   for (const [icon, text] of lines) {
     card.append(
@@ -1186,6 +1341,61 @@ function alarmsCard(ui: UiState): HTMLElement {
     el("label", { class: "hn-field" }, el("span", { class: "hn-field-label" }, "Radio de llegada (nm)"), arrival),
   );
   card.append(row);
+  return card;
+}
+
+// Vigilancia de fondeo (E9.3): marca el punto donde se largó el ancla y avisa si
+// el barco se aleja más que el radio. El estado se recuerda entre recargas.
+function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
+  const card = el("div", { class: "hn-card" });
+  card.append(el("div", { class: "hn-card-title" }, "Fondeo"));
+
+  const radius = el("input", { class: "hn-search", type: "number", min: "5", step: "5", inputmode: "numeric" });
+  radius.value = String(Math.round(ui.anchor().radiusM));
+  radius.addEventListener("change", () => {
+    const r = Number(radius.value);
+    if (Number.isFinite(r) && r > 0) ui.anchor.update((a) => ({ ...a, radiusM: r }));
+  });
+  const field = el(
+    "label",
+    { class: "hn-field" },
+    el("span", { class: "hn-field-label" }, "Radio (m)"),
+    radius,
+  );
+
+  const info = el("div", { class: "hn-anchor-info hn-muted" });
+  const actions = el("div", { class: "hn-actions" });
+  card.append(field, info, actions);
+
+  cleanup.push(
+    effect(() => {
+      const a = ui.anchor();
+      const pos = ui.position();
+      clear(info);
+      clear(actions);
+      radius.disabled = a.active;
+      if (!a.active) {
+        info.textContent = pos
+          ? "Vigilá que el barco no garree. Al activar se toma la posición actual."
+          : "Poné tu posición para activar la vigilancia.";
+        const on = el("button", { class: "hn-btn hn-btn-primary", type: "button" }, "Activar vigilancia");
+        on.disabled = !pos;
+        on.addEventListener("click", () => {
+          const p = ui.position();
+          if (!p) return;
+          ui.anchor.update((cur) => ({ ...cur, active: true, lat: p.lat, lon: p.lon }));
+        });
+        actions.append(on);
+        return;
+      }
+      info.textContent = pos
+        ? `Fondeado a ${Math.round(anchorDistanceM(pos, a))} m del punto · radio ${Math.round(a.radiusM)} m`
+        : "Fondeado · esperando posición";
+      const off = el("button", { class: "hn-btn", type: "button" }, "Desactivar");
+      off.addEventListener("click", () => ui.anchor.set({ ...DEFAULT_ANCHOR }));
+      actions.append(off);
+    }),
+  );
   return card;
 }
 
@@ -1374,7 +1584,43 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
   host.addEventListener("click", () => goTo(ui, "aqui"));
   let autoPeekDone = false;
   let lastActiveKey: string | null = null;
+  let mobTimer: number | undefined;
+  void lastActiveKey;
   effect(() => {
+    const mob = ui.mob();
+    if (mob) {
+      const at = (): { lat: number; lon: number } => ui.position() ?? { lat: mob.lat, lon: mob.lon };
+      const line = (): string => {
+        const f = mobFix(at(), mob);
+        return `${nmDecimal(f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
+      };
+      const bearing = Math.round(mobFix(at(), mob).bearingDeg);
+      const row1 = el("div", { class: "hn-navstrip-row1" });
+      row1.append(
+        el("span", { class: "hn-navstrip-next hn-navstrip-mob" }, "MOB"),
+        el("span", { class: "hn-navstrip-bearing" }, `${bearing}°`),
+      );
+      const row2 = el("div", { class: "hn-navstrip-row2" }, line());
+      const end = el("button", { class: "hn-btn hn-navstrip-end", type: "button" }, "Terminar MOB");
+      end.addEventListener("click", (ev) => {
+        ev.stopPropagation();
+        ui.mob.set(null);
+      });
+      const row3 = el("div", { class: "hn-navstrip-row3" }, end);
+      host.hidden = false;
+      host.replaceChildren(row1, row2, row3);
+      if (mobTimer === undefined) {
+        mobTimer = window.setInterval(() => {
+          if (ui.mob()) row2.textContent = line();
+        }, 1000);
+      }
+      return;
+    }
+    if (mobTimer !== undefined) {
+      window.clearInterval(mobTimer);
+      mobTimer = undefined;
+    }
+
     const active = ui.active();
     const key = active ? `${active.code}|${active.variant ?? ""}` : null;
     if (key !== lastActiveKey) {
@@ -1429,9 +1675,12 @@ function sustainedSog(fixes: Fix[], nowMs: number): boolean {
   return haversineNm(first.lat, first.lon, last.lat, last.lon) / (span / 3_600_000) >= 0.5;
 }
 
-// Banda de alarma (E9.2): fija arriba de la hoja. Solo con ruta activa. Al
-// aparecer una alarma nueva (no silenciada) suena beep(3) y repite cada 10 s
-// mientras siga activa; Silenciar la deja en gris, sin sonido.
+// Banda de alarma (E9.2/E9.3): fija arriba de la hoja. Cubre MOB (prioridad),
+// fondeo garreado y las alarmas de ruta (llegada/desvío). Al aparecer una alarma
+// nueva (no silenciada) suena y repite mientras siga activa; Silenciar la deja en
+// gris, sin sonido, hasta que cambie de tipo.
+type AlarmKind = "mob" | "anchor" | "arrival" | "xte";
+
 function renderAlarmBand(ui: UiState): void {
   const band = el("div", { class: "hn-alarm" });
   const text = el("span", { class: "hn-alarm-text" }, "");
@@ -1440,7 +1689,8 @@ function renderAlarmBand(ui: UiState): void {
   band.hidden = true;
   document.body.append(band);
 
-  let state: AlarmState = { active: null, silencedFor: null };
+  let shown: AlarmKind | null = null;
+  let silenced: AlarmKind | null = null;
   let beepTimer: number | undefined;
   const stopBeeps = (): void => {
     if (beepTimer !== undefined) {
@@ -1450,43 +1700,66 @@ function renderAlarmBand(ui: UiState): void {
   };
 
   silence.addEventListener("click", () => {
-    if (!state.active) return;
-    state = { active: state.active, silencedFor: state.active };
+    if (!shown) return;
+    silenced = shown;
     stopBeeps();
     band.className = "hn-alarm hn-alarm-silenced";
   });
 
   effect(() => {
-    const a = ui.active();
-    const nav = a ? activeNav(ui) : null;
-    if (!a || !nav) {
-      state = { active: null, silencedFor: null };
+    const mob = ui.mob();
+    const anchor = ui.anchor();
+    const pos = ui.position();
+    const active = ui.active();
+    const nav = active ? activeNav(ui) : null;
+
+    let kind: AlarmKind | null = null;
+    let message = "";
+    let beeps = 3;
+    let intervalMs = 10_000;
+
+    if (mob) {
+      kind = "mob";
+      const f = mobFix(pos ?? { lat: mob.lat, lon: mob.lon }, mob);
+      message = `✖ Hombre al agua · ${nmDecimal(f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
+      beeps = 2;
+      intervalMs = 5_000;
+    } else if (anchor.active && pos && anchorAlarm(pos, anchor)) {
+      kind = "anchor";
+      message = `⚓ Garreando: ${Math.round(anchorDistanceM(pos, anchor))} m del fondeo`;
+    } else if (nav) {
+      const next = evalAlarms(nav.fix, ui.settings.alarms, { active: null, silencedFor: null });
+      if (next.active === "arrival") {
+        kind = "arrival";
+        message = `⚑ Llegando a ${nav.fix.nextName || "el waypoint"}`;
+      } else if (next.active === "xte") {
+        kind = "xte";
+        message = `⚠ Desvío de ${Math.abs(nav.fix.xteNm).toFixed(1).replace(".", ",")} nm`;
+      }
+    }
+
+    if (kind === null) {
+      shown = null;
+      silenced = null;
       stopBeeps();
       band.hidden = true;
       return;
     }
-    const next = evalAlarms(nav.fix, ui.settings.alarms, state);
-    const fresh = next.active !== null && next.active !== state.active;
-    state = next;
-    if (!state.active) {
-      stopBeeps();
-      band.hidden = true;
-      return;
-    }
-    const silenced = state.silencedFor === state.active;
+
+    const fresh = kind !== shown;
+    if (fresh) silenced = null;
+    shown = kind;
+    const isSilenced = silenced === kind;
     band.hidden = false;
-    band.className = `hn-alarm${silenced ? " hn-alarm-silenced" : ""}`;
-    text.textContent =
-      state.active === "arrival"
-        ? `⚑ Llegando a ${nav.fix.nextName || "el waypoint"}`
-        : `⚠ Desvío de ${Math.abs(nav.fix.xteNm).toFixed(1).replace(".", ",")} nm`;
-    if (fresh && !silenced) {
-      beep(3);
+    band.className = `hn-alarm${isSilenced ? " hn-alarm-silenced" : ""}`;
+    text.textContent = message;
+    if (fresh && !isSilenced) {
+      beep(beeps);
       stopBeeps();
       beepTimer = window.setInterval(() => {
-        if (state.active && state.silencedFor !== state.active) beep(3);
+        if (shown === kind && silenced !== kind) beep(beeps);
         else stopBeeps();
-      }, 10_000);
+      }, intervalMs);
     }
   });
 }
@@ -2272,6 +2545,12 @@ function clock(ms: number): string {
   const d = new Date(ms);
   const p = (n: number): string => String(n).padStart(2, "0");
   return `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}`;
+}
+
+function mmss(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${p(Math.floor(s / 60))}:${p(s % 60)}`;
 }
 
 function trackToGpx(name: string, g: Geometry): string {

@@ -159,6 +159,14 @@
   line-height: 1.2;
   color: var(--hn-muted);
 }
+/* Modo MOB en la tira (E9.3): "MOB" en rojo y botón para terminar. */
+.hn-navstrip-mob {
+  color: #ff5252;
+}
+.hn-navstrip-end {
+  align-self: flex-start;
+  margin-top: 4px;
+}
 
 @media (max-width: 699px) {
   .hn-sheet.hn-nav.hn-sheet-peek {
@@ -847,6 +855,75 @@
 }
 .hn-field .hn-search {
   margin-bottom: 0;
+}
+
+/* Vigilancia de fondeo (E9.3). */
+.hn-anchor-info {
+  margin-top: 6px;
+}
+
+/* Botón MOB (E9.3): flotante abajo a la izquierda, por encima de la hoja. Se
+   mantiene apretado 600 ms; el anillo muestra el progreso. */
+.hn-mob {
+  position: fixed;
+  left: 16px;
+  bottom: calc(var(--hn-sheet-h, 96px) + 84px);
+  z-index: 30;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  border: 1px solid #ff5252;
+  background: #b3261e;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+}
+.hn-mob[hidden] {
+  display: none;
+}
+.hn-mob-on {
+  box-shadow: 0 0 0 2px rgba(255, 23, 68, 0.45), 0 2px 8px rgba(0, 0, 0, 0.45);
+}
+.hn-mob-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 3px solid #ffd54f;
+  opacity: 0;
+  pointer-events: none;
+}
+.hn-mob-press .hn-mob-ring {
+  opacity: 1;
+  animation: hn-mob-fill 0.6s linear forwards;
+}
+@keyframes hn-mob-fill {
+  from {
+    transform: scale(0.7);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.15);
+    opacity: 0.25;
+  }
+}
+@media (min-width: 700px) {
+  .hn-mob {
+    left: 416px;
+    bottom: 88px;
+  }
+}
+@media (min-width: 1100px) {
+  .hn-mob {
+    left: 336px;
+  }
+  body.hn-has-ficha .hn-mob {
+    left: 776px;
+  }
 }
 
 @media (min-width: 700px) {
