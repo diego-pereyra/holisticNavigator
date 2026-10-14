@@ -69,12 +69,39 @@ jobs:
             fi
           done < /tmp/zonas.tsv
 
+      - name: Descargar las balizas por zona (E10.3)
+        run: |
+          set -euo pipefail
+          echo "## Balizas por zona (E10.3)" >> "$GITHUB_STEP_SUMMARY"
+          python3 - <<'PY' > /tmp/zonas-bbox.tsv
+          import json
+          with open("tools/tiles/zones.json", encoding="utf-8") as f:
+              data = json.load(f)
+          for name, cfg in data.items():
+              if "bbox" not in cfg:
+                  continue
+              w, s, e, n = cfg["bbox"]
+              print("\t".join([name, str(w), str(s), str(e), str(n)]))
+          PY
+          while IFS=$'\t' read -r id w s e n; do
+            [ -z "$id" ] && continue
+            echo "balizas de $id ($w,$s,$e,$n)"
+            if python3 tools/tiles/fetch_seamarks.py "$w" "$s" "$e" "$n" \
+                 > "zones/$id-seamarks.geojson"; then
+              bytes=$(stat -c%s "zones/$id-seamarks.geojson")
+              echo "- \`$id\`: $bytes bytes" >> "$GITHUB_STEP_SUMMARY"
+            else
+              rm -f "zones/$id-seamarks.geojson"
+              echo "- \`$id\`: sin balizas (Overpass no respondió)" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          done < /tmp/zonas-bbox.tsv
+
       - name: Escribir tiles.json
         run: |
           set -euo pipefail
           base="${{ github.server_url }}/${{ github.repository }}/releases/download/tiles-latest"
           python3 - "$base" "$built" > tiles.json <<'PY'
-          import hashlib, json, sys
+          import hashlib, json, os, sys
           base, built = sys.argv[1], sys.argv[2]
           with open("tools/tiles/zones.json", encoding="utf-8") as f:
               cfg = json.load(f)
@@ -93,13 +120,20 @@ jobs:
               if "bbox" not in z:
                   continue
               b, h = meta(f"zones/{name}.pmtiles")
-              out["zones"][name] = {
+              zone = {
                   "nombre": z["nombre"],
                   "bbox": z["bbox"],
                   "bytes": b,
                   "sha256": h,
                   "url": f"{base}/{name}.pmtiles",
               }
+              seamarks = f"zones/{name}-seamarks.geojson"
+              if os.path.exists(seamarks):
+                  zone["seamarks"] = {
+                      "url": f"{base}/{name}-seamarks.geojson",
+                      "bytes": os.path.getsize(seamarks),
+                  }
+              out["zones"][name] = zone
           print(json.dumps(out, ensure_ascii=False, indent=2))
           PY
           cat tiles.json
@@ -114,3 +148,4 @@ jobs:
             world-z6.pmtiles
             tiles.json
             zones/*.pmtiles
+            zones/*-seamarks.geojson

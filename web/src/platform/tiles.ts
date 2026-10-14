@@ -5,7 +5,7 @@
 // (mismo origen: sin CORS ni bloqueos). Acá vive la descarga a IndexedDB, el
 // índice de zonas y las capas/source que el mapa usa para dibujarlas.
 
-import type { LayerSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, LayerSpecification } from "maplibre-gl";
 import { type KeyValueStore } from "./store.ts";
 
 export interface ZoneMeta {
@@ -14,6 +14,7 @@ export interface ZoneMeta {
   bytes: number;
   sha256?: string;
   url?: string;
+  seamarks?: { url?: string; bytes?: number };
 }
 
 export interface TilesIndex {
@@ -33,12 +34,13 @@ export interface DownloadResult {
   blob: Blob;
   bytes: number;
   date: string;
+  seamarks?: string;
 }
 
 // Enganchas que la UI usa para avisarle al mapa (main.ts) que una zona se
 // descargó o se borró.
 export interface ZoneHooks {
-  add(id: string, blob: Blob, meta: ZoneMeta): void;
+  add(id: string, blob: Blob, meta: ZoneMeta, seamarks?: string): void;
   remove(id: string): void;
 }
 
@@ -54,12 +56,21 @@ export function zoneInfoKey(id: string): string {
   return `hn.tiles.${id}.info`;
 }
 
+// Balizas de la zona (E10.3): el GeoJSON de puntos se guarda como string.
+export function zoneSeamarksKey(id: string): string {
+  return `hn.tiles.${id}.seamarks`;
+}
+
 export function zoneProtocolName(id: string): string {
   return `zone-${id}`;
 }
 
 export function zoneSourceId(id: string): string {
   return `detail-${id}`;
+}
+
+export function zoneSeamarkSourceId(id: string): string {
+  return `seamarks-${id}`;
 }
 
 export function zoneLayerIds(id: string): string[] {
@@ -69,6 +80,8 @@ export function zoneLayerIds(id: string): string[] {
     `detail-boundary-${id}`,
     `detail-place-${id}`,
     `detail-${id}-poi`,
+    `seamarks-${id}-sym`,
+    `seamarks-${id}-name`,
   ];
 }
 
@@ -133,6 +146,89 @@ export function zoneLayers(id: string): LayerSpecification[] {
   ];
 }
 
+// Símbolo por tipo de baliza (E10.3) y color por `colour`. Se dibujan desde
+// zoom 11; el nombre, desde 13.
+const SEAMARK_SYMBOL: ExpressionSpecification = [
+  "match", ["get", "type"],
+  ["buoy_lateral", "beacon_lateral"], "●",
+  ["buoy_cardinal", "beacon_cardinal"], "◆",
+  "buoy_safe_water", "○",
+  "buoy_isolated_danger", "◉",
+  ["buoy_special", "beacon_special"], "▲",
+  ["light_major", "light_minor", "lighthouse"], "✦",
+  "harbour", "⚓",
+  "mooring", "⊙",
+  "●",
+];
+
+const SEAMARK_COLOR: ExpressionSpecification = [
+  "match", ["get", "colour"],
+  "red", "#FF5252",
+  "green", "#69F0AE",
+  "yellow", "#FFD740",
+  "black", "#E0E0E0",
+  "white", "#E0E0E0",
+  "#B0BEC5",
+];
+
+export function zoneSeamarkLayers(id: string): LayerSpecification[] {
+  const source = zoneSeamarkSourceId(id);
+  return [
+    {
+      id: `seamarks-${id}-sym`,
+      type: "symbol",
+      source,
+      minzoom: 11,
+      layout: {
+        "text-field": SEAMARK_SYMBOL,
+        "text-size": 16,
+        "text-allow-overlap": true,
+        "text-padding": 2,
+      },
+      paint: {
+        "text-color": SEAMARK_COLOR,
+        "text-halo-color": "#0b1626",
+        "text-halo-width": 1.2,
+      },
+    },
+    {
+      id: `seamarks-${id}-name`,
+      type: "symbol",
+      source,
+      minzoom: 13,
+      filter: ["has", "name"],
+      layout: {
+        "text-field": ["get", "name"],
+        "text-size": 11,
+        "text-offset": [0, 1.1],
+        "text-anchor": "top",
+      },
+      paint: { "text-color": "#CFE3F2", "text-halo-color": "#0b1626", "text-halo-width": 1 },
+    },
+  ];
+}
+
+// Nombre en castellano del tipo de baliza, para el popup (E10.3).
+const SEAMARK_LABELS: Record<string, string> = {
+  buoy_lateral: "boya lateral",
+  beacon_lateral: "baliza lateral",
+  buoy_cardinal: "boya de cardenal",
+  beacon_cardinal: "baliza de cardenal",
+  buoy_safe_water: "boya de aguas navegables",
+  buoy_isolated_danger: "boya de peligro aislado",
+  buoy_special: "boya especial",
+  beacon_special: "baliza especial",
+  light_major: "faro",
+  light_minor: "luz",
+  lighthouse: "faro",
+  harbour: "puerto",
+  mooring: "boya de amarre",
+};
+
+export function seamarkLabel(type: string): string {
+  return SEAMARK_LABELS[type] ?? type;
+}
+
 // Tamaño del mundo z≤6 según la release publicada; sirve de referencia en el
 // panel si el índice todavía no llegó.
 export const WORLD_BYTES_FALLBACK = 45073486;
@@ -192,7 +288,21 @@ export async function downloadZone(
   const date = new Date().toISOString().slice(0, 10);
   await store.putBlob(zoneKey(id), blob);
   await store.put(zoneInfoKey(id), JSON.stringify({ bytes: blob.size, date }));
-  return { blob, bytes: blob.size, date };
+
+  // Balizas (E10.3): el GeoJSON de puntos viaja con la zona. Si el sitio no lo
+  // tiene, la zona igual queda descargada (sin balizas).
+  let seamarks: string | undefined;
+  const smUrl = new URL(`tiles/zones/${id}-seamarks.geojson`, document.baseURI).toString();
+  try {
+    const smRes = await fetch(smUrl, { cache: "no-cache" });
+    if (smRes.ok) {
+      seamarks = await smRes.text();
+      await store.put(zoneSeamarksKey(id), seamarks);
+    }
+  } catch {
+    /* sin balizas */
+  }
+  return { blob, bytes: blob.size, date, seamarks };
 }
 
 export async function getZone(store: KeyValueStore, id: string): Promise<Blob | null> {
@@ -212,9 +322,14 @@ export async function getZoneInfo(
   }
 }
 
+export async function getZoneSeamarks(store: KeyValueStore, id: string): Promise<string | null> {
+  return store.get(zoneSeamarksKey(id));
+}
+
 export async function deleteZone(store: KeyValueStore, id: string): Promise<void> {
   await store.removeBlob(zoneKey(id));
   await store.remove(zoneInfoKey(id));
+  await store.remove(zoneSeamarksKey(id));
 }
 
 export async function loadTilesIndexSaved(store: KeyValueStore): Promise<TilesIndex | null> {

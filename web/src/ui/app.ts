@@ -424,6 +424,27 @@ function persist(ui: UiState, key: string, value: string): void {
 
 function installBaseLayers(map: MlMap): void {
   const empty = featureCollection([]);
+
+  // Balizas OSM en línea (E10.3): raster de OpenSeaMap al pie del mapa. Arranca
+  // apagada (el interruptor está en el panel "Sin conexión"), así no pide
+  // teselas por red hasta que el usuario la prenda.
+  map.addSource("seamarks-online", {
+    type: "raster",
+    tiles: ["https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"],
+    tileSize: 256,
+    minzoom: 9,
+    maxzoom: 18,
+    attribution: "© OpenSeaMap (CC BY-SA)",
+  });
+  map.addLayer({
+    id: "seamarks-online",
+    type: "raster",
+    source: "seamarks-online",
+    minzoom: 9,
+    layout: { visibility: "none" },
+    paint: { "raster-opacity": 0.9 },
+  });
+
   for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
@@ -1178,6 +1199,7 @@ function offlineCard(ui: UiState): HTMLElement {
   card.append(el("div", { class: "hn-card-title" }, "Sin conexión"));
   card.append(offlineRow("Carta base", "siempre"));
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
+  card.append(onlineSeamarkRow(ui));
 
   const zonesBox = el("div", { class: "hn-offline-zones" });
   card.append(zonesBox);
@@ -1196,6 +1218,28 @@ function offlineCard(ui: UiState): HTMLElement {
 function offlineRow(name: string, info: string): HTMLElement {
   const row = el("div", { class: "hn-offline-row" });
   row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info));
+  return row;
+}
+
+// Balizas OSM en línea (E10.3): capa raster de OpenSeaMap, apagada por defecto.
+// Sirve donde hay red; sin conexión quedan las balizas bajadas con la zona.
+function onlineSeamarkRow(ui: UiState): HTMLElement {
+  const row = el("div", { class: "hn-offline-row" });
+  const action = el("span", { class: "hn-offline-action" });
+  const btn = el("button", { class: "hn-btn", type: "button" }, "Mostrar");
+  let on = false;
+  btn.addEventListener("click", () => {
+    if (!ui.map.getLayer("seamarks-online")) return;
+    on = !on;
+    ui.map.setLayoutProperty("seamarks-online", "visibility", on ? "visible" : "none");
+    btn.textContent = on ? "Ocultar" : "Mostrar";
+  });
+  action.append(btn);
+  row.append(
+    el("span", { class: "hn-offline-name" }, "Balizas OSM online"),
+    el("span", { class: "hn-offline-info" }, "con red"),
+    action,
+  );
   return row;
 }
 
@@ -1247,7 +1291,7 @@ function zoneRow(ui: UiState, state: ZoneState): HTMLElement {
         info.textContent = `${Math.round(ratio * 100)} %`;
       })
         .then((res) => {
-          ui.zones?.add(id, res.blob, meta);
+          ui.zones?.add(id, res.blob, meta, res.seamarks);
           showReady(res.bytes, res.date);
         })
         .catch((err) => {

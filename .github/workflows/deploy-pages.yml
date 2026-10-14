@@ -27,7 +27,7 @@ jobs:
       - run: npm ci --prefix web
       - run: bash scripts/build-web.sh
       - run: bash scripts/budget.sh
-      - name: Copiar las teselas de la carta de detalle al sitio (E10.1b, E10.2)
+      - name: Copiar las teselas de la carta de detalle al sitio (E10.1b, E10.2, E10.3)
         run: |
           # El workflow de teselas puede estar reemplazando los assets de la
           # release tiles-latest al mismo tiempo (los dos corren en el mismo
@@ -49,6 +49,14 @@ jobs:
             curl -fsSL "${RETRY[@]}" -o "web/dist/tiles/zones/$id.pmtiles" \
               "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/$id.pmtiles" \
               || echo "aviso: la zona $id todavía no está en la release; queda sin copiar"
+          done
+          # Balizas sin red (E10.3): <id>-seamarks.geojson, si la zona lo trae.
+          sids=$(python3 -c 'import json; d=json.load(open("web/dist/tiles/tiles.json")); print(" ".join(k for k, v in d.get("zones", {}).items() if v.get("seamarks")))')
+          for id in $sids; do
+            echo "copiando balizas $id"
+            curl -fsSL "${RETRY[@]}" -o "web/dist/tiles/zones/$id-seamarks.geojson" \
+              "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/$id-seamarks.geojson" \
+              || echo "aviso: las balizas de $id todavía no están en la release; quedan sin copiar"
           done
 
       - name: Smoke test en browser real (bloquea el deploy si la app no arranca)

@@ -1,5 +1,11 @@
-import { Map as MlMap, NavigationControl, addProtocol, setWorkerUrl } from "maplibre-gl";
-import type { ExpressionSpecification, LayerSpecification, StyleSpecification } from "maplibre-gl";
+import { Map as MlMap, NavigationControl, Popup, addProtocol, setWorkerUrl } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  GeoJSONSourceSpecification,
+  LayerSpecification,
+  MapLayerMouseEvent,
+  StyleSpecification,
+} from "maplibre-gl";
 import { Protocol, PMTiles, FileSource } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 
@@ -9,10 +15,14 @@ import { openStore, type KeyValueStore } from "./platform/store.ts";
 import {
   bboxTouches,
   getZone,
+  getZoneSeamarks,
   loadTilesIndex,
+  seamarkLabel,
   zoneLayerIds,
   zoneLayers,
   zoneProtocolName,
+  zoneSeamarkLayers,
+  zoneSeamarkSourceId,
   zoneSourceId,
   type ZoneHooks,
   type ZoneMeta,
@@ -245,8 +255,44 @@ map.on("error", (e) => {
 // bbox (así una zona del Caribe no hace trabajo estando en el Río de la Plata).
 const zoneBounds = new Map<string, [number, number, number, number]>();
 const registeredZones = new Set<string>();
+const seamarkClickIds = new Set<string>();
 
-function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta): void {
+function showSeamarkPopup(e: MapLayerMouseEvent): void {
+  const f = e.features?.[0];
+  if (!f) return;
+  const props = (f.properties ?? {}) as Record<string, unknown>;
+  const parts = [
+    props.name ? String(props.name) : "",
+    seamarkLabel(String(props.type ?? "")),
+    props.light ? String(props.light) : "",
+  ].filter(Boolean);
+  new Popup({ closeButton: true, offset: 12 }).setLngLat(e.lngLat).setText(parts.join(" · ")).addTo(map);
+}
+
+// Balizas de la zona (E10.3): si se bajó el GeoJSON junto con la zona, se
+// agrega como fuente `seamarks-<id>` con dos capas (símbolo y nombre). El
+// popup muestra nombre, tipo y luz.
+function addZoneSeamarks(id: string, seamarks?: string): void {
+  const srcId = zoneSeamarkSourceId(id);
+  if (map.getSource(srcId)) return;
+  let data: GeoJSONSourceSpecification["data"];
+  try {
+    data = (seamarks ? JSON.parse(seamarks) : { type: "FeatureCollection", features: [] }) as GeoJSONSourceSpecification["data"];
+  } catch {
+    return;
+  }
+  map.addSource(srcId, { type: "geojson", data });
+  const before = map.getLayer("country-label") ? "country-label" : undefined;
+  for (const layer of zoneSeamarkLayers(id)) {
+    map.addLayer(layer, before);
+    if (!seamarkClickIds.has(layer.id)) {
+      seamarkClickIds.add(layer.id);
+      map.on("click", layer.id, showSeamarkPopup);
+    }
+  }
+}
+
+function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta, seamarks?: string): void {
   const name = zoneProtocolName(id);
   if (!registeredZones.has(name)) {
     pmtilesProtocol.add(new PMTiles(new FileSource(new File([blob], name))));
@@ -258,6 +304,7 @@ function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta): void {
     const before = map.getLayer("country-label") ? "country-label" : undefined;
     for (const layer of zoneLayers(id)) map.addLayer(layer, before);
   }
+  addZoneSeamarks(id, seamarks);
   zoneBounds.set(id, meta.bbox);
   updateZoneVisibility();
   updateScaleNote();
@@ -267,6 +314,8 @@ function removeZoneFromMap(id: string): void {
   for (const lid of zoneLayerIds(id)) if (map.getLayer(lid)) map.removeLayer(lid);
   const srcId = zoneSourceId(id);
   if (map.getSource(srcId)) map.removeSource(srcId);
+  const smSrc = zoneSeamarkSourceId(id);
+  if (map.getSource(smSrc)) map.removeSource(smSrc);
   pmtilesProtocol.tiles.delete(zoneProtocolName(id));
   zoneBounds.delete(id);
   updateScaleNote();
@@ -381,7 +430,7 @@ async function restoreZones(store: KeyValueStore): Promise<void> {
   const zones = idx?.zones ?? {};
   for (const [id, meta] of Object.entries(zones)) {
     const blob = await getZone(store, id);
-    if (blob) addZoneToMap(id, blob, meta);
+    if (blob) addZoneToMap(id, blob, meta, (await getZoneSeamarks(store, id)) ?? undefined);
   }
 }
 
