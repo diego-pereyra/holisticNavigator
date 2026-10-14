@@ -67,3 +67,17 @@ al entorno/CI; avisame y lo cambio.
 ## E10.0 · batimetría (resuelto, 2026-10-14)
 
 **Resuelto (E10.0 corregida).** El bloqueo era correcto: redondear decimales no reduce puntos (24,8 MB a 2 decimales). Se resolvió simplificando la geometría con Douglas-Peucker (`simplify`, sin dependencias) en `tools/build_basemap.py`. Con tol 0.15 daba 1 579 KB pero su gzip (452 KB) rompía el presupuesto de primera carga (1,30 MB > 1,20 MB), así que se usó la siguiente tolerancia autorizada: **tol 0.25 → 1 740 148 → 61 981 puntos (3,6 %), 1 110 KB bruto / 309 KB gzip** (≤ 2 MB; total del build 1,15 MB). No hay `50m`/`110m` de bathymetry en NE (HTTP 403), así que la única vía era simplificar los 10m.
+
+## E10.1 · PMTiles desde un asset de Release no se puede leer en el navegador (CORS)
+
+**Qué falla.** El job `Build PMTiles (world z6)` corre bien y publica `world-z6.pmtiles` (45 073 486 B) y `tiles.json` en la release `tiles-latest`. Pero los assets de GitHub Releases **no mandan `Access-Control-Allow-Origin`** (verificado con `curl -H "Origin: …"`: la respuesta final de `release-assets.githubusercontent.com` es 200 sin cabecera CORS). El navegador bloquea el `fetch` del protocolo pmtiles y el smoke test del deploy falla:
+
+```
+SMOKE FAIL
+ - console.error: Access to fetch at 'https://github.com/…/tiles-latest/world-z6.pmtiles' from origin 'http://localhost:8087' has been blocked by CORS policy: No 'Access-Control-Allow-Origin' header is present on the requested resource.
+ - request failed: https://github.com/…/world-z6.pmtiles net::ERR_FAILED
+```
+
+`map.on("error")` sí captura el error de la fuente (la app sigue con el piso, E10.0 intacto), pero los `console.error`/`requestfailed` del navegador no se pueden silenciar desde la app y el smoke los marca como fallo, así que el deploy queda bloqueado (CI roja; el sitio sigue en E10.0).
+
+**Qué propongo.** Servir el `.pmtiles` desde un origen con CORS. **GitHub Pages sí manda `Access-Control-Allow-Origin: *`** (verificado), así que sirve publicarlo ahí en vez de en la release: (a) mismo sitio/mismo origen (el archivo en `web/dist`, sin CORS), (b) Pages como hosting del `.pmtiles`, o (c) un bucket público con CORS (R2/S3). Decime cuál y lo cambio; la Parte B ya queda apuntando a la URL prevista de la release.
