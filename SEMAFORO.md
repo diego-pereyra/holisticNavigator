@@ -1,31 +1,24 @@
 ADELANTE
 
-TAREA ÚNICA: W4.5 — ficha compacta: cabecera fija, rejilla de datos, acordeones, teclado.
+TAREA ÚNICA: W4.8 — en móvil, la lista de rutas ocupa la hoja.
 
 
-La ficha apila 9 bloques en una columna; en escritorio hay que pasar por consejos, cita, variantes
-y referencias para llegar a los waypoints. Commit `W4.5 Ficha compacta`, después de W4.4:
+Diego (2026-10-14): con la hoja a media altura se ve una sola ruta. La cabecera de la pestaña
+Rutas (título "Rutas", búsqueda, chips, "Solo cerca de mí", contador, importar) se come el alto.
 
-1. **Cabecera y acciones fijas** (`position: sticky; top: 0`) dentro de la columna de ficha: código,
-   título, origen → destino, botones Seguir / Exportar GPX / Recorrer / Enlace. Siempre a la vista.
-2. **Datos en rejilla** (`class="hn-facts"`, 2 columnas en escritorio, 1 en móvil), justo debajo:
-   Cuenca · Millas (mín–máx) · Variantes · Mejor época (texto) · Ciclones (texto) · Veredicto del mes.
-   La tira de meses va encima de la rejilla. Esto reemplaza las líneas sueltas de hoy.
-3. **Acordeones** (`class="hn-acc"`, cabecera de 44 px con título y cuenta, chevron, estado
-   recordado en `hn.settings`): `Consejo` (tip + "Cómo encarar" de la cuenca) · `Variantes (3)` ·
-   `Waypoints (12)` · `Referencias` (cartas, guías, planificador en una línea cada una) ·
-   `Del libro` (cita + atribución). Estado por defecto: en escritorio abiertos Consejo y
-   Waypoints, cerrados los demás; en móvil todos abiertos como hoy (a Diego le funciona).
-3 bis. **Waypoint seleccionado = waypoint resaltado en la carta** (patrón savvy navvy): tocar una
-   fila de la tabla de waypoints centra la carta en ese punto, lo agranda (`route-wp-selected`,
-   8 px `#FFCC80` con halo) y muestra bajo la fila su posición y la distancia al siguiente waypoint.
-   Tocar un waypoint en la carta selecciona su fila y la trae a la vista.
-4. **Teclado en escritorio** (regla 12 de §6 ter): `Esc` cierra la ficha, `/` enfoca la búsqueda,
-   `↑/↓` mueven la selección en la lista y `Enter` abre la ficha. Marcador: `keydown`.
-5. Prueba: en 1366 × 768 con AN12 abierta, sin scrollear se ven cabecera, acciones, tira de meses,
-   rejilla de datos, el consejo y el inicio de la tabla de waypoints.
+Archivos: `web/src/ui/app.ts`, `web/public/app.css`. Commit `W4.8: lista de rutas con cabecera compacta`.
 
-Aclaraciones:
-- Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
-- El estado de cada acordeón se guarda en hn.settings como { acc: { consejo: true, variantes: false, ... } }.
-- Al terminar: npm test, build-web.sh, commit "W4.5: ficha compacta", push, PARÁ.
+1. Quitar el `h2` "Rutas" (ya lo dice la pestaña).
+2. Una sola fila de 44 px: campo de búsqueda (ocupa el ancho) con placeholder
+   `Buscar · 133 de 400` (el contador va en el placeholder cuando el campo está vacío; cuando se
+   escribe, el contador pasa a una línea de 16 px debajo de los chips).
+3. Chips en una sola fila horizontal con scroll (`overflow-x: auto`, sin salto de línea), 36 px de
+   alto: `Todas · Cerca de mí · Atlántico Norte · …`. "Cerca de mí" es un chip más, no un toggle.
+4. "Importar GPX / KML / CSV" deja de estar arriba: es la **última fila de la lista**, con el
+   mismo alto que una fila de ruta y un icono `+`.
+5. La lista (`.hn-list`) es el único elemento con scroll y tiene `flex: 1; min-height: 0` dentro
+   de un cuerpo `display: flex; flex-direction: column`. Cabecera total ≤ 100 px.
+6. Prueba: teléfono de 844 px de alto, hoja a media altura → se ven al menos 4 filas de ruta y la
+   lista scrollea sola; en escritorio no cambia nada.
+
+Al terminar: npm test, build-web.sh, commit "W4.8: lista de rutas con cabecera compacta", push, PARÁ.
