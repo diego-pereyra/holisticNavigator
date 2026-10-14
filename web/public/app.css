@@ -728,6 +728,32 @@
 }
 .hn-menu .hn-btn { min-width: 180px; justify-content: flex-start; }
 
+/* UX-3: nota discreta cuando el zoom pasa el detalle disponible en el centro
+   (la carta base llega a zoom 6; una zona descargada, a 10). */
+.hn-scale-note {
+  position: fixed;
+  left: 16px;
+  bottom: calc(var(--hn-sheet-h, 96px) + 16px);
+  z-index: 30;
+  max-width: min(70vw, 340px);
+  padding: 6px 10px;
+  border: 1px solid var(--hn-line);
+  border-radius: 8px;
+  background: rgba(11, 22, 38, 0.85);
+  color: var(--hn-muted);
+  font-size: 12px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+.hn-scale-note[hidden] { display: none; }
+@media (min-width: 700px) {
+  .hn-scale-note { left: 416px; bottom: 16px; }
+}
+@media (min-width: 1100px) {
+  .hn-scale-note { left: 336px; }
+  body.hn-has-ficha .hn-scale-note { left: 776px; }
+}
+
 .hn-update {
   position: fixed;
   left: 0;

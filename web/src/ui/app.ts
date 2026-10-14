@@ -163,6 +163,7 @@ export interface AppHandle {
   setRoutes(routesGeoJson: string): void;
   catalogFailed(): void;
   routesFailed(): void;
+  setScaleNote(text: string | null): void;
 }
 
 const EMPTY_INDEX: CatalogIndex = { chapters: [], routes: [] };
@@ -232,6 +233,13 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   });
   root.append(fab);
 
+  // UX-3: nota discreta abajo a la izquierda cuando el zoom pasa el detalle
+  // disponible en el centro (la carta base llega a zoom 6; una zona descargada,
+  // a 10). El texto y su visibilidad los decide main.ts.
+  const scaleNote = el("div", { class: "hn-scale-note" });
+  scaleNote.hidden = true;
+  root.append(scaleNote);
+
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
   renderAlarmBand(ui);
@@ -286,6 +294,14 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     routesFailed() {
       if (ui.routes() === "ready") return;
       ui.routes.set("failed");
+    },
+    setScaleNote(text) {
+      if (text === null) {
+        scaleNote.hidden = true;
+        return;
+      }
+      if (scaleNote.textContent !== text) scaleNote.textContent = text;
+      scaleNote.hidden = false;
     },
   };
 }

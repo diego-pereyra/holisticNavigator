@@ -225,7 +225,7 @@ const map = new MlMap({
   center: [0, 20],
   zoom: 1.2,
   minZoom: 0,
-  maxZoom: 12,
+  maxZoom: 18,
   attributionControl: { compact: true, customAttribution: ATTRIBUTION },
 });
 
@@ -260,6 +260,7 @@ function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta): void {
   }
   zoneBounds.set(id, meta.bbox);
   updateZoneVisibility();
+  updateScaleNote();
 }
 
 function removeZoneFromMap(id: string): void {
@@ -268,6 +269,7 @@ function removeZoneFromMap(id: string): void {
   if (map.getSource(srcId)) map.removeSource(srcId);
   pmtilesProtocol.tiles.delete(zoneProtocolName(id));
   zoneBounds.delete(id);
+  updateScaleNote();
 }
 
 function updateZoneVisibility(): void {
@@ -287,6 +289,34 @@ function updateZoneVisibility(): void {
 
 const zoneHooks: ZoneHooks = { add: addZoneToMap, remove: removeZoneFromMap };
 map.on("moveend", updateZoneVisibility);
+
+// UX-3: el zoom no se corta (hasta 18). La carta mundial llega a zoom 6 y una
+// zona descargada a zoom 10; más allá MapLibre sobreamplía las teselas, así que
+// cuando el centro queda por encima de ese detalle se avisa con una nota
+// discreta (abajo a la izquierda). El texto lo pinta la UI (app.ts).
+let setScaleNote: ((text: string | null) => void) | null = null;
+
+function centerCovered(): boolean {
+  const c = map.getCenter();
+  for (const b of zoneBounds.values()) {
+    if (c.lng >= b[0] && c.lng <= b[2] && c.lat >= b[1] && c.lat <= b[3]) return true;
+  }
+  return false;
+}
+
+function updateScaleNote(): void {
+  if (!setScaleNote) return;
+  const covered = centerCovered();
+  if (map.getZoom() > (covered ? 10 : 6)) {
+    setScaleNote(
+      covered
+        ? "Detalle hasta zoom 10 · usá tu carta para el puerto"
+        : "Sin detalle a esta escala · descargá la zona",
+    );
+  } else {
+    setScaleNote(null);
+  }
+}
 
 // ------------------------------------------------------------------- arranque
 
@@ -361,6 +391,10 @@ function start(): void {
   boot.hide();
   const store = lazyStore();
   const app = mountApp(map, { store, zones: zoneHooks });
+  setScaleNote = (text) => app.setScaleNote(text);
+  map.on("move", updateScaleNote);
+  map.on("zoom", updateScaleNote);
+  updateScaleNote();
   window.hnRetryCatalog = () => void loadCatalog(app);
   void loadCatalog(app);
   void loadRoutes(app);
