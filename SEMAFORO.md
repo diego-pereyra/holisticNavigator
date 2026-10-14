@@ -1,39 +1,39 @@
 ADELANTE
 
-TAREA ÚNICA: E10.3 — balizas, boyas y luces sin red, por zona.
+TAREA ÚNICA: E9.3 — vigilancia de fondeo, hombre al agua (MOB) y pantalla encendida.
 
+0. Primero, re-lanzar el job de teselas para completar las balizas de rio-de-la-plata: agregá
+   "version": 2 al objeto raíz de tools/tiles/zones.json, commit "tiles: re-run", push. Seguí con
+   lo de abajo sin esperar.
 
-Las teselas de Protomaps no incluyen `seamark:*`. Por cada zona de `zones.json`, el job de teselas
-descarga de Overpass (`https://overpass-api.de/api/interpreter`) los nodos con `seamark:type` en
-`buoy_lateral, buoy_cardinal, buoy_safe_water, buoy_special, buoy_isolated_danger, beacon_lateral,
-beacon_cardinal, beacon_special, light_major, light_minor, lighthouse, harbour, mooring` dentro del
-bbox, y publica `zones/<id>-seamarks.geojson` (propiedades: `type`, `name`, `colour`, `shape`,
-`light` = carácter si existe). Tamaño típico: 100–500 KB. La app lo descarga junto con la zona y lo
-dibuja desde zoom 11 con `SymbolLayer`: texto del símbolo por tipo (● lateral con color
-rojo/verde, ◆ cardinal amarillo/negro, ✦ luz, ⚓ puerto/amarre), nombre desde zoom 13, y el
-carácter de la luz al tocar. Con red, además, capa raster OpenSeaMap `seamarks` (apagada por
-defecto, interruptor "Balizas OSM online"). Commit `E10.3: balizas sin red por zona`.
+Archivos: web/src/core/alarms.ts (+test), web/src/ui/app.ts, web/public/app.css,
+web/src/platform/wakelock.ts (nuevo). Nada más.
 
-Pasos concretos:
-1. tiles.yml: por cada zona con bbox, consulta Overpass QL (POST, timeout 180 s, reintento ×3):
-   [out:json][timeout:180];
-   node["seamark:type"~"^(buoy_lateral|buoy_cardinal|buoy_safe_water|buoy_special|buoy_isolated_danger|beacon_lateral|beacon_cardinal|beacon_special|light_major|light_minor|lighthouse|harbour|mooring)$"](S,W,N,E);
-   out body;
-   Convertir a GeoJSON de puntos con propiedades type (sin el prefijo seamark:), name,
-   colour (seamark:*:colour), shape, light (seamark:light:character + :colour + :period si existen).
-   Publicar zones/<id>-seamarks.geojson en la release y copiarlo al sitio en deploy-pages.yml.
-2. tiles.json: por zona, agregar "seamarks": { "url", "bytes" }.
-3. App: downloadZone descarga también el geojson de balizas y lo guarda como string en
-   hn.tiles.<id>.seamarks; al arrancar, por cada zona descargada, fuente geojson seamarks-<id> y capas:
-   - seamarks-<id>-sym: symbol, minzoom 11, text-field por type: lateral "●", cardinal "◆",
-     safe_water "○", isolated_danger "◉", special "▲", light_* y lighthouse "✦", harbour "⚓",
-     mooring "⊙"; text-color por colour (red → #FF5252, green → #69F0AE, yellow → #FFD740,
-     black/white → #E0E0E0, resto #B0BEC5); text-size 16; halo #0b1626.
-   - seamarks-<id>-name: symbol, minzoom 13, name, 11 px, offset abajo.
-   - Tocar una baliza: pequeño popup (MapLibre Popup) con type, name y light.
-4. Con red: capa raster "seamarks-online" https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png,
-   minzoom 9, apagada por defecto, interruptor "Balizas OSM online" en el panel Sin conexión;
-   atribución "© OpenSeaMap (CC BY-SA)". Nunca precacheada.
-5. Prueba: descargar Río de la Plata, modo avión, zoom 13 sobre el puerto de Montevideo →
-   boyas y luces del canal con sus colores; tocar una → su característica.
-6. npm test, build-web.sh, commit "E10.3: balizas sin red por zona", push, PARÁ.
+1. core/alarms.ts: agregar
+   export interface AnchorWatch { lat: number; lon: number; radiusM: number }   // defecto 50 m
+   export function anchorAlarm(pos: {lat,lon}, w: AnchorWatch): boolean  → distancia > radiusM
+   export interface Mob { lat: number; lon: number; t: number }
+   export function mobFix(pos, mob): { bearingDeg, distanceNm, elapsedS }  (haversine + rumbo).
+   Tests: 4 casos (dentro/fuera del radio; rumbo de vuelta y tiempo).
+2. platform/wakelock.ts: export async function keepAwake(on: boolean): usa navigator.wakeLock
+   .request("screen") y lo libera; re-pide en visibilitychange → visible si on. Sin API → no-op.
+3. Fondeo: en Aquí → tarjeta "Fondeo": botón "Activar vigilancia" (toma la posición actual y el
+   radio del campo "Radio (m)", defecto 50, persistido en hn.settings.anchor). Activada: la
+   tarjeta muestra "Fondeado a {d} m del punto · radio {r} m" actualizado por un effect propio;
+   en el mapa, círculo del radio (fuente anchor, capa anchor-ring línea #FFD54F 1,5 px) y punto
+   del ancla. Si anchorAlarm → misma banda roja y sonido que las alarmas de E9.2 (kind "anchor",
+   texto "⚓ Garreando: {d} m del fondeo · [Silenciar]"), misma regla de silencio. "Desactivar"
+   borra todo. Estado persistido (sobrevive recarga).
+4. MOB: botón flotante rojo "MOB" (class hn-mob, 56×56, abajo a la izquierda, por encima de la
+   hoja, siempre visible cuando hay posición). Pulsación larga de 600 ms con anillo de progreso
+   (CSS) para activar: guarda Mob con la posición y hora, crea el waypoint "MOB hh:mm" en el mapa
+   (capa mob, símbolo "✖" #FF1744 16 px con halo), y la tira de navegación pasa a modo MOB:
+   línea 1 "MOB" y rumbo de vuelta en 40 px; línea 2 "{distancia} nm · {mm:ss} desde la caída";
+   alarma sonora continua (beep(2) cada 5 s) hasta "Silenciar"; botón "Terminar MOB" en la
+   tira. Mientras MOB está activo, las alarmas de ruta se suspenden. Persistido.
+5. keepAwake(true) mientras haya ruta activa, fondeo activo o MOB; false si no queda ninguno.
+6. Ayuda de primer uso: agregar una cuarta línea "Mantené apretado MOB si alguien cae al agua".
+7. Prueba (posición manual): activar fondeo, mover la posición 80 m → suena y banda; MOB con
+   pulsación larga → tira en modo MOB con rumbo de vuelta y cronómetro; "Terminar MOB" vuelve a
+   la navegación normal. En Android Chrome la pantalla no se apaga con ruta activa.
+8. npm test, build-web.sh, commit "E9.3: fondeo, MOB y pantalla encendida", push, PARÁ.
