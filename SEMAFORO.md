@@ -1,35 +1,31 @@
 ADELANTE
 
-TAREA ÚNICA: E9.1 — pantalla "Navegando" en la tira de la hoja (peek).
+TAREA ÚNICA: E9.2 — alarmas de desvío y de llegada.
 
-Qué es: con ruta activa (Seguir) y posición, la hoja en estado peek deja de mostrar el asa vacía y
-muestra la tira de navegación con números grandes, legible a un metro. Es la pantalla principal
-cuando el barco se mueve.
+Archivos: web/src/core/alarms.ts (nuevo, con test), web/src/ui/app.ts, web/public/app.css,
+web/src/platform/sound.ts (nuevo). Nada más.
 
-Archivos: web/src/ui/app.ts (nueva función renderNavStrip), web/public/app.css. Nada más.
-core/kinematics.ts y core/navigation.ts ya existen y se usan tal cual (activeNav(ui) ya devuelve
-fix + kin).
-
-1. Nueva función renderNavStrip(ui, host): host es un div class="hn-navstrip" que se inserta en la
-   hoja justo debajo del asa, solo cuando ui.active() != null y ui.position() != null. Tiene un
-   effect propio (lee ui.position, ui.active) que hace replaceChildren de host; no reconstruye la hoja.
-2. Contenido, dos líneas:
-   Línea 1 (40px de alto de fuente, peso 700): `{nombre del próximo waypoint}` a la izquierda y
-   `{rumbo}°` a la derecha. Ej.: `Sable            212°`
-   Línea 2 (24px): `{distancia} nm · ETA {hh:mm} · SOG {x.x} kn · desvío {d.d} nm {estribor|babor}`.
-   Si SOG es null: `SOG —` y `ETA —`. Si xteNm == 0: `en rumbo`.
-   Tercera línea pequeña (13px, color secundario): `tramo {n} de {m} · {destino final} a {nm} nm`.
-3. Tocar la tira abre la pestaña Aquí (goTo(ui,"aqui")), donde ya está la tarjeta "Ruta en curso".
-4. En móvil, con tira visible, el estado peek mide 160px (variable --hn-sheet-h: 160px) en vez
-   de 96; el botón ◉ sube con la hoja (ya usa la variable).
-5. En escritorio (≥ 700px) la misma tira va fija ARRIBA del panel izquierdo, debajo de las
-   pestañas, con las mismas tres líneas.
-6. Paso automático de waypoint ya existe en navigate() (elige el tramo más cercano); no tocar.
-7. Modo Navegar automático: si SOG ≥ 0,5 kn durante 2 minutos seguidos (ventana de fixes de
-   ui.navFixes) y la hoja está en half o full, pasarla a peek UNA vez (no volver a forzar si el
-   usuario la sube). Guardar en una variable local `autoPeekDone` que se resetea al cambiar
-   ui.active.
-8. Prueba: Seguir AN12 con posición manual en 40N 30W → aparece la tira con "Bermuda E" (o el
-   waypoint más cercano), rumbo, distancia y "tramo n de m"; sin SOG muestra "—". Mover la posición
-   manual: la tira se actualiza sin que la hoja salte.
-9. npm test, build-web.sh, commit "E9.1: pantalla Navegando en la tira", push, PARÁ.
+1. core/alarms.ts (lógica pura, testeada):
+   export interface AlarmSettings { xteMaxNm: number; arrivalNm: number }   // defecto 2 y 1
+   export type AlarmKind = "xte" | "arrival";
+   export interface AlarmState { active: AlarmKind | null; silencedFor: AlarmKind | null }
+   export function evalAlarms(fix: NavFix, s: AlarmSettings, prev: AlarmState): AlarmState
+   Reglas: |xteNm| > xteMaxNm → "xte"; distanceNm < arrivalNm → "arrival" (tiene prioridad).
+   Si la condición desaparece, active = null y silencedFor = null (vuelve a poder sonar).
+   Si active == silencedFor, no suena (sigue activa pero silenciada).
+   Tests: 6 casos (cruza umbral, vuelve, silenciada no se repite, se repite tras resolverse, llegada
+   gana a desvío, sin fix → null).
+2. platform/sound.ts: export function beep(times: number): tono 880 Hz de 150 ms con
+   AudioContext (crearlo en el primer gesto del usuario; si no hay, silencio) + navigator.vibrate?.(200).
+3. Ajustes: en la pestaña Aquí, sección "Alarmas" (tarjeta): dos campos numéricos "Desvío máximo
+   (nm)" y "Radio de llegada (nm)", con los defectos; se guardan en hn.settings.alarms.
+4. En app.ts, un effect que lee ui.position y ui.active, llama activeNav(ui) y evalAlarms; cuando
+   active cambia de null a un valor y no está silenciada: beep(3) cada 10 s mientras siga activa,
+   y banda roja fija arriba de la hoja class="hn-alarm" con el texto
+   `⚠ Desvío de {d.d} nm · [Silenciar]` o `⚑ Llegando a {waypoint} · [Silenciar]`.
+   Silenciar: silencedFor = active; la banda queda en gris con el texto, sin sonido.
+5. Las alarmas solo corren con ruta activa. Al Dejar de seguir, se limpian.
+6. Prueba: Seguir AN12 con posición manual a 3 nm del trazado → suena y aparece la banda; Silenciar
+   → deja de sonar; mover la posición al trazado → banda desaparece; volver a desviarse → vuelve a
+   sonar. Posición a 0,5 nm de un waypoint → "Llegando a …".
+7. npm test, build-web.sh, commit "E9.2: alarmas de desvío y llegada", push, PARÁ.
