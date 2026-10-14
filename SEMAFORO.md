@@ -1,41 +1,37 @@
 ADELANTE
 
-TAREA ÚNICA: W4.3 — mapa legible: países, fronteras y ciudades en la carta base.
+TAREA ÚNICA: W4.4 — lista de rutas informativa y dos columnas en escritorio.
 
 
-Diego vio la app nueva: "el mapa muestra todas las rutas y es un lío" y "me gusta la división por
-países, si no no sé en qué costa estoy". Un solo commit `W4.3 Mapa legible` después de W4.2:
+Diego: la hoja desde abajo no molesta, pero "el panel de la izquierda era más práctico en la
+información que traía". Lo que el panel viejo mostraba y el nuevo perdió:
 
-**A. Carta base con países y ciudades** (`tools/build_basemap.py`, `main.ts`, precache)
-- Reemplazar `land.geojson` por `countries.geojson` = Natural Earth 110m `admin_0_countries`,
-  coordenadas a 2 decimales, solo propiedades `name` y `mapcolor7` (objetivo ≤ 100 KB gzip).
-- Capas, de abajo arriba: `country-fill` (relleno por `mapcolor7` con 7 tonos apagados sobre el
-  oscuro: `#1c2733 #202c3a #1a2a31 #22293a #1e2f3a #242a33 #1b2d38`), `country-line` (`#3a4a5a`,
-  0,6 px), `coast-line` igual que hoy, `country-label` (símbolo con `name`, 11 px, `#6b7f96`, halo
-  `#0b1626`, visible desde zoom 2, sin solapes).
-- `cities.geojson` = Natural Earth 110m `populated_places` (≈ 240 puntos, `name`, `pop_max`): capas
-  `city-dot` (2 px `#9FB0C0`) y `city-label` (10 px) visibles desde zoom 3; desde zoom 5 todas.
-- La retícula y sus etiquetas se mantienen. Tema oscuro se mantiene (el tema Día llega con T11.5).
+1. **El título del libro en cada fila.** La fila nueva dice `AN12 · Falmouth → Newport`; la vieja
+   decía `AN12 / Europe to North America (southern routes) / Atlántico Norte`. El título dice de
+   qué trata la ruta; origen→destino no. Fila nueva, tres líneas:
+   `AN12 · Europe to North America (southern routes)` (negrita) ·
+   `Falmouth → Newport · 3011–3309 nm · 3 variantes` ·
+   insignia de mes a la derecha. Región solo si el filtro es "Todas".
+2. **Contador** `133 de 400 rutas · Atlántico Norte` arriba de la lista, como antes.
+3. **Lista y ficha a la vez en escritorio, en dos columnas.** Diego: "en la compu es aberrante lo
+   que tenés que scrollear". En ≥ 1100 px: columna 1 = lista (320 px: tabs, búsqueda, chips,
+   contador, lista con scroll propio); columna 2 = ficha (440 px, `class="hn-col-ficha"`, solo
+   cuando hay ruta seleccionada, con scroll propio); el mapa ocupa el resto. Entre 700 y 1100 px:
+   una columna de 400 px con lista arriba y ficha abajo al 50 % cada una, scroll propio en cada
+   mitad. La lista nunca desaparece al elegir. En móvil se mantiene la hoja con `‹ Rutas`.
+   *Criterio:* es el patrón establecido de las apps de mapas (Google Maps en escritorio: lista a la
+   izquierda, detalle al lado, mapa siempre visible; en móvil, hoja inferior que se despliega) y el
+   de savvy navvy (panel de información de ruta lateral en tablet/escritorio, hoja en teléfono).
+   No inventar otro.
+4. **Variantes como chips** `Todas · A · B · C` encima de la lista cuando hay ruta seleccionada
+   (como el panel viejo), además de las filas de variantes dentro de la ficha. Las dos cosas mueven
+   `selectedVariant`.
+5. **Importar** vuelve a ser visible sin scroll: fila fija bajo la búsqueda, texto
+   `+ Importar GPX / KML / CSV`.
 
-**B. Rutas: nunca las 2 268 a la vez** (`ui/app.ts`)
-- Zoom < 3 (mundo): **ninguna ruta**. En su lugar, `basin-label`: las 13 cuencas con su nombre en
-  el centro de su caja (`basins.json`), 12 px `#4FC3F7` α0,7; tocar una cuenca = chip de cuenca.
-- Zoom ≥ 3: se dibujan solo las rutas de la **cuenca bajo el centro del mapa** (o del filtro
-  activo: chip, búsqueda, "cerca de mí"), y **una línea por ruta** (la variante A) en
-  `catalog-lines` α0,35, 1 px. Cambiar de cuenca al mover el mapa actualiza el filtro de la capa
-  (expresión `in`), con un retardo de 300 ms tras `moveend`.
-- Ruta seleccionada: todas sus variantes en `route-lines` α0,6; la elegida en `route-active`.
-- Búsqueda con texto: solo las coincidencias, en cualquier zoom.
-- Aquí → "Rutas que te pasan cerca": esas rutas se dibujan también en `route-lines` mientras la
-  pestaña Aquí está visible.
-- Prueba: a zoom mundial no hay líneas y se leen las 13 cuencas; con el centro sobre el Atlántico
-  Norte a zoom 4 hay ≤ 133 líneas (una por ruta AN), ninguna de otra cuenca.
-
-`country-label`, `city-dot`, `city-label`, `basin-label`, `moveend`, `countries.geojson`,
-`cities.geojson`.
+`hn-count`, `hn-ficha-dock`, `hn-variant-chips`.
 
 Aclaraciones:
-- La parte B (rutas por cuenca) ya está hecha en W4.6: no la rehagas. Solo la parte A.
-- Fuentes: descargar en tools/build_basemap.py desde https://naciscdn.org/naturalearth/110m/cultural/ne_110m_admin_0_countries.zip y ne_110m_populated_places_simple.zip (dominio público); convertir con shapely/json, sin dependencias nuevas en web/.
-- Si el geojson de países supera 100 KB gzip, redondear a 2 decimales y quitar propiedades hasta cumplir; no bajar de 110m.
-- Al terminar: npm test, build-web.sh, commit "W4.3: países, fronteras y ciudades en la carta base", push, PARÁ.
+- Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
+- Las dos columnas de escritorio van con @media (min-width: 1100px); entre 700 y 1100 px, lista arriba y ficha abajo al 50 %.
+- Al terminar: npm test, build-web.sh, commit "W4.4: lista informativa y dos columnas en escritorio", push, PARÁ.
