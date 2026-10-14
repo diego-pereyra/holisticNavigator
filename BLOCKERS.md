@@ -68,7 +68,7 @@ al entorno/CI; avisame y lo cambio.
 
 **Resuelto (E10.0 corregida).** El bloqueo era correcto: redondear decimales no reduce puntos (24,8 MB a 2 decimales). Se resolvió simplificando la geometría con Douglas-Peucker (`simplify`, sin dependencias) en `tools/build_basemap.py`. Con tol 0.15 daba 1 579 KB pero su gzip (452 KB) rompía el presupuesto de primera carga (1,30 MB > 1,20 MB), así que se usó la siguiente tolerancia autorizada: **tol 0.25 → 1 740 148 → 61 981 puntos (3,6 %), 1 110 KB bruto / 309 KB gzip** (≤ 2 MB; total del build 1,15 MB). No hay `50m`/`110m` de bathymetry en NE (HTTP 403), así que la única vía era simplificar los 10m.
 
-## E10.1 · PMTiles desde un asset de Release no se puede leer en el navegador (CORS)
+## E10.1 · PMTiles desde un asset de Release no se puede leer en el navegador (CORS) — resuelto (E10.1b, 2026-10-14)
 
 **Qué falla.** El job `Build PMTiles (world z6)` corre bien y publica `world-z6.pmtiles` (45 073 486 B) y `tiles.json` en la release `tiles-latest`. Pero los assets de GitHub Releases **no mandan `Access-Control-Allow-Origin`** (verificado con `curl -H "Origin: …"`: la respuesta final de `release-assets.githubusercontent.com` es 200 sin cabecera CORS). El navegador bloquea el `fetch` del protocolo pmtiles y el smoke test del deploy falla:
 
@@ -81,3 +81,7 @@ SMOKE FAIL
 `map.on("error")` sí captura el error de la fuente (la app sigue con el piso, E10.0 intacto), pero los `console.error`/`requestfailed` del navegador no se pueden silenciar desde la app y el smoke los marca como fallo, así que el deploy queda bloqueado (CI roja; el sitio sigue en E10.0).
 
 **Qué propongo.** Servir el `.pmtiles` desde un origen con CORS. **GitHub Pages sí manda `Access-Control-Allow-Origin: *`** (verificado), así que sirve publicarlo ahí en vez de en la release: (a) mismo sitio/mismo origen (el archivo en `web/dist`, sin CORS), (b) Pages como hosting del `.pmtiles`, o (c) un bucket público con CORS (R2/S3). Decime cuál y lo cambio; la Parte B ya queda apuntando a la URL prevista de la release.
+
+**Resuelto (E10.1b, 2026-10-14).** Se adoptó la opción (a): los assets de la release `tiles-latest` quedan como almacén y el workflow `deploy-pages.yml` los copia a `web/dist/tiles/` del propio sitio (mismo origen, con CORS y soporte de rangos). `TILES_WORLD_URL` ahora es `new URL("tiles/world-z6.pmtiles", document.baseURI)`; `tiles/` queda fuera del precache del SW (que además saltea esas peticiones `Range`) y del presupuesto de primera carga. Sin peticiones cross-origin, el bloqueo CORS desaparece.
+
+**Nota (desvío del enunciado).** El smoke de CI servía la dist con `python3 -m http.server`, que **no soporta HTTP Range**: responde 200 con el archivo entero y el `fetch` de pmtiles se aborta (`ERR_ABORTED` → `requestfailed`), así que el smoke habría seguido rojo aunque el CORS estuviera resuelto. Como Pages sí soporta rangos, el paso del smoke (en `deploy-pages.yml`, sin tocar `web/smoke.mjs`) ahora levanta un servidor con Range para que el test refleje a Pages. Verificado el servidor con `curl` (200/206/416 correctos) antes de subirlo.

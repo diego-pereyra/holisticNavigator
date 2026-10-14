@@ -106,6 +106,11 @@ self.addEventListener("fetch", (event) => {
   }
   if (url.origin !== self.location.origin) return;
 
+  // Teselas PMTiles (E10.1b): se piden con `Range` y el servidor responde 206
+  // (contenido parcial). El SW no debe interceptarlas: cachear respuestas 206
+  // parciales corrompería la lectura del archivo. Van directo a la red.
+  if (url.pathname.includes("/tiles/")) return;
+
   const base = "./" + url.pathname.split("/").pop();
 
   if (req.mode === "navigate") {

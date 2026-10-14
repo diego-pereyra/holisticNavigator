@@ -18,10 +18,12 @@ const COUNTRIES = "basemap/countries.geojson";
 const CITIES = "basemap/cities.geojson";
 const GRATICULE = "basemap/graticule.geojson";
 
-// Carta de detalle mundial (PMTiles de OSM, E10.1). El archivo `world-z6.pmtiles`
-// lo publica el workflow `tiles.yml` como asset de la release `tiles-latest`.
-const TILES_WORLD_URL =
-  "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles";
+// Carta de detalle mundial (PMTiles de OSM, E10.1b). El workflow `tiles.yml`
+// publica `world-z6.pmtiles` como asset de la release `tiles-latest`; el deploy
+// lo copia a `tiles/` del propio sitio de Pages (mismo origen, con CORS y
+// soporte de rangos). Leerlo del propio origen evita el bloqueo CORS de los
+// assets de Releases.
+const TILES_WORLD_URL = new URL("tiles/world-z6.pmtiles", document.baseURI).toString();
 
 const ATTRIBUTION = "© OpenStreetMap contributors · Protomaps · Natural Earth";
 

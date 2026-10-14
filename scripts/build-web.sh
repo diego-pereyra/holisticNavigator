@@ -37,7 +37,9 @@ dist = os.path.join(root, "web", "dist")
 sha = sys.argv[1]
 
 # 1) sw-manifest.json: todos los archivos de la dist, salvo mapas de depuración,
-#    licencias y el propio service worker / manifiesto.
+#    licencias, el service worker / manifiesto y `tiles/` (E10.1b). Las teselas
+#    PMTiles son ~45 MB y se piden por rangos a medida que se navega: no van al
+#    precache (el SW además las saltea explícitamente, ver service-worker.js).
 skip_names = {"service-worker.js", "sw-manifest.json"}
 skip_suffix = (".map", ".LICENSE.txt")
 urls = ["./"]
@@ -46,6 +48,8 @@ for dirpath, _dirs, files in os.walk(dist):
         if name in skip_names or name.endswith(skip_suffix):
             continue
         rel = os.path.relpath(os.path.join(dirpath, name), dist).replace(os.sep, "/")
+        if rel.split("/", 1)[0] == "tiles":
+            continue
         urls.append("./" + rel)
 urls = sorted(set(urls))
 

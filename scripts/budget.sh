@@ -14,6 +14,8 @@ for root,dirs,files in os.walk('$DIST'):
   for fn in files:
     try:
       p=os.path.join(root,fn)
+      rel=os.path.relpath(p,'$DIST')
+      if rel.split(os.sep)[0]=='tiles': continue
       with open(p,'rb') as fh: total += len(gzip.compress(fh.read()))
     except: pass
 print(total)

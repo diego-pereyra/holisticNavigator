@@ -27,11 +27,81 @@ jobs:
       - run: npm ci --prefix web
       - run: bash scripts/build-web.sh
       - run: bash scripts/budget.sh
+      - name: Copiar las teselas de la carta de detalle al sitio (E10.1b)
+        run: |
+          mkdir -p web/dist/tiles
+          curl -fsSL -o web/dist/tiles/world-z6.pmtiles \
+            https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles
+          curl -fsSL -o web/dist/tiles/tiles.json \
+            https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/tiles.json
       - name: Smoke test en browser real (bloquea el deploy si la app no arranca)
         run: |
           cd web && npm i --no-save playwright && npx playwright install --with-deps chromium && cd ..
           mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator
-          (cd /tmp/site && python3 -m http.server 8087 >/dev/null 2>&1 &)
+          # El smoke sirve la dist con un servidor que soporta HTTP Range: las
+          # teselas PMTiles se piden por rangos (206) y `python3 -m http.server`
+          # no los soporta (responde 200 con el archivo entero, el fetch se
+          # aborta y Playwright lo marca como requestfailed). Pages sí soporta
+          # rangos, así que el smoke imita a Pages.
+          cat > /tmp/serve-range.py <<'PY'
+          import http.server, os, re
+          class RangeHandler(http.server.SimpleHTTPRequestHandler):
+              def send_head(self):
+                  path = self.translate_path(self.path)
+                  if os.path.isdir(path):
+                      return super().send_head()
+                  try:
+                      f = open(path, "rb")
+                  except OSError:
+                      self.send_error(404, "File not found")
+                      return None
+                  size = os.fstat(f.fileno()).st_size
+                  ctype = self.guess_type(path)
+                  self._remaining = size
+                  rng = self.headers.get("Range")
+                  m = re.match(r"bytes=(\d*)-(\d*)$", rng.strip()) if rng else None
+                  if m and (m.group(1) or m.group(2)):
+                      if m.group(1):
+                          start = int(m.group(1))
+                          end = int(m.group(2)) if m.group(2) else size - 1
+                      else:
+                          start = max(0, size - int(m.group(2)))
+                          end = size - 1
+                      if start >= size:
+                          f.close()
+                          self.send_response(416)
+                          self.send_header("Content-Range", "bytes */%d" % size)
+                          self.end_headers()
+                          return None
+                      end = min(end, size - 1)
+                      self._remaining = end - start + 1
+                      self.send_response(206)
+                      self.send_header("Content-type", ctype)
+                      self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+                      self.send_header("Content-Length", str(self._remaining))
+                      self.send_header("Accept-Ranges", "bytes")
+                      self.end_headers()
+                      f.seek(start)
+                      return f
+                  self.send_response(200)
+                  self.send_header("Content-type", ctype)
+                  self.send_header("Content-Length", str(size))
+                  self.send_header("Accept-Ranges", "bytes")
+                  self.end_headers()
+                  return f
+              def copyfile(self, source, outputfile):
+                  remaining = getattr(self, "_remaining", None)
+                  if remaining is None:
+                      return super().copyfile(source, outputfile)
+                  while remaining > 0:
+                      chunk = source.read(min(65536, remaining))
+                      if not chunk:
+                          break
+                      outputfile.write(chunk)
+                      remaining -= len(chunk)
+          http.server.ThreadingHTTPServer(("", 8087), RangeHandler).serve_forever()
+          PY
+          (cd /tmp/site && python3 /tmp/serve-range.py >/dev/null 2>&1 &)
           sleep 2
           node web/smoke.mjs http://localhost:8087/holisticNavigator/
       - uses: actions/upload-artifact@v4
