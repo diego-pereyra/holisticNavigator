@@ -2,9 +2,15 @@ import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
 import type { StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { mountApp } from "./ui/app.ts";
+import { mountApp, type AppHandle } from "./ui/app.ts";
 import { loadBasins, loadIndex, loadRoutesGeoJson } from "./platform/catalog.ts";
-import { openStore } from "./platform/store.ts";
+import { openStore, type KeyValueStore } from "./platform/store.ts";
+
+declare global {
+  interface Window {
+    hnRetryCatalog?: () => void;
+  }
+}
 
 const LAND = "basemap/land.geojson";
 const GRATICULE = "basemap/graticule.geojson";
@@ -73,27 +79,75 @@ const map = new Map({
 
 map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
 
-async function boot(): Promise<void> {
+// ------------------------------------------------------------------- arranque
+
+// Pantalla de carga (definida en index.html). Si no está, no hay nada que
+// actualizar: degradar a no-ops. El tope de 8 s y los errores globales viven ahí.
+interface BootScreen {
+  step(key: "base" | "catalog" | "routes", ok: boolean): void;
+  hide(): void;
+  fail(msg: string): void;
+  notice(msg: string): void;
+}
+const boot: BootScreen =
+  (window as unknown as { hnBoot?: BootScreen }).hnBoot ??
+  { step() {}, hide() {}, fail() {}, notice() {} };
+
+function firstLine(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  return msg.split("\n")[0] ?? msg;
+}
+
+// Store perezoso: la app arranca sin esperar a IndexedDB. Cada operación aguarda
+// la apertura (openStore ya tiene tope de 3 s y cae a localStorage).
+function lazyStore(): KeyValueStore {
+  const ready = openStore();
+  return {
+    get: (k) => ready.then((s) => s.get(k)),
+    put: (k, v) => ready.then((s) => s.put(k, v)),
+    remove: (k) => ready.then((s) => s.remove(k)),
+  };
+}
+
+async function loadCatalog(app: AppHandle): Promise<void> {
   try {
-    const [index, basins, routesGeoJson, store] = await Promise.all([
-      loadIndex(),
-      loadBasins(),
-      loadRoutesGeoJson(),
-      openStore(),
-    ]);
-    mountApp(map, { index, basins, routesGeoJson, store });
+    const [index, basins] = await Promise.all([loadIndex(), loadBasins()]);
+    app.setCatalog(index, basins);
+    boot.step("catalog", true);
   } catch (err) {
-    console.error("No pude iniciar la app:", err);
-  } finally {
-    document.getElementById("hn-loading")?.classList.add("done");
+    console.error("No pude cargar el catálogo:", err);
+    app.catalogFailed();
+    boot.fail(firstLine(err));
   }
 }
 
-if (map.loaded()) void boot();
-else map.on("load", () => void boot());
+async function loadRoutes(app: AppHandle): Promise<void> {
+  try {
+    app.setRoutes(await loadRoutesGeoJson());
+    boot.step("routes", true);
+  } catch (err) {
+    console.error("No pude cargar las rutas:", err);
+    app.routesFailed();
+    boot.fail(firstLine(err));
+  }
+}
+
+function start(): void {
+  // El mapa base ya está en pantalla: se monta la UI y se oculta la carga.
+  boot.step("base", true);
+  boot.hide();
+  const app = mountApp(map, { store: lazyStore() });
+  window.hnRetryCatalog = () => void loadCatalog(app);
+  void loadCatalog(app);
+  void loadRoutes(app);
+}
+
+if (map.loaded()) start();
+else map.on("load", start);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
     navigator.serviceWorker.register("service-worker.js").catch(() => undefined);
   });
 }
+

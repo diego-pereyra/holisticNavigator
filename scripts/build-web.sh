@@ -27,6 +27,56 @@ cp web/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs web/dist/
 if grep -q "maplibre-gl-shared.mjs" web/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs; then
   cp web/node_modules/maplibre-gl/dist/maplibre-gl-shared.mjs web/dist/
 fi
-sed "s/__HN_BUILD__/$SHA/g" web/public/service-worker.js > web/dist/service-worker.js
 
-echo "web/dist listo ($(du -sh web/dist | cut -f1), sw=hn-$SHA)"
+# Manifiesto de precache + inyección de marcadores en el service worker (#6).
+python3 - "$SHA" <<'PY'
+import json, os, re, sys
+
+root = os.environ["HN_ROOT"]
+dist = os.path.join(root, "web", "dist")
+sha = sys.argv[1]
+
+# 1) sw-manifest.json: todos los archivos de la dist, salvo mapas de depuración,
+#    licencias y el propio service worker / manifiesto.
+skip_names = {"service-worker.js", "sw-manifest.json"}
+skip_suffix = (".map", ".LICENSE.txt")
+urls = ["./"]
+for dirpath, _dirs, files in os.walk(dist):
+    for name in sorted(files):
+        if name in skip_names or name.endswith(skip_suffix):
+            continue
+        rel = os.path.relpath(os.path.join(dirpath, name), dist).replace(os.sep, "/")
+        urls.append("./" + rel)
+urls = sorted(set(urls))
+
+with open(os.path.join(dist, "sw-manifest.json"), "w", encoding="utf-8") as f:
+    json.dump(urls, f, ensure_ascii=False, indent=0)
+
+# 2) CATALOG_VERSION desde el índice del catálogo servido.
+catalog_version = "0"
+try:
+    with open(os.path.join(dist, "catalog", "index.json"), encoding="utf-8") as f:
+        catalog_version = str(json.load(f).get("catalogVersion", "0"))
+except OSError:
+    pass
+
+# 3) service worker: reemplazar marcadores.
+with open(os.path.join(root, "web", "public", "service-worker.js"), encoding="utf-8") as f:
+    sw = f.read()
+sw = sw.replace("__HN_BUILD__", sha)
+sw = sw.replace("__HN_CATALOG__", catalog_version)
+sw = sw.replace("__HN_PRECACHE__", json.dumps(urls, ensure_ascii=False))
+with open(os.path.join(dist, "service-worker.js"), "w", encoding="utf-8") as f:
+    f.write(sw)
+
+# 4) index.html: SHA del build en la pantalla de carga (#2).
+idx_path = os.path.join(dist, "index.html")
+with open(idx_path, encoding="utf-8") as f:
+    html = f.read()
+with open(idx_path, "w", encoding="utf-8") as f:
+    f.write(html.replace("__HN_BUILD__", sha))
+
+print(f"sw-manifest: {len(urls)} URLs · CATALOG_VERSION={catalog_version}")
+PY
+
+echo "web/dist listo ($(du -sh web/dist | cut -f1), sw=hn-app-$SHA)"

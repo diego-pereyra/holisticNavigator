@@ -6,6 +6,7 @@
   <title>Holistic Navigator</title>
   <meta name="description" content="Planificación de travesías oceánicas: rutas de World Cruising Routes, waypoints GPS, navegación y bitácora. Offline.">
   <meta name="theme-color" content="#0b1626">
+  <meta name="hn-version" content="__HN_BUILD__">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="app.css">
@@ -21,41 +22,100 @@
     }
     #hn-loading .t { font-size: 20px; letter-spacing: .06em; }
     #hn-loading .s { font-size: 12px; color: #6b7f96; }
+    #hn-loading .v { font-size: 11px; color: #3f5165; font-variant-numeric: tabular-nums; }
     #hn-loading.done { opacity: 0; pointer-events: none; }
+    #hn-error {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+      padding: 6px 10px; background: #4a1f1f; color: #ffd7d2;
+      font: 12px/1.3 system-ui, sans-serif;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    #hn-error[hidden] { display: none; }
   </style>
 </head>
 <body>
   <div id="map"></div>
   <div id="hn-loading">
     <div class="t">Holistic Navigator</div>
-    <div class="s">Cargando carta base…</div>
+    <div class="s" id="hn-progress">carta base … · catálogo … · rutas …</div>
+    <div class="v" id="hn-version"></div>
   </div>
+  <div id="hn-error" hidden></div>
   <script>
-    // Diagnóstico de arranque en pantalla (temporal, W5.1): sin consola en el teléfono.
+    // Arranque progresivo y diagnóstico en pantalla (W5.1): sin consola en el
+    // teléfono. Deja ver que el mapa aparece ya y que el catálogo llega después.
     (function () {
       var box = document.getElementById("hn-loading");
-      var line = box && box.querySelector(".s");
-      var t0 = Date.now();
-      function say(msg) { if (line) line.textContent = msg; }
-      function fail(msg) {
+      var prog = document.getElementById("hn-progress");
+      var ver = document.getElementById("hn-version");
+      var band = document.getElementById("hn-error");
+      var state = { base: false, catalog: false, routes: false };
+      var labels = { base: "carta base", catalog: "catálogo", routes: "rutas" };
+      var hidden = false;
+
+      function renderSteps() {
+        if (!prog) return;
+        prog.textContent = ["base", "catalog", "routes"].map(function (k) {
+          return labels[k] + " " + (state[k] ? "✓" : "…");
+        }).join(" · ");
+      }
+      function showBand(msg) {
+        if (!band) return;
+        band.hidden = false;
+        band.textContent = String(msg).split("\n")[0].slice(0, 200);
+      }
+      function showFail(msg) {
+        msg = String(msg).split("\n")[0].slice(0, 200);
+        if (hidden) { showBand(msg); return; }
         if (!box) return;
         box.classList.remove("done");
         var p = document.createElement("div");
-        p.className = "s"; p.style.color = "#ff8a80"; p.style.maxWidth = "90vw"; p.style.textAlign = "center";
-        p.textContent = String(msg).slice(0, 220);
+        p.className = "s";
+        p.style.color = "#ff8a80";
+        p.style.maxWidth = "90vw";
+        p.style.textAlign = "center";
+        p.textContent = msg;
         box.appendChild(p);
       }
-      window.addEventListener("error", function (e) { fail("Error: " + (e.message || e.type) + (e.filename ? " @" + e.filename.split("/").pop() + ":" + e.lineno : "")); });
-      window.addEventListener("unhandledrejection", function (e) { var r = e.reason; fail("Promesa: " + (r && r.message ? r.message : r)); });
-      var gl = null; try { gl = document.createElement("canvas").getContext("webgl2"); } catch (x) {}
-      if (!gl) fail("Este navegador no tiene WebGL2: el mapa no puede dibujarse.");
-      var want = ["main.js", "land.geojson", "graticule.geojson", "index.json", "basins.json", "routes.geojson"];
-      var tick = setInterval(function () {
-        if (!box || box.classList.contains("done")) { clearInterval(tick); return; }
-        var done = performance.getEntriesByType("resource").map(function (r) { return r.name.split("/").pop().split("?")[0]; });
-        var st = want.map(function (f) { return (done.indexOf(f) >= 0 ? "✓ " : "… ") + f; }).join("  ");
-        say("Cargando " + Math.round((Date.now() - t0) / 1000) + " s  ·  " + st);
-      }, 1000);
+      function hide() {
+        hidden = true;
+        if (box) box.classList.add("done");
+      }
+
+      window.hnBoot = {
+        step: function (k, ok) {
+          if (!(k in state)) return;
+          state[k] = ok !== false;
+          renderSteps();
+        },
+        hide: hide,
+        fail: showFail,
+        notice: function (msg) {
+          console.warn(msg);
+          showBand(msg);
+        },
+      };
+
+      window.addEventListener("error", function (e) {
+        showFail("Error: " + (e.message || e.type) + (e.filename ? " @" + e.filename.split("/").pop() + ":" + e.lineno : ""));
+      });
+      window.addEventListener("unhandledrejection", function (e) {
+        var r = e.reason;
+        showFail("Promesa: " + (r && r.message ? r.message : r));
+      });
+
+      var gl = null;
+      try { gl = document.createElement("canvas").getContext("webgl2"); } catch (x) {}
+      if (!gl) showFail("Este navegador no tiene WebGL2: el mapa no puede dibujarse.");
+
+      var metaV = document.querySelector('meta[name="hn-version"]');
+      if (ver && metaV && metaV.content && metaV.content.indexOf("__HN_") !== 0) {
+        ver.textContent = "build " + metaV.content.slice(0, 7);
+      }
+
+      renderSteps();
+      // A los 8 s se oculta igual: lo que falte sigue cargando por detrás.
+      setTimeout(hide, 8000);
     })();
   </script>
   <script type="module" src="main.js"></script>

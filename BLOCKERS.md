@@ -30,3 +30,18 @@ quiere AN32 en el caso real habría que cambiar el criterio de cercanía.
 
 **Decisión pendiente:** si se acepta este ajuste de cajas o se redefine el
 resolver de contexto.
+
+## W5.1 · `wpNames` se conserva en `routes.geojson`
+
+**Qué falla (desvío).** El paso 7 de W5.1 pide quitar de `routes.geojson` las
+propiedades repetidas por variante, nombrando `title` y `wpNames`. `wpNames` se
+usa en runtime: `activeNav` lo lee para mostrar el nombre del waypoint de destino
+("Próximo: …"). Quitarlo rompería ese texto.
+
+**Qué hice.** Mantuve `wpNames` y quité solo los features `Point` de extremos
+(`name`/`dest`) y `title`. `routes.geojson` queda en coords de 4 decimales con
+props `{code, variant, wpNames}` → **389 KB (50 KB gzip)**, dentro del objetivo
+≤ 60 KB gzip. `CATALOG_VERSION` subió a 11.
+
+**Decisión pendiente:** si se prefiere quitar `wpNames` igual (y resolver el
+nombre del waypoint desde `index.json`/facts), decime y lo muevo a los facts.

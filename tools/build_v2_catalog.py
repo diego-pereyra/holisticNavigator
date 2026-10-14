@@ -2,8 +2,9 @@
 """Build data/catalog/v2 from data/epub/routes_v2.json (8th-edition EPUB).
 
 Outputs the three files the Web app consumes:
-  - index.json        {chapters:[...], routes:[{code,title,chapter}]}
-  - routes.geojson    one LineString per variant + Point features for ends
+  - index.json        {chapters:[...], routes:[{code,title,...}]}
+  - routes.geojson    one LineString per variant (coords a 4 decimales, props mínimas:
+                      code, variant, wpNames); sin la lista de Points de extremos
   - facts/<CH>.jsonl  RouteDetail lines (months, miles via haversine, names)
 """
 import json
@@ -24,6 +25,9 @@ SRC = os.path.join(ROOT, "data", "epub", "routes_v2.json")
 DST = os.path.join(ROOT, "data", "catalog", "v2")
 DST3 = os.path.join(ROOT, "data", "catalog", "v3")
 ATTRIBUTION = "World Cruising Routes, 8.ª ed. — Jimmy & Doina Cornell"
+# Sube en 1 en cada cambio de datos del catálogo. Nombra el caché de datos del
+# service worker (hn-data-v<CATALOG_VERSION>), que NO se borra al cambiar el SHA.
+CATALOG_VERSION = 11
 QUOTES = os.path.join(DST, "quotes.json")
 TIPS_DIR = os.path.join(ROOT, "tools")
 TIPS_CHAPTERS = os.path.join(TIPS_DIR, "tips_chapters_es.json")
@@ -416,33 +420,10 @@ def main():
                 "properties": {
                     "code": r["code"],
                     "variant": vid,
-                    "title": title,
                     "wpNames": [w["name"] or "" for w in wps],
-                    "wpDests": [bool(w.get("dest")) for w in wps],
-                    "wpApprox": [bool(w.get("approx")) for w in wps],
-                    "wpCorrected": [bool(w.get("corrected")) for w in wps],
-                    "from": first["name"] or "start",
-                    "to": last["name"] or "end",
-                    "approximate": False,
-                    "coastal": coastal,
-                    "needsReview": flagged,
-                    "landNm": round(cross),
                 },
-                "geometry": {"type": "LineString", "coordinates": coords},
+                "geometry": {"type": "LineString", "coordinates": [[round(x, 4), round(y, 4)] for x, y in coords]},
             })
-            ends = [i for i, w in enumerate(wps) if w.get("dest")]
-            for i in (ends or [0, len(wps) - 1]):
-                w = wps[i]
-                features.append({
-                    "type": "Feature",
-                    "properties": {
-                        "code": r["code"],
-                        "variant": vid,
-                        "name": w["name"],
-                        "dest": bool(w.get("dest")),
-                    },
-                    "geometry": {"type": "Point", "coordinates": list(coords[i])},
-                })
 
         months = extract_months(" ".join(r.get("fields", {}).get("bestTime", [])))
         names, miles = [], []
@@ -565,6 +546,7 @@ def main():
         ),
     }
     index_v3 = {
+        "catalogVersion": CATALOG_VERSION,
         "chapters": chapters,
         "routes": sorted(
             ({"code": r["code"], "title": r.get("title") or "",
@@ -607,7 +589,11 @@ def main():
     codes_in_geo = Counter(f["properties"]["code"] for f in features)
     missing = [r["code"] for r in routes if r["code"] not in codes_in_geo]
     print(f"rutas: {len(routes)} | variantes dibujadas: {codes_in_geo.total()}({len(codes_in_geo)} códigos)")
-    print(f"geojson: {os.path.getsize(os.path.join(DST,'routes.geojson'))//1024} KB | sin geometría: {missing[:5] or 'ninguna'}")
+    import gzip as _gzip
+    geo_bytes = os.path.getsize(os.path.join(DST3, "routes.geojson"))
+    with open(os.path.join(DST3, "routes.geojson"), "rb") as gf:
+        geo_gz = len(_gzip.compress(gf.read()))
+    print(f"geojson: {geo_bytes//1024} KB ({geo_gz//1024} KB gzip) | sin geometría: {missing[:5] or 'ninguna'}")
     if land.ok:
         print(f"optimizador costero: {coastal_variants} variantes con waypoints insertados")
         print(f"needsReview (toques de tierra >= {LAND_FLAG_NM:g}nm): {land_variants} variantes")

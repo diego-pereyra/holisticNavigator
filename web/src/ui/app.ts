@@ -70,6 +70,9 @@ import {
 
 type TabName = "aqui" | "rutas" | "travesia";
 type SheetState = "peek" | "half" | "full";
+// Arranque progresivo (W5.1): el catálogo (índice+cuencas) y la geometría de
+// rutas llegan después de montar el mapa; la hoja muestra el estado mientras tanto.
+type LoadState = "loading" | "ready" | "failed";
 
 interface Geometry {
   coords: [number, number][];
@@ -89,6 +92,8 @@ interface UiState {
   basins: Record<string, Basin>;
   geometry: Map<string, Geometry>;
   variants: VariantGeometry[];
+  catalog: Signal<LoadState>;
+  routes: Signal<LoadState>;
   position: Signal<Position | null>;
   gpsStatus: Signal<PositionStatus>;
   month: Signal<number>;
@@ -106,23 +111,32 @@ interface UiState {
 }
 
 export interface AppDeps {
-  index: CatalogIndex;
-  basins: Record<string, Basin>;
-  routesGeoJson: string;
   store: KeyValueStore;
 }
 
+// El mapa y la UI se montan apenas carga el mapa base; el catálogo llega después
+// y se inyecta por estos métodos (arranque progresivo, W5.1).
+export interface AppHandle {
+  setCatalog(index: CatalogIndex, basins: Record<string, Basin>): void;
+  setRoutes(routesGeoJson: string): void;
+  catalogFailed(): void;
+  routesFailed(): void;
+}
+
+const EMPTY_INDEX: CatalogIndex = { chapters: [], routes: [] };
+
 // --------------------------------------------------------------- montaje
 
-export function mountApp(map: MlMap, deps: AppDeps): void {
-  const { geometry, variants } = buildGeometry(deps.routesGeoJson);
+export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   const ui: UiState = {
     store: deps.store,
     map,
-    index: deps.index,
-    basins: deps.basins,
-    geometry,
-    variants,
+    index: EMPTY_INDEX,
+    basins: {},
+    geometry: new Map(),
+    variants: [],
+    catalog: signal<LoadState>("loading"),
+    routes: signal<LoadState>("loading"),
     position: signal<Position | null>(null),
     gpsStatus: signal<PositionStatus>("off"),
     month: signal(currentMonthUtc()),
@@ -139,8 +153,7 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
     navFixes: [],
   };
 
-  installMapLayers(map, deps.routesGeoJson, deps.basins);
-  wireMap(ui);
+  installBaseLayers(map);
   wireGps(ui);
   let moveTimer: number | undefined;
   map.on("moveend", () => {
@@ -151,6 +164,7 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
     ui.query();
     ui.region();
     ui.nearMe();
+    ui.catalog();
     applyCatalogFilter(ui);
   });
   try {
@@ -179,8 +193,6 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
 
-  if (bootParams.route && entryOf(ui, bootParams.route)) openRoute(ui, bootParams.route);
-
   effect(() => persist(ui, KEYS.month, String(ui.month())));
   effect(() => {
     const a = ui.active();
@@ -193,6 +205,42 @@ export function mountApp(map: MlMap, deps: AppDeps): void {
   });
 
   void restore(ui);
+
+  let bootOpened = false;
+  return {
+    setCatalog(index, basins) {
+      if (ui.catalog() === "ready") return;
+      ui.index = index;
+      ui.basins = basins;
+      addBasinLayers(ui, basins);
+      applyCatalogFilter(ui);
+      ui.catalog.set("ready");
+      if (bootParams.route && !bootOpened && entryOf(ui, bootParams.route)) {
+        bootOpened = true;
+        openRoute(ui, bootParams.route);
+      }
+    },
+    setRoutes(routesGeoJson) {
+      if (ui.routes() === "ready") return;
+      const { geometry, variants } = buildGeometry(routesGeoJson);
+      ui.geometry = geometry;
+      ui.variants = variants;
+      addCatalogLayers(ui, routesGeoJson);
+      ui.routes.set("ready");
+      const sel = ui.selected();
+      if (sel) drawSelected(ui, sel.code, selectedVariant);
+      drawActive(ui);
+      applyCatalogFilter(ui);
+    },
+    catalogFailed() {
+      if (ui.catalog() === "ready") return;
+      ui.catalog.set("failed");
+    },
+    routesFailed() {
+      if (ui.routes() === "ready") return;
+      ui.routes.set("failed");
+    },
+  };
 }
 
 async function restore(ui: UiState): Promise<void> {
@@ -290,29 +338,12 @@ function persist(ui: UiState, key: string, value: string): void {
 
 // --------------------------------------------------------------- capas
 
-function installMapLayers(map: MlMap, routesGeoJson: string, basins: Record<string, Basin>): void {
+function installBaseLayers(map: MlMap): void {
   const empty = featureCollection([]);
-  map.addSource("catalog", { type: "geojson", data: JSON.parse(routesGeoJson) as object });
   for (const id of ["selected", "active", "imported", "voyage", "me", "navline"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
-  map.addSource("basins", { type: "geojson", data: basinsFeatureCollection(basins) });
 
-  map.addLayer({
-    id: "catalog-lines",
-    type: "line",
-    source: "catalog",
-    filter: ["==", ["get", "variant"], ""],
-    paint: { "line-color": "#4FC3F7", "line-opacity": 0.25, "line-width": 1 },
-  });
-  map.addLayer({
-    id: "basin-label",
-    type: "symbol",
-    source: "basins",
-    maxzoom: 3,
-    layout: { "text-field": ["get", "name"], "text-size": 12 },
-    paint: { "text-color": "#4FC3F7", "text-halo-color": "#0b1626", "text-halo-width": 1.5 },
-  });
   map.addLayer({
     id: "imported-lines",
     type: "line",
@@ -380,6 +411,59 @@ function installMapLayers(map: MlMap, routesGeoJson: string, basins: Record<stri
   });
 }
 
+// Capas del catálogo: se agregan recién cuando llegan los datos (arranque
+// progresivo). Quedan por debajo de las capas base (ancla "imported-lines").
+function addBasinLayers(ui: UiState, basins: Record<string, Basin>): void {
+  const map = ui.map;
+  if (map.getLayer("basin-label")) return;
+  map.addSource("basins", { type: "geojson", data: basinsFeatureCollection(basins) });
+  map.addLayer(
+    {
+      id: "basin-label",
+      type: "symbol",
+      source: "basins",
+      maxzoom: 3,
+      layout: { "text-field": ["get", "name"], "text-size": 12 },
+      paint: { "text-color": "#4FC3F7", "text-halo-color": "#0b1626", "text-halo-width": 1.5 },
+    },
+    "imported-lines",
+  );
+  map.on("click", "basin-label", (e) => {
+    const name = e.features?.[0]?.properties?.["name"];
+    if (typeof name === "string") {
+      ui.region.set(name);
+      goTo(ui, "rutas");
+    }
+  });
+}
+
+function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
+  const map = ui.map;
+  if (map.getLayer("catalog-lines")) return;
+  map.addSource("catalog", { type: "geojson", data: JSON.parse(routesGeoJson) as object });
+  const before = map.getLayer("basin-label") ? "basin-label" : "imported-lines";
+  map.addLayer(
+    {
+      id: "catalog-lines",
+      type: "line",
+      source: "catalog",
+      filter: ["==", ["get", "variant"], ""],
+      paint: { "line-color": "#4FC3F7", "line-opacity": 0.25, "line-width": 1 },
+    },
+    before,
+  );
+  map.on("click", "catalog-lines", (e) => {
+    const code = e.features?.[0]?.properties?.["code"];
+    if (typeof code === "string") openRoute(ui, code);
+  });
+  map.on("mouseenter", "catalog-lines", () => {
+    map.getCanvas().style.cursor = "pointer";
+  });
+  map.on("mouseleave", "catalog-lines", () => {
+    map.getCanvas().style.cursor = "";
+  });
+}
+
 function setSource(map: MlMap, id: string, data: object): void {
   const src = map.getSource(id) as GeoJSONSource | undefined;
   src?.setData(data as never);
@@ -423,6 +507,7 @@ function basinAt(ui: UiState, lon: number, lat: number): string | null {
 const CATALOG_EMPTY_FILTER: FilterSpecification = ["==", ["get", "variant"], ""];
 
 function applyCatalogFilter(ui: UiState): void {
+  if (!ui.map.getLayer("catalog-lines")) return;
   if (ui.map.getZoom() < 3) {
     ui.map.setFilter("catalog-lines", CATALOG_EMPTY_FILTER);
     return;
@@ -512,27 +597,6 @@ function drawVoyage(ui: UiState, log: VoyageLog | null): void {
     "voyage",
     featureCollection([lineFeature(log.points.map((p) => [p.lon, p.lat] as [number, number]))]),
   );
-}
-
-function wireMap(ui: UiState): void {
-  ui.map.on("click", "catalog-lines", (e) => {
-    const f = e.features?.[0];
-    const code = f?.properties?.["code"];
-    if (typeof code === "string") openRoute(ui, code);
-  });
-  ui.map.on("click", "basin-label", (e) => {
-    const name = e.features?.[0]?.properties?.["name"];
-    if (typeof name === "string") {
-      ui.region.set(name);
-      goTo(ui, "rutas");
-    }
-  });
-  ui.map.on("mouseenter", "catalog-lines", () => {
-    ui.map.getCanvas().style.cursor = "pointer";
-  });
-  ui.map.on("mouseleave", "catalog-lines", () => {
-    ui.map.getCanvas().style.cursor = "";
-  });
 }
 
 function wireGps(ui: UiState): void {
@@ -644,6 +708,8 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     const state = ui.sheet();
     const tab = ui.tab();
     const sel = ui.selected();
+    const catalog = ui.catalog();
+    ui.routes();
     for (const d of cleanup) d();
     cleanup = [];
     sheet.className = `hn-sheet hn-sheet-${state}`;
@@ -693,11 +759,24 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     // locales (ver cleanup) que reemplazan solo su nodo, sin tocar el scroll.
     untracked(() => {
       if (sel) renderFicha(ui, body, sel.code, sel.chapter);
+      else if (catalog === "loading") renderCatalogLoading(body);
+      else if (catalog === "failed") renderCatalogFailed(body);
       else if (tab === "aqui") renderAqui(ui, body, cleanup);
       else if (tab === "rutas") renderRutas(ui, body, cleanup);
       else renderTravesia(ui, body, cleanup);
     });
   });
+}
+
+function renderCatalogLoading(body: HTMLElement): void {
+  body.append(el("p", { class: "hn-muted" }, "Cargando catálogo…"));
+}
+
+function renderCatalogFailed(body: HTMLElement): void {
+  body.append(el("p", { class: "hn-muted" }, "Sin catálogo todavía"));
+  const retry = el("button", { class: "hn-btn" }, "Reintentar");
+  retry.addEventListener("click", () => window.hnRetryCatalog?.());
+  body.append(retry);
 }
 
 // ----------------------------------------------------------- pestaña Aquí
