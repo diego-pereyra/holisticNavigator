@@ -50,7 +50,7 @@ jobs:
           with open("tools/tiles/zones.json", encoding="utf-8") as f:
               data = json.load(f)
           for name, cfg in data.items():
-              if "bbox" not in cfg:
+              if not isinstance(cfg, dict) or "bbox" not in cfg:
                   continue
               w, s, e, n = cfg["bbox"]
               print("\t".join([name, str(w), str(s), str(e), str(n),
@@ -78,7 +78,7 @@ jobs:
           with open("tools/tiles/zones.json", encoding="utf-8") as f:
               data = json.load(f)
           for name, cfg in data.items():
-              if "bbox" not in cfg:
+              if not isinstance(cfg, dict) or "bbox" not in cfg:
                   continue
               w, s, e, n = cfg["bbox"]
               print("\t".join([name, str(w), str(s), str(e), str(n)]))
@@ -117,7 +117,7 @@ jobs:
               "zones": {},
           }
           for name, z in cfg.items():
-              if "bbox" not in z:
+              if not isinstance(z, dict) or "bbox" not in z:
                   continue
               b, h = meta(f"zones/{name}.pmtiles")
               zone = {

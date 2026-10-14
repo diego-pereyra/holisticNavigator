@@ -1,4 +1,5 @@
 {
+  "version": 2,
   "world": { "maxzoom": 6 },
   "caribe": { "bbox": [-90, 7, -58, 28], "minzoom": 7, "maxzoom": 10, "nombre": "Caribe y Antillas" },
   "rio-de-la-plata": { "bbox": [-60, -40, -50, -31], "minzoom": 7, "maxzoom": 10, "nombre": "Río de la Plata y Uruguay" }
