@@ -1,54 +1,42 @@
 ADELANTE
 
-TAREA ÚNICA: E10.0 — batimetría en el piso (corregida: con simplificación geométrica).
+TAREA ÚNICA: E10.1 — carta de detalle mundial (PMTiles de OSM, zoom 0–6) sobre el piso.
 
-El bloqueo era correcto: redondear decimales no reduce puntos. Se simplifica la geometría con
-Douglas-Peucker (sin dependencias), que sí los reduce ~100×. Todo lo demás de la tarea anterior
-sigue igual (fuentes, capa bathy-fill, colores, precache).
+Dos partes en un solo commit. Dependencia nueva permitida: `pmtiles` (npm, versión exacta).
 
-1. En tools/build_basemap.py agregá esta función tal cual:
+PARTE A — el archivo de teselas (GitHub Actions, no en la laptop)
+1. .github/workflows/tiles.yml: `on: workflow_dispatch` y `push: paths: ["tools/tiles/**"]`.
+   Pasos: descargar el binario `pmtiles` (go-pmtiles, última release de
+   https://github.com/protomaps/go-pmtiles/releases, linux x86_64); extraer del build diario de
+   Protomaps el mundo hasta zoom 6:
+     pmtiles extract https://build.protomaps.com/$(date -u +%Y%m%d).pmtiles world-z6.pmtiles --maxzoom=6
+   (si el de hoy no existe, probar ayer y anteayer). Publicar `world-z6.pmtiles` y un
+   `tiles.json` ({ "world": { "url": "<url del asset>", "bytes": N, "sha256": "...", "built": "YYYY-MM-DD" } })
+   como assets de una Release con tag `tiles-latest` (acción softprops/action-gh-release, `overwrite`).
+2. tools/tiles/zones.json: por ahora solo `{ "world": { "maxzoom": 6 } }` (las zonas por cuenca van
+   en E10.2). Hacer push de ese archivo dispara el job.
 
-def simplify(ring, tol):
-    """Douglas-Peucker sobre una lista de (lon, lat). tol en grados."""
-    if len(ring) < 5:
-        return ring
-    def dist(p, a, b):
-        (x, y), (x1, y1), (x2, y2) = p, a, b
-        dx, dy = x2 - x1, y2 - y1
-        if dx == 0 and dy == 0:
-            return ((x - x1) ** 2 + (y - y1) ** 2) ** 0.5
-        t = max(0.0, min(1.0, ((x - x1) * dx + (y - y1) * dy) / (dx * dx + dy * dy)))
-        px, py = x1 + t * dx, y1 + t * dy
-        return ((x - px) ** 2 + (y - py) ** 2) ** 0.5
-    stack = [(0, len(ring) - 1)]
-    keep = [False] * len(ring)
-    keep[0] = keep[-1] = True
-    while stack:
-        i, j = stack.pop()
-        if j <= i + 1:
-            continue
-        k, dmax = i, 0.0
-        for m in range(i + 1, j):
-            d = dist(ring[m], ring[i], ring[j])
-            if d > dmax:
-                k, dmax = m, d
-        if dmax > tol:
-            keep[k] = True
-            stack.append((i, k))
-            stack.append((k, j))
-    out = [p for p, k in zip(ring, keep) if k]
-    return out if len(out) >= 4 else ring[:1] + [ring[len(ring) // 3], ring[2 * len(ring) // 3]] + ring[-1:]
-
-2. Para cada polígono de batimetría: aplicar simplify a cada anillo con tol = 0.15 (≈ 9 nm);
-   descartar anillos cuya caja mida menos de 0.5° en ambos ejes; redondear a 2 decimales;
-   quitar puntos consecutivos iguales. Si bathy.geojson sigue > 2 MB, repetir con tol 0.25 y
-   después 0.4 hasta cumplir. Anotar en el commit el tol final, los puntos antes/después y el
-   tamaño bruto y gzip.
-3. Capa "bathy-fill" en main.ts entre "background" y "country-fill", colores:
-   200 → #13223a, 1000 → #0f1d33, 2000 → #0c182b, 3000 → #0a1425, 4000 → #081120, 5000 → #060d1a;
-   "background" pasa a #15263f.
-4. bathy.geojson al precache (manifiesto de build-web.sh).
-5. Prueba: sin red, a zoom 2 se distinguen plataformas y fosas; a zoom 6 los bordes no son
-   groseros (tol 0.15 ≈ 9 nm, aceptable para un piso oceánico).
-6. npm test, build-web.sh, commit "E10.0: batimetría en el piso del mapa", push, PARÁ.
-   Marcá el bloqueo como resuelto en BLOCKERS.md (una línea).
+PARTE B — la app
+3. main.ts: `import { Protocol } from "pmtiles"; const p = new Protocol(); maplibregl.addProtocol("pmtiles", p.tile)`
+   (con la API que exponga la versión instalada) ANTES de crear el mapa.
+4. Fuente vectorial `detail` en el estilo base: `{ type: "vector", url: "pmtiles://" + TILES_WORLD_URL, maxzoom: 6 }`
+   donde TILES_WORLD_URL es la URL del asset `world-z6.pmtiles` de la release `tiles-latest`
+   (constante en main.ts; actualizarla en el mismo commit cuando exista). Si la fuente falla (sin
+   red o sin archivo), el mapa sigue con el piso: capturar el error de la fuente en `map.on("error")`
+   y no mostrar nada al usuario.
+5. Capas sobre `detail`, en este orden, encima de `country-label` y debajo de `basin-label`:
+   - `detail-water`: fill, source-layer `water`, color #0b1626 (tapa el piso donde hay agua fina).
+   - `detail-earth`: fill, source-layer `earth`, color #1c2733.
+   - `detail-boundary`: line, source-layer `boundaries`, filter kind == "country", color #3a4a5a, 0.6 px.
+   - `detail-place`: symbol, source-layer `places`, text-field name, text-size por kind
+     (country 12, region 11, locality 10), color #9FB0C0, halo #0b1626, minzoom 3.
+   Las capas de Natural Earth (`country-*`, `city-*`, `coast-line`) se apagan con `minzoom`/`maxzoom`
+   para que a zoom ≥ 4 mande el detalle: NE visible 0–4, detalle 4–6 (en E10.2 llegará 7–11).
+6. Atribución: control de atribución de MapLibre activado (compacto) con
+   "© OpenStreetMap contributors · Protomaps · Natural Earth".
+7. Prueba: con red, a zoom 5 sobre el Caribe se ven costas finas y nombres de islas y ciudades; sin
+   red (tras cargar), el piso sigue y no hay errores en consola; el presupuesto de primera carga no
+   sube (las teselas se piden por rangos al hacer zoom).
+8. npm test, build-web.sh, commit "E10.1: carta de detalle mundial PMTiles z0–6", push, PARÁ.
+   Si el job de la Parte A falla, anotá el log en BLOCKERS.md y hacé la Parte B apuntando a la URL
+   prevista; Claude revisa.
