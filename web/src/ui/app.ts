@@ -1,11 +1,10 @@
-let selectedVariant = "A";
-
-function updateUrlForSelection(routeCode?: string, variant: string = "A"): void {
+function updateUrlForSelection(routeCode?: string, variant: string = ""): void {
   try {
     const sp = new URLSearchParams(location.search);
     if (routeCode) {
       sp.set("route", routeCode);
-      sp.set("variant", variant);
+      if (variant) sp.set("variant", variant);
+      else sp.delete("variant");
       history.replaceState({}, "", location.pathname + "?" + sp.toString());
     }
   } catch {}
@@ -23,7 +22,6 @@ function readUrlParams(): BootParams {
 }
 
 const bootParams = readUrlParams();
-if (bootParams.variant) selectedVariant = bootParams.variant;
 // W4 — UI equivalente en DOM (ADR-007, sin framework):
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
@@ -100,6 +98,7 @@ interface UiState {
   tab: Signal<TabName>;
   sheet: Signal<SheetState>;
   selected: Signal<{ code: string; chapter: string } | null>;
+  variant: Signal<string>;
   active: Signal<ActiveRoute | null>;
   query: Signal<string>;
   region: Signal<string>;
@@ -143,6 +142,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     tab: signal<TabName>("aqui"),
     sheet: signal<SheetState>("peek"),
     selected: signal<{ code: string; chapter: string } | null>(null),
+    variant: signal(bootParams.variant ?? ""),
     active: signal<ActiveRoute | null>(null),
     query: signal(""),
     region: signal(""),
@@ -228,7 +228,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
       addCatalogLayers(ui, routesGeoJson);
       ui.routes.set("ready");
       const sel = ui.selected();
-      if (sel) drawSelected(ui, sel.code, selectedVariant);
+      if (sel) drawSelected(ui, sel.code, ui.variant().startsWith(sel.code) ? ui.variant() : null);
       drawActive(ui);
       applyCatalogFilter(ui);
     },
@@ -325,6 +325,16 @@ function buildGeometry(geojson: string): {
 function firstGeometry(ui: UiState, code: string): Geometry | null {
   for (const [key, g] of ui.geometry) if (key.startsWith(`${code}|`)) return g;
   return null;
+}
+
+// Geometría de la variante elegida (o la primera si todavía no hay ninguna).
+function selectedGeometry(ui: UiState, code: string): Geometry | null {
+  const v = ui.variant();
+  if (v.startsWith(code)) {
+    const g = ui.geometry.get(`${code}|${v}`);
+    if (g) return g;
+  }
+  return firstGeometry(ui, code);
 }
 
 function isoDate(): string {
@@ -556,10 +566,11 @@ function drawSelected(ui: UiState, code: string | null, variant: string | null):
     setSource(ui.map, "selected", featureCollection([]));
     return;
   }
+  const want = variant !== null && ui.geometry.has(`${code}|${variant}`) ? variant : null;
   const features: object[] = [];
   for (const [key, g] of ui.geometry) {
     if (!key.startsWith(`${code}|`)) continue;
-    if (variant !== null && key !== `${code}|${variant}`) continue;
+    if (want !== null && key !== `${code}|${want}`) continue;
     features.push(lineFeature(g.coords));
     for (let i = 0; i < g.coords.length; i++) {
       features.push(pointFeature(g.coords[i]![0], g.coords[i]![1], { name: g.names[i] ?? "" }));
@@ -703,67 +714,90 @@ function positionLabel(ui: UiState): string {
 // --------------------------------------------------------------- hoja
 
 function renderSheet(ui: UiState, sheet: HTMLElement): void {
-  let cleanup: (() => void)[] = [];
+  const handle = el("div", { class: "hn-handle" });
+  let startY = 0;
+  let dragging = false;
+  handle.addEventListener("pointerdown", (ev) => {
+    dragging = true;
+    startY = ev.clientY;
+    handle.setPointerCapture(ev.pointerId);
+  });
+  handle.addEventListener("pointerup", (ev) => {
+    if (!dragging) return;
+    dragging = false;
+    const dy = ev.clientY - startY;
+    if (dy > -24 && dy < 24) return;
+    const order: SheetState[] = ["peek", "half", "full"];
+    const i = order.indexOf(ui.sheet());
+    const next = dy < 0 ? Math.min(order.length - 1, i + 1) : Math.max(0, i - 1);
+    ui.sheet.set(order[next]!);
+  });
+  handle.addEventListener("pointercancel", () => {
+    dragging = false;
+  });
+
+  // Dos columnas en escritorio (W4.4): lista a la izquierda (tabs + cuerpo) y
+  // ficha a la derecha. En móvil la ficha reemplaza a la lista (ver app.css).
+  const cols = el("div", { class: "hn-cols" });
+  const listCol = el("div", { class: "hn-col-list" });
+  const tabs = el("div", { class: "hn-tabs" });
+  const names: { id: TabName; label: string }[] = [
+    { id: "aqui", label: "Aquí" },
+    { id: "rutas", label: "Rutas" },
+    { id: "travesia", label: "Travesía" },
+  ];
+  const tabButtons = new Map<TabName, HTMLElement>();
+  for (const t of names) {
+    const b = el("button", { class: "hn-tab" }, t.label);
+    b.addEventListener("click", () => goTo(ui, t.id));
+    tabs.append(b);
+    tabButtons.set(t.id, b);
+  }
+  const body = el("div", { class: "hn-sheet-body" });
+  listCol.append(tabs, body);
+  const fichaCol = el("div", { class: "hn-col-ficha hn-ficha-dock" });
+  cols.append(listCol, fichaCol);
+  sheet.append(handle, cols);
+
+  // La forma de la hoja depende del estado y de si hay ficha abierta.
   effect(() => {
     const state = ui.sheet();
-    const tab = ui.tab();
     const sel = ui.selected();
+    sheet.className = `hn-sheet hn-sheet-${state}${sel ? " hn-ficha-open" : ""}`;
+    document.body.classList.toggle("hn-has-ficha", !!sel);
+  });
+
+  effect(() => {
+    const tab = ui.tab();
+    for (const [id, b] of tabButtons) b.className = `hn-tab${tab === id ? " on" : ""}`;
+  });
+
+  // La ficha vive en su propia columna: elegir una ruta no rearma la lista.
+  effect(() => {
+    const sel = ui.selected();
+    untracked(() => {
+      clear(fichaCol);
+      if (sel) renderFicha(ui, fichaCol, sel.code, sel.chapter);
+    });
+  });
+
+  // El cuerpo (lista) se arma por cambio de pestaña o llegada del catálogo.
+  // Las dependencias que sí importan (posición, mes) se siguen con efectos
+  // locales (ver bodyCleanup) que reemplazan solo su nodo, sin tocar el scroll.
+  let bodyCleanup: (() => void)[] = [];
+  effect(() => {
+    const tab = ui.tab();
     const catalog = ui.catalog();
     ui.routes();
-    for (const d of cleanup) d();
-    cleanup = [];
-    sheet.className = `hn-sheet hn-sheet-${state}`;
-    clear(sheet);
-
-    const handle = el("div", { class: "hn-handle" });
-    let startY = 0;
-    let dragging = false;
-    handle.addEventListener("pointerdown", (ev) => {
-      dragging = true;
-      startY = ev.clientY;
-      handle.setPointerCapture(ev.pointerId);
-    });
-    handle.addEventListener("pointerup", (ev) => {
-      if (!dragging) return;
-      dragging = false;
-      const dy = ev.clientY - startY;
-      if (dy > -24 && dy < 24) return;
-      const order: SheetState[] = ["peek", "half", "full"];
-      const i = order.indexOf(state);
-      const next = dy < 0 ? Math.min(order.length - 1, i + 1) : Math.max(0, i - 1);
-      ui.sheet.set(order[next]!);
-    });
-    handle.addEventListener("pointercancel", () => {
-      dragging = false;
-    });
-    sheet.append(handle);
-
-    const tabs = el("div", { class: "hn-tabs" });
-    const names: { id: TabName; label: string }[] = [
-      { id: "aqui", label: "Aquí" },
-      { id: "rutas", label: "Rutas" },
-      { id: "travesia", label: "Travesía" },
-    ];
-    for (const t of names) {
-      const b = el("button", { class: `hn-tab${tab === t.id && !sel ? " on" : ""}` }, t.label);
-      b.addEventListener("click", () => goTo(ui, t.id));
-      tabs.append(b);
-    }
-    sheet.append(tabs);
-
-    const body = el("div", { class: "hn-sheet-body" });
-    sheet.append(body);
-
-    // El cuerpo se arma una vez por cambio de pestaña/ficha/estado de hoja.
-    // Lo que sí depende de la posición o el mes se actualiza con efectos
-    // locales (ver cleanup) que reemplazan solo su nodo, sin tocar el scroll.
+    for (const d of bodyCleanup) d();
+    bodyCleanup = [];
+    clear(body);
     untracked(() => {
-      if (sel) renderFicha(ui, body, sel.code, sel.chapter);
-      else if (catalog === "loading") renderCatalogLoading(body);
+      if (catalog === "loading") renderCatalogLoading(body);
       else if (catalog === "failed") renderCatalogFailed(body);
-      else if (tab === "aqui") renderAqui(ui, body, cleanup);
-      else if (tab === "rutas") renderRutas(ui, body, cleanup);
-      else renderTravesia(ui, body, cleanup);
+      else if (tab === "aqui") renderAqui(ui, body, bodyCleanup);
+      else if (tab === "rutas") renderRutas(ui, body, bodyCleanup);
+      else renderTravesia(ui, body, bodyCleanup);
     });
   });
 }
@@ -950,12 +984,14 @@ function remainingToDest(coords: [number, number][], fix: NavFix): number {
 
 function routeRow(ui: UiState, e: IndexEntry, distanceNm?: number, nearestWp?: string): HTMLElement {
   const row = el("button", { class: "hn-row" });
+  const main = el("div", { class: "hn-row-main" });
+  main.append(el("div", { class: "hn-row-title" }, `${e.code} · ${e.title}`));
   const sub =
     distanceNm !== undefined
       ? `${nmDecimal(distanceNm)}${nearestWp ? ` · ${nearestWp}` : ""}`
-      : `${rangeNm(e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`;
-  const main = el("div", { class: "hn-row-main" });
-  main.append(el("div", { class: "hn-row-title" }, `${e.code} · ${e.from} → ${e.to}`), el("div", { class: "hn-row-sub" }, sub));
+      : `${e.from} → ${e.to} · ${rangeNm(e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`;
+  main.append(el("div", { class: "hn-row-sub" }, sub));
+  if (ui.region() === "" && e.region) main.append(el("div", { class: "hn-row-region" }, e.region));
   row.append(main, monthBadge(e, ui.month()));
   row.addEventListener("click", () => openRoute(ui, e.code));
   return row;
@@ -975,29 +1011,34 @@ function monthBadge(e: IndexEntry, month: number): HTMLElement {
 // ---------------------------------------------------------- pestaña Rutas
 
 function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
-  body.append(el("h2", { class: "hn-h2" }, "Rutas"));
+  const wrap = el("div", { class: "hn-rutas" });
+  const head = el("div", { class: "hn-rutas-head" });
 
   const search = el("input", { class: "hn-search", type: "search", placeholder: "Puerto, zona o código…" });
   search.value = ui.query();
-  body.append(search);
+
+  const importRow = el("div", { class: "hn-import-row" });
+  const impBtn = el("button", { class: "hn-btn hn-btn-import" }, "+ Importar GPX / KML / CSV");
+  impBtn.addEventListener("click", () => void importFile(ui));
+  importRow.append(impBtn);
 
   const chips = el("div", { class: "hn-chips" });
-  body.append(chips);
 
   const toggle = el("label", { class: "hn-toggle" });
   const cb = el("input", { type: "checkbox" });
   cb.checked = ui.nearMe();
   toggle.append(cb, el("span", {}, "Solo cerca de mí"));
-  body.append(toggle);
 
+  const count = el("p", { class: "hn-count hn-muted" });
+  const variantChips = el("div", { class: "hn-variant-chips" });
+
+  head.append(search, importRow, chips, toggle, count, variantChips);
   const results = el("div", { class: "hn-results" });
-  body.append(results);
+  wrap.append(head, results);
+  body.append(wrap);
 
-  const importRow = el("div", { class: "hn-actions hn-actions-sticky" });
-  const impBtn = el("button", { class: "hn-btn" }, "Importar GPX/KML/CSV");
-  impBtn.addEventListener("click", () => void importFile(ui));
-  importRow.append(impBtn);
-  body.append(importRow);
+  const total = ui.index.routes.length;
+  const countText = (shown: number): string => `${shown} de ${total} rutas${ui.region() ? ` · ${ui.region()}` : ""}`;
 
   const buildChips = (): void => {
     clear(chips);
@@ -1020,16 +1061,17 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
         .map((e) => ({ e, d: bboxDistanceNm(e, pos.lat, pos.lon) }))
         .filter((x) => x.d <= 600)
         .sort((a, b) => a.d - b.d);
-      results.append(el("p", { class: "hn-muted" }, `${scored.length} rutas cerca`));
+      count.textContent = countText(scored.length);
       const rows = el("div", { class: "hn-list" });
+      if (scored.length === 0) rows.append(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm."));
       for (const { e, d } of scored.slice(0, 80)) rows.append(routeRow(ui, e, d));
       results.append(rows);
     } else {
       const list = filterEntries(ui.index, { query: ui.query(), region: ui.region() });
+      count.textContent = countText(list.length);
       if (list.length === 0) {
         results.append(el("p", { class: "hn-muted" }, "Sin resultados."));
       } else {
-        results.append(el("p", { class: "hn-muted" }, `${list.length} rutas`));
         const rows = el("div", { class: "hn-list" });
         for (const e of list.slice(0, 120)) rows.append(routeRow(ui, e));
         results.append(rows);
@@ -1068,11 +1110,45 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
       ui.region();
       const near = ui.nearMe();
       if (near) ui.position();
-      const top = body.scrollTop;
+      const top = results.scrollTop;
       untracked(refresh);
-      body.scrollTop = top;
+      results.scrollTop = top;
     }),
   );
+
+  // Chips de variantes: aparecen cuando hay ruta seleccionada y mueven
+  // `selectedVariant` (W4.4 #4). Solo el sufijo (A, B, C) como etiqueta.
+  cleanup.push(
+    effect(() => {
+      const sel = ui.selected();
+      const cur = ui.variant();
+      ui.routes();
+      clear(variantChips);
+      if (!sel) return;
+      const ids: string[] = [];
+      for (const v of ui.variants) {
+        if (v.code === sel.code && v.variant && !ids.includes(v.variant)) ids.push(v.variant);
+      }
+      if (ids.length === 0) return;
+      const makeChip = (id: string, label: string): HTMLElement => {
+        const chip = el("button", { class: `hn-chip${cur === id ? " on" : ""}` }, label);
+        chip.addEventListener("click", () => {
+          ui.variant.set(id);
+          updateUrlForSelection(sel.code, id);
+          drawSelected(ui, sel.code, id || null);
+          const g = (id && ui.geometry.get(`${sel.code}|${id}`)) || firstGeometry(ui, sel.code);
+          if (g) fitTo(ui, g.coords);
+        });
+        return chip;
+      };
+      variantChips.append(makeChip("", "Todas"));
+      for (const id of ids) variantChips.append(makeChip(id, variantLabel(id, sel.code)));
+    }),
+  );
+}
+
+function variantLabel(id: string, code: string): string {
+  return id.startsWith(code) ? id.slice(code.length) || id : id;
 }
 
 function showImported(ui: UiState, r: ImportedRoute): void {
@@ -1126,16 +1202,18 @@ async function importFile(ui: UiState): Promise<void> {
 function openRoute(ui: UiState, code: string): void {
   const e = entryOf(ui, code);
   if (!e) return;
+  const keep = ui.variant().startsWith(code) ? ui.variant() : "";
+  if (keep !== ui.variant()) ui.variant.set(keep);
   ui.selected.set({ code, chapter: e.chapter });
-  updateUrlForSelection(code, selectedVariant);
+  updateUrlForSelection(code, keep);
   if (ui.sheet() === "peek") ui.sheet.set("half");
-  drawSelected(ui, code, null);
-  const g = firstGeometry(ui, code);
+  drawSelected(ui, code, keep || null);
+  const g = (keep && ui.geometry.get(`${code}|${keep}`)) || firstGeometry(ui, code);
   if (g) fitTo(ui, g.coords);
 }
 
 function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
-  const back = el("button", { class: "hn-back" }, "← Rutas");
+  const back = el("button", { class: "hn-back" }, "‹ Rutas");
   back.addEventListener("click", () => {
     ui.selected.set(null);
     ui.sheet.set("half");
@@ -1175,7 +1253,8 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
 
   const seguir = el("button", { class: "hn-btn hn-btn-primary" }, "Seguir");
   seguir.addEventListener("click", () => {
-    ui.active.set({ code: d.code, chapter: d.chapter, variant: d.variants[0]?.id ?? null });
+    const variant = ui.variant().startsWith(d.code) ? ui.variant() : (d.variants[0]?.id ?? null);
+    ui.active.set({ code: d.code, chapter: d.chapter, variant });
     wireGpsStart();
     ui.selected.set(null);
     ui.tab.set("aqui");
@@ -1184,13 +1263,13 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
 
   const exportar = el("button", { class: "hn-btn" }, "Exportar GPX");
   exportar.addEventListener("click", () => {
-    const g = firstGeometry(ui, d.code);
+    const g = selectedGeometry(ui, d.code);
     if (g) downloadText(`${d.code}.gpx`, "application/gpx+xml", trackToGpx(d.code, g));
   });
 
   const recorrer = el("button", { class: "hn-btn" }, "Recorrer");
   recorrer.addEventListener("click", () => {
-    const g = firstGeometry(ui, d.code);
+    const g = selectedGeometry(ui, d.code);
     if (g) fitTo(ui, g.coords);
   });
 
@@ -1226,6 +1305,8 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
       );
       if (v.needsReview) item.append(el("span", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
       item.addEventListener("click", () => {
+        ui.variant.set(v.id);
+        updateUrlForSelection(d.code, v.id);
         drawSelected(ui, d.code, v.id);
         const g = ui.geometry.get(`${d.code}|${v.id}`);
         if (g) fitTo(ui, g.coords);
@@ -1235,7 +1316,8 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
     host.append(list);
   }
 
-  const wps = d.variants[0]?.waypoints ?? [];
+  const selVariant = ui.variant().startsWith(d.code) ? ui.variant() : "";
+  const wps = (d.variants.find((v) => v.id === selVariant) ?? d.variants[0])?.waypoints ?? [];
   if (wps.length > 0) {
     host.append(el("h3", { class: "hn-h3" }, "Waypoints"));
     const list = el("div", { class: "hn-list hn-wps" });
@@ -1442,9 +1524,11 @@ function escapeXml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-function getLeftPadding(_ui: UiState): number {
+function getLeftPadding(ui: UiState): number {
   if (typeof window === "undefined") return 40;
-  return window.innerWidth >= 700 ? 400 : 40;
+  if (window.innerWidth >= 1100) return ui.selected() ? 780 : 340;
+  if (window.innerWidth >= 700) return 420;
+  return 40;
 }
 
 function getBottomPadding(_ui: UiState): number {
