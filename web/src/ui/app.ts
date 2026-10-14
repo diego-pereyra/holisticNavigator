@@ -1084,105 +1084,119 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
   const wrap = el("div", { class: "hn-rutas" });
   const head = el("div", { class: "hn-rutas-head" });
 
-  const search = el("input", { class: "hn-search", type: "search", placeholder: "Puerto, zona o código…" });
+  const searchRow = el("div", { class: "hn-search-row" });
+  const search = el("input", { class: "hn-search", type: "search", placeholder: "" });
   search.value = ui.query();
-
-  const importRow = el("div", { class: "hn-import-row" });
-  const impBtn = el("button", { class: "hn-btn hn-btn-import" }, "+ Importar GPX / KML / CSV");
-  impBtn.addEventListener("click", () => void importFile(ui));
-  importRow.append(impBtn);
+  searchRow.append(search);
 
   const chips = el("div", { class: "hn-chips" });
 
-  const toggle = el("label", { class: "hn-toggle" });
-  const cb = el("input", { type: "checkbox" });
-  cb.checked = ui.nearMe();
-  toggle.append(cb, el("span", {}, "Solo cerca de mí"));
-
+  // Contador: va en el placeholder si la búsqueda está vacía; si se escribe,
+  // baja a una línea de 16 px debajo de los chips (W4.8 #2).
   const count = el("p", { class: "hn-count hn-muted" });
+  count.hidden = true;
   const variantChips = el("div", { class: "hn-variant-chips" });
 
-  head.append(search, importRow, chips, toggle, count, variantChips);
-  const results = el("div", { class: "hn-results" });
-  wrap.append(head, results);
+  head.append(searchRow, chips, count, variantChips);
+  const list = el("div", { class: "hn-list" });
+  wrap.append(head, list);
   body.append(wrap);
 
   const total = ui.index.routes.length;
-  const countText = (shown: number): string => `${shown} de ${total} rutas${ui.region() ? ` · ${ui.region()}` : ""}`;
 
+  const setCount = (shown: number): void => {
+    if (ui.query().trim() === "") {
+      search.placeholder = `Buscar · ${shown} de ${total}`;
+      count.hidden = true;
+    } else {
+      count.textContent = `${shown} de ${total} rutas${ui.region() ? ` · ${ui.region()}` : ""}`;
+      count.hidden = false;
+    }
+  };
+
+  // Chips en una sola fila: "Todas · Cerca de mí · cuencas". "Cerca de mí" es
+  // un chip más, no un toggle (W4.8 #3).
   const buildChips = (): void => {
     clear(chips);
-    for (const r of ["", ...uniqueRegions(ui)]) {
-      const chip = el("button", { class: `hn-chip${ui.region() === r ? " on" : ""}` }, r === "" ? "Todas" : r);
-      chip.addEventListener("click", () => {
-        ui.region.set(r);
-        buildChips();
-        refresh();
-      });
+    const add = (label: string, on: boolean, onClick: () => void): void => {
+      const chip = el("button", { class: `hn-chip${on ? " on" : ""}`, type: "button" }, label);
+      chip.addEventListener("click", onClick);
       chips.append(chip);
+    };
+    add("Todas", ui.region() === "" && !ui.nearMe(), () => {
+      ui.region.set("");
+      ui.nearMe.set(false);
+      list.scrollTop = 0;
+    });
+    add("Cerca de mí", ui.nearMe(), () => {
+      ui.nearMe.set(!ui.nearMe());
+      list.scrollTop = 0;
+    });
+    for (const r of uniqueRegions(ui)) {
+      add(r, ui.region() === r, () => {
+        ui.region.set(ui.region() === r ? "" : r);
+        list.scrollTop = 0;
+      });
     }
   };
 
   const refresh = (): void => {
-    clear(results);
+    clear(list);
     const pos = ui.position();
     if (ui.nearMe() && pos) {
       const scored = filterEntries(ui.index, { query: ui.query(), region: ui.region() })
         .map((e) => ({ e, d: bboxDistanceNm(e, pos.lat, pos.lon) }))
         .filter((x) => x.d <= 600)
         .sort((a, b) => a.d - b.d);
-      count.textContent = countText(scored.length);
-      const rows = el("div", { class: "hn-list" });
-      if (scored.length === 0) rows.append(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm."));
-      for (const { e, d } of scored.slice(0, 80)) rows.append(routeRow(ui, e, d));
-      results.append(rows);
+      setCount(scored.length);
+      if (scored.length === 0) list.append(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm."));
+      for (const { e, d } of scored.slice(0, 80)) list.append(routeRow(ui, e, d));
     } else {
-      const list = filterEntries(ui.index, { query: ui.query(), region: ui.region() });
-      count.textContent = countText(list.length);
-      if (list.length === 0) {
-        results.append(el("p", { class: "hn-muted" }, "Sin resultados."));
+      const items = filterEntries(ui.index, { query: ui.query(), region: ui.region() });
+      setCount(items.length);
+      if (items.length === 0) {
+        list.append(el("p", { class: "hn-muted" }, "Sin resultados."));
       } else {
-        const rows = el("div", { class: "hn-list" });
-        for (const e of list.slice(0, 120)) rows.append(routeRow(ui, e));
-        results.append(rows);
+        for (const e of items.slice(0, 120)) list.append(routeRow(ui, e));
       }
     }
     const imported = ui.imported();
     if (imported.length > 0) {
-      results.append(el("h3", { class: "hn-h3" }, "Importadas"));
-      const rows = el("div", { class: "hn-list" });
+      list.append(el("h3", { class: "hn-h3" }, "Importadas"));
       for (const r of imported) {
-        const row = el("button", { class: "hn-row" });
+        const row = el("button", { class: "hn-row", type: "button" });
         row.append(el("div", { class: "hn-row-main" }, el("div", { class: "hn-row-title" }, r.name), el("div", { class: "hn-row-sub" }, `${r.points.length} puntos`)));
         row.addEventListener("click", () => showImported(ui, r));
-        rows.append(row);
+        list.append(row);
       }
-      results.append(rows);
     }
+    // Importar deja de estar arriba: es la última fila de la lista (W4.8 #4).
+    const importRow = el("button", { class: "hn-row hn-row-import", type: "button" });
+    importRow.append(el("span", { class: "hn-row-import-plus" }, "+"), el("span", {}, "Importar GPX / KML / CSV"));
+    importRow.addEventListener("click", () => void importFile(ui));
+    list.append(importRow);
   };
 
   search.addEventListener("input", () => {
     ui.query.set(search.value);
     refresh();
-  });
-  cb.addEventListener("change", () => {
-    ui.nearMe.set(cb.checked);
-    refresh();
+    list.scrollTop = 0;
   });
 
-  buildChips();
-
-  // La lista se redibuja al cambiar búsqueda, cuenca, importadas o "cerca de mí".
-  // Se reemplaza solo el contenedor de resultados y se conserva el scroll.
+  // Chips y lista se redibujan al cambiar cuenca, "cerca de mí" o importadas.
+  // La búsqueda se refresca en el handler de input; se conserva el scroll.
   cleanup.push(
     effect(() => {
       ui.imported();
       ui.region();
       const near = ui.nearMe();
       if (near) ui.position();
-      const top = results.scrollTop;
-      untracked(refresh);
-      results.scrollTop = top;
+      const top = list.scrollTop;
+      untracked(() => {
+        buildChips();
+        refresh();
+      });
+      list.scrollTop = top;
     }),
   );
 
@@ -1348,7 +1362,7 @@ function wireKeyboard(ui: UiState): void {
     }
 
     if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
-      const rows = Array.from(document.querySelectorAll<HTMLElement>(".hn-results .hn-row"));
+      const rows = Array.from(document.querySelectorAll<HTMLElement>(".hn-rutas .hn-list .hn-row:not(.hn-row-import)"));
       if (rows.length === 0) return;
       const current = rows.indexOf(document.activeElement as HTMLElement);
       const next =
