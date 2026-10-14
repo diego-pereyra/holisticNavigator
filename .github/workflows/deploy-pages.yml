@@ -29,17 +29,22 @@ jobs:
       - run: bash scripts/budget.sh
       - name: Copiar las teselas de la carta de detalle al sitio (E10.1b, E10.2)
         run: |
+          # El workflow de teselas puede estar reemplazando los assets de la
+          # release tiles-latest al mismo tiempo (los dos corren en el mismo
+          # push): durante el reemplazo la URL da 404 un instante, así que se
+          # reintenta.
+          RETRY=(--retry 6 --retry-delay 10 --retry-all-errors)
           mkdir -p web/dist/tiles/zones
-          curl -fsSL -o web/dist/tiles/tiles.json \
+          curl -fsSL "${RETRY[@]}" -o web/dist/tiles/tiles.json \
             https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/tiles.json
-          curl -fsSL -o web/dist/tiles/world-z6.pmtiles \
+          curl -fsSL "${RETRY[@]}" -o web/dist/tiles/world-z6.pmtiles \
             https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles
           # Zonas descargables (E10.2): se copian las que ya estén en la release.
           # Si el workflow de teselas todavía no las publicó, el deploy sigue.
           ids=$(python3 -c 'import json; print(" ".join(json.load(open("web/dist/tiles/tiles.json")).get("zones", {}).keys()))')
           for id in $ids; do
             echo "copiando zona $id"
-            curl -fsSL -o "web/dist/tiles/zones/$id.pmtiles" \
+            curl -fsSL "${RETRY[@]}" -o "web/dist/tiles/zones/$id.pmtiles" \
               "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/zones/$id.pmtiles" \
               || echo "aviso: la zona $id todavía no está en la release; queda sin copiar"
           done
