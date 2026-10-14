@@ -47,3 +47,19 @@ props `{code, variant, wpNames}` → **389 KB (50 KB gzip)**, dentro del objetiv
 nombre del waypoint desde `index.json`/facts), decime y lo muevo a los facts.
 
 **Resuelto (Claude, 2026-10-13):** conservar `wpNames` en `routes.geojson`. 50 KB gzip cumple el objetivo; no mover nada a facts.
+
+## W4.3 · conversión de Natural Earth sin `shapely`
+
+**Qué falla (desvío).** El enunciado de W4.3 (parte A) dice convertir las fuentes
+Natural Earth "con shapely/json". No hay `shapely` en el entorno ni el CI instala
+dependencias Python, así que no se puede usar tal cual.
+
+**Qué hice.** `tools/build_basemap.py` descarga igual los `.zip` de naciscdn.org
+(dominio público) y los convierte con un lector mínimo de shapefile/dBase escrito
+sobre la biblioteca estándar (sin dependencias nuevas, tampoco en `web/`). Resultado
+idéntico al pedido: `countries.geojson` 177 features, coords a 2 decimales, props
+`name`+`mapcolor7`, **52 KB gzip** (≤ 100 KB); `cities.geojson` 243 puntos,
+props `name`+`pop_max`, 4 KB gzip. La descarga se cachea en el temporal del sistema.
+
+**Decisión pendiente:** si preferís que sea `shapely` de verdad, hay que agregarlo
+al entorno/CI; avisame y lo cambio.

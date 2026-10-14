@@ -1,5 +1,5 @@
 import { Map, NavigationControl, setWorkerUrl } from "maplibre-gl";
-import type { StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, StyleSpecification } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { mountApp, type AppHandle } from "./ui/app.ts";
@@ -12,14 +12,40 @@ declare global {
   }
 }
 
-const LAND = "basemap/land.geojson";
+const COUNTRIES = "basemap/countries.geojson";
+const CITIES = "basemap/cities.geojson";
 const GRATICULE = "basemap/graticule.geojson";
 
+// Siete tonos apagados (índices 1..7 de `mapcolor7`) para que los países se
+// distingan sobre el fondo oscuro sin gritar.
+const COUNTRY_SHADES = [
+  "#1c2733", "#202c3a", "#1a2a31", "#22293a", "#1e2f3a", "#242a33", "#1b2d38",
+] as const;
+
+// Población mínima para mostrar una ciudad, según el zoom: en la vista de mundo
+// solo las enormes; desde el zoom 5, todas.
+const CITY_MIN_POP: ExpressionSpecification = [
+  "step", ["zoom"], 2000000, 4, 500000, 5, 0,
+];
+
 export function baseMapStyle(): StyleSpecification {
+  const fillColor: ExpressionSpecification = [
+    "match",
+    ["get", "mapcolor7"],
+    1, COUNTRY_SHADES[0],
+    2, COUNTRY_SHADES[1],
+    3, COUNTRY_SHADES[2],
+    4, COUNTRY_SHADES[3],
+    5, COUNTRY_SHADES[4],
+    6, COUNTRY_SHADES[5],
+    7, COUNTRY_SHADES[6],
+    COUNTRY_SHADES[0],
+  ];
   return {
     version: 8,
     sources: {
-      land: { type: "geojson", data: LAND },
+      countries: { type: "geojson", data: COUNTRIES },
+      cities: { type: "geojson", data: CITIES },
       graticule: { type: "geojson", data: GRATICULE },
     },
     layers: [
@@ -29,15 +55,21 @@ export function baseMapStyle(): StyleSpecification {
         paint: { "background-color": "#0b1626" },
       },
       {
-        id: "land-fill",
+        id: "country-fill",
         type: "fill",
-        source: "land",
-        paint: { "fill-color": "#1c2733" },
+        source: "countries",
+        paint: { "fill-color": fillColor },
+      },
+      {
+        id: "country-line",
+        type: "line",
+        source: "countries",
+        paint: { "line-color": "#3a4a5a", "line-width": 0.6 },
       },
       {
         id: "coast-line",
         type: "line",
-        source: "land",
+        source: "countries",
         paint: { "line-color": "#3a4a5a", "line-width": 0.8 },
       },
       {
@@ -57,6 +89,31 @@ export function baseMapStyle(): StyleSpecification {
           "symbol-placement": "line",
         },
         paint: { "text-color": "#44546a" },
+      },
+      {
+        id: "country-label",
+        type: "symbol",
+        source: "countries",
+        minzoom: 2,
+        layout: { "text-field": ["get", "name"], "text-size": 11 },
+        paint: { "text-color": "#6b7f96", "text-halo-color": "#0b1626", "text-halo-width": 1 },
+      },
+      {
+        id: "city-dot",
+        type: "circle",
+        source: "cities",
+        minzoom: 3,
+        filter: [">=", ["get", "pop_max"], CITY_MIN_POP],
+        paint: { "circle-radius": 2, "circle-color": "#9FB0C0" },
+      },
+      {
+        id: "city-label",
+        type: "symbol",
+        source: "cities",
+        minzoom: 3,
+        filter: [">=", ["get", "pop_max"], CITY_MIN_POP],
+        layout: { "text-field": ["get", "name"], "text-size": 10 },
+        paint: { "text-color": "#9FB0C0", "text-halo-color": "#0b1626", "text-halo-width": 1 },
       },
     ],
   };
