@@ -56,7 +56,10 @@ BATHY = [
     ("ne_10m_bathymetry_G_4000", 4000),
     ("ne_10m_bathymetry_F_5000", 5000),
 ]
-BATHY_TOLS = (0.15, 0.25, 0.4)
+# tol 0.15 cumple el tope de 2 MB del archivo (1 579 KB) pero su gzip (452 KB)
+# empuja el presupuesto de primera carga por encima de 1,2 MB, así que arrancamos
+# en la siguiente tolerancia autorizada (0.25 → 1 110 KB / 309 KB gzip).
+BATHY_TOLS = (0.25, 0.4)
 BATHY_MAX = 2 * 1024 * 1024
 BATHY_MIN_BOX = 0.5
 

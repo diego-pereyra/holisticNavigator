@@ -66,4 +66,4 @@ al entorno/CI; avisame y lo cambio.
 
 ## E10.0 · batimetría (resuelto, 2026-10-14)
 
-**Resuelto (E10.0 corregida).** El bloqueo era correcto: redondear decimales no reduce puntos (24,8 MB a 2 decimales). Se resolvió simplificando la geometría con Douglas-Peucker (`simplify`, sin dependencias) en `tools/build_basemap.py`: `bathy.geojson` con tol 0.15 → 1 740 148 → 92 274 puntos (5,3 %), **1579 KB bruto / 452 KB gzip** (≤ 2 MB). No hay `50m`/`110m` de bathymetry en NE (HTTP 403), así que la única vía era simplificar los 10m.
+**Resuelto (E10.0 corregida).** El bloqueo era correcto: redondear decimales no reduce puntos (24,8 MB a 2 decimales). Se resolvió simplificando la geometría con Douglas-Peucker (`simplify`, sin dependencias) en `tools/build_basemap.py`. Con tol 0.15 daba 1 579 KB pero su gzip (452 KB) rompía el presupuesto de primera carga (1,30 MB > 1,20 MB), así que se usó la siguiente tolerancia autorizada: **tol 0.25 → 1 740 148 → 61 981 puntos (3,6 %), 1 110 KB bruto / 309 KB gzip** (≤ 2 MB; total del build 1,15 MB). No hay `50m`/`110m` de bathymetry en NE (HTTP 403), así que la única vía era simplificar los 10m.
