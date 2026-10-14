@@ -1,25 +1,22 @@
 ADELANTE
 
-TAREA ÚNICA: E10.1b — servir las teselas desde GitHub Pages (resuelve el bloqueo CORS).
+TAREA ÚNICA: UX-1 — la app abre mostrando qué hacer: Aquí a media altura y ayuda de primer uso.
 
-Decisión: los assets de Releases quedan como almacén; lo que la app lee es una copia en el propio
-sitio de Pages (manda CORS * y acepta peticiones por rangos).
+Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
 
-1. .github/workflows/deploy-pages.yml, después del build y antes del smoke test:
-     mkdir -p web/dist/tiles
-     curl -sSL -o web/dist/tiles/world-z6.pmtiles \
-       https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles
-     curl -sSL -o web/dist/tiles/tiles.json \
-       https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/tiles.json
-   (si la descarga falla, el paso falla: no se publica un sitio sin teselas).
-2. main.ts: TILES_WORLD_URL = new URL("tiles/world-z6.pmtiles", document.baseURI).toString().
-3. scripts/build-web.sh / sw-manifest: excluir `tiles/` del precache (son 45 MB; se piden por rangos).
-4. service-worker.js: si `url.pathname.includes("/tiles/")` → `return;` ANTES de cualquier
-   respondWith (el SW no debe tocar peticiones con Range: cachearía respuestas 206 parciales y
-   corrompería la lectura). Comentario en el código explicándolo.
-5. scripts/budget.sh: excluir `tiles/` del cálculo de primera carga.
-6. Smoke test: sin cambios; debe pasar con la fuente detail cargando desde el mismo origen.
-7. Prueba en CI: deploy verde; con red, zoom 5 sobre el Caribe muestra costas finas y nombres;
-   DevTools → Network muestra peticiones a tiles/world-z6.pmtiles con status 206.
-8. Commit "E10.1b: teselas servidas desde Pages, fuera del SW y del presupuesto", push, PARÁ.
-   Marcá el bloqueo como resuelto en BLOCKERS.md.
+1. Al montar: la hoja arranca en "half" con la pestaña Aquí (hoy arranca en peek). Excepciones:
+   si hay ruta activa y posición → peek con la tira Navegando (E9.1); si la URL trae ?route= →
+   la ficha, como ahora.
+2. Aquí, primera tarjeta cuando NO hay posición: título "Tu posición manda" y tres botones
+   grandes (44 px, ancho completo): "Usar GPS" (wireGpsStart), "Fijar en el mapa", "Escribir
+   coordenadas" (los mismos del menú de posición). Cuando hay posición, esa tarjeta no aparece.
+3. Ayuda de primer uso (una sola vez, hn.seenHelp): tarjeta al tope de Aquí, no modal:
+   "Tu posición manda · Elegí una ruta · Tocá Seguir" en una línea cada una, con un icono de texto
+   (📍 ▸ ⚑), y un botón "Entendido" que la cierra y guarda hn.seenHelp = "1". Máximo 4 líneas de
+   alto. Nunca tapa el mapa.
+4. En escritorio no cambia nada salvo la tarjeta de ayuda y la de posición, que van en la misma
+   pestaña Aquí del panel.
+5. Prueba: borrar datos del sitio, abrir → mapa + hoja a media altura con la ayuda y "Tu posición
+   manda"; tocar Usar GPS → la tarjeta de posición desaparece y aparecen cuenca y rutas cercanas;
+   recargar → la ayuda ya no vuelve.
+6. npm test, build-web.sh, commit "UX-1: apertura en Aquí y ayuda de primer uso", push, PARÁ.
