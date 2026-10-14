@@ -26,7 +26,7 @@ const bootParams = readUrlParams();
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
-import type { Map as MlMap, GeoJSONSource, FilterSpecification } from "maplibre-gl";
+import type { Map as MlMap, GeoJSONSource, FilterSpecification, MapMouseEvent } from "maplibre-gl";
 import { signal, effect, untracked, type Signal } from "../core/store.ts";
 import {
   filterEntries,
@@ -100,6 +100,10 @@ function defaultAcc(): Record<string, boolean> {
 // gesto llega a la capa del catálogo). La bandera se limpia en el mismo tick.
 let wpHitHandled = false;
 
+// "Fijar en el mapa" (UX-1): con el modo armado, el próximo clic fija la
+// posición y los otros handlers de clic no deben reaccionar.
+let fixOnMapArmed = false;
+
 // Fichas ya cargadas: permiten volver a armarlas al cambiar de variante sin
 // mostrar "Cargando…" otra vez (W4.5).
 const fichaCache = new Map<string, RouteDetail>();
@@ -133,6 +137,7 @@ interface UiState {
   imported: Signal<ImportedRoute[]>;
   voyage: Signal<VoyageLog | null>;
   recording: Signal<boolean>;
+  helpSeen: Signal<boolean | null>;
   navFixes: Fix[];
   settings: Settings;
 }
@@ -168,7 +173,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     gpsStatus: signal<PositionStatus>("off"),
     month: signal(currentMonthUtc()),
     tab: signal<TabName>("aqui"),
-    sheet: signal<SheetState>("peek"),
+    sheet: signal<SheetState>("half"),
     selected: signal<{ code: string; chapter: string } | null>(null),
     variant: signal(bootParams.variant ?? ""),
     active: signal<ActiveRoute | null>(null),
@@ -178,6 +183,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     imported: signal<ImportedRoute[]>([]),
     voyage: signal<VoyageLog | null>(null),
     recording: signal(false),
+    helpSeen: signal<boolean | null>(null),
     navFixes: [],
     settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS } },
   };
@@ -276,18 +282,20 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
 }
 
 async function restore(ui: UiState): Promise<void> {
-  const [month, active, imported, voyage, position, settings] = await Promise.all([
+  const [month, active, imported, voyage, position, settings, seenHelp] = await Promise.all([
     ui.store.get(KEYS.month),
     ui.store.get(KEYS.active),
     ui.store.get(KEYS.imported),
     ui.store.get(KEYS.voyageCurrent),
     ui.store.get(KEYS.position),
     ui.store.get(KEYS.settings),
+    ui.store.get(KEYS.seenHelp),
   ]);
   if (month) ui.month.set(Number(month) || currentMonthUtc());
   ui.active.set(readJson<ActiveRoute | null>(active, null));
   ui.imported.set(readJson<ImportedRoute[]>(imported, []));
   ui.voyage.set(readJson<VoyageLog | null>(voyage, null));
+  ui.helpSeen.set(seenHelp === "1");
   const s = readJson<Settings | null>(settings, null);
   if (s) {
     if (s.acc) ui.settings.acc = { ...defaultAcc(), ...s.acc };
@@ -298,6 +306,9 @@ async function restore(ui: UiState): Promise<void> {
     ui.position.set(pos);
     setSource(ui.map, "me", featureCollection([pointFeature(pos.lon, pos.lat)]));
   }
+  // Excepción a la apertura en Aquí (UX-1): con ruta activa y posición la hoja
+  // arranca en peek, para mostrar la tira Navegando (E9.1).
+  if (ui.active() && ui.position()) ui.sheet.set("peek");
   drawImported(ui);
 }
 
@@ -508,6 +519,7 @@ function addBasinLayers(ui: UiState, basins: Record<string, Basin>): void {
     "imported-lines",
   );
   map.on("click", "basin-label", (e) => {
+    if (fixOnMapArmed) return;
     const name = e.features?.[0]?.properties?.["name"];
     if (typeof name === "string") {
       ui.region.set(name);
@@ -532,7 +544,7 @@ function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
     before,
   );
   map.on("click", "catalog-lines", (e) => {
-    if (wpHitHandled) return;
+    if (wpHitHandled || fixOnMapArmed) return;
     const code = e.features?.[0]?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
@@ -750,11 +762,13 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
       const m = el("div", { class: "hn-menu" });
       const useGps = el("button", { class: "hn-btn" }, "Usar GPS");
       useGps.addEventListener("click", () => { m.remove(); wireGpsStart(); });
+      const fix = el("button", { class: "hn-btn" }, "Fijar en el mapa");
+      fix.addEventListener("click", () => { m.remove(); armFixOnMap(ui); });
       const write = el("button", { class: "hn-btn" }, "Escribir coordenadas");
       write.addEventListener("click", () => { m.remove(); openManualPosition(ui); });
       const ap = el("button", { class: "hn-btn" }, "Apagar");
       ap.addEventListener("click", () => { m.remove(); ui.position.set(null); ui.gpsStatus.set("off"); (window as unknown as { hnStopGps?: () => void }).hnStopGps?.(); });
-      m.append(useGps, write, ap);
+      m.append(useGps, fix, write, ap);
       document.body.appendChild(m);
       const rm = (ev: Event) => { if (!m.contains(ev.target as Node)) { m.remove(); document.removeEventListener("click", rm); } };
       setTimeout(() => document.addEventListener("click", rm), 0);
@@ -907,6 +921,23 @@ function renderCatalogFailed(body: HTMLElement): void {
 function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
   body.append(el("h2", { class: "hn-h2" }, "Aquí"));
 
+  // Ayuda de primer uso (UX-1): tarjeta al tope, no modal, una sola vez.
+  const helpSlot = el("div", { class: "hn-aqui-help" });
+  body.append(helpSlot);
+  cleanup.push(
+    effect(() => {
+      clear(helpSlot);
+      if (ui.helpSeen() !== false) return;
+      // Si ya consiguió posición, la ayuda cumplió su función y no vuelve.
+      if (ui.position()) {
+        ui.helpSeen.set(true);
+        persist(ui, KEYS.seenHelp, "1");
+        return;
+      }
+      helpSlot.append(helpCard(ui));
+    }),
+  );
+
   const top = el("div", { class: "hn-aqui-top" });
   body.append(top);
 
@@ -916,6 +947,9 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
       const pos = ui.position();
       const ctx = pos ? resolveContext(pos.lat, pos.lon, month, ui.basins, ui.variants) : null;
       const nodes: Node[] = [];
+
+      // Primera tarjeta cuando todavía no hay posición (UX-1).
+      if (!pos) nodes.push(positionCard(ui));
 
       const sentence = el("p", { class: "hn-sentence" });
       sentence.textContent = ctx?.region
@@ -968,6 +1002,79 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
   );
 
   body.append(alarmsCard(ui));
+}
+
+// Ayuda de primer uso (UX-1): tarjeta, no modal, máx. cuatro renglones.
+function helpCard(ui: UiState): HTMLElement {
+  const card = el("div", { class: "hn-card hn-help" });
+  const lines: [string, string][] = [
+    ["📍", "Tu posición manda"],
+    ["▸", "Elegí una ruta"],
+    ["⚑", "Tocá Seguir"],
+  ];
+  for (const [icon, text] of lines) {
+    card.append(
+      el("div", { class: "hn-help-line" }, el("span", { class: "hn-help-ico" }, icon), el("span", {}, text)),
+    );
+  }
+  const ok = el("button", { class: "hn-btn hn-btn-primary hn-help-ok", type: "button" }, "Entendido");
+  ok.addEventListener("click", () => {
+    ui.helpSeen.set(true);
+    persist(ui, KEYS.seenHelp, "1");
+  });
+  card.append(ok);
+  return card;
+}
+
+// Tarjeta "Tu posición manda" (UX-1): solo cuando todavía no hay posición.
+function positionCard(ui: UiState): HTMLElement {
+  const card = el("div", { class: "hn-card hn-card-pos" });
+  card.append(el("div", { class: "hn-card-title" }, "Tu posición manda"));
+  const actions = el("div", { class: "hn-pos-actions" });
+  const gps = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Usar GPS");
+  gps.addEventListener("click", () => wireGpsStart());
+  const fix = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Fijar en el mapa");
+  fix.addEventListener("click", () => armFixOnMap(ui));
+  const write = el("button", { class: "hn-btn hn-pos-btn", type: "button" }, "Escribir coordenadas");
+  write.addEventListener("click", () => openManualPosition(ui));
+  actions.append(gps, fix, write);
+  card.append(actions);
+  return card;
+}
+
+// "Fijar en el mapa" (UX-1): arma el modo de un toque; el próximo clic sobre la
+// carta fija la posición. La banda avisa y permite cancelar.
+function armFixOnMap(ui: UiState): void {
+  if (fixOnMapArmed) return;
+  fixOnMapArmed = true;
+  const band = el("div", { class: "hn-fixband" });
+  band.append(el("span", { class: "hn-fixband-text" }, "Tocá el mapa para fijar tu posición"));
+  const cancel = el("button", { class: "hn-alarm-btn", type: "button" }, "Cancelar");
+  band.append(cancel);
+  document.body.append(band);
+
+  const done = (): void => {
+    band.remove();
+    ui.map.off("click", onMap);
+    ui.map.getCanvas().style.cursor = "";
+    // Se limpia recién en el próximo tick: los handlers de capa del mismo clic
+    // (basin-label, catalog-lines, route-wps-selected) todavía deben verlo armado.
+    window.setTimeout(() => {
+      fixOnMapArmed = false;
+    }, 0);
+  };
+  const onMap = (e: MapMouseEvent): void => {
+    const pos: Position = { lat: e.lngLat.lat, lon: e.lngLat.lng, accuracyM: 0, source: "manual", t: Date.now() };
+    ui.position.set(pos);
+    ui.gpsStatus.set("off");
+    persist(ui, KEYS.position, JSON.stringify(pos));
+    setSource(ui.map, "me", featureCollection([pointFeature(pos.lon, pos.lat)]));
+    pushFix(ui, pos);
+    done();
+  };
+  cancel.addEventListener("click", done);
+  ui.map.getCanvas().style.cursor = "crosshair";
+  ui.map.on("click", onMap);
 }
 
 // Ajustes de alarmas (E9.2): dos umbrales numéricos, persistidos en hn.settings.
@@ -1504,6 +1611,7 @@ function selectWpByIndex(index: number): void {
 
 function wireSelectedWp(ui: UiState): void {
   ui.map.on("click", "route-wps-selected", (e) => {
+    if (fixOnMapArmed) return;
     wpHitHandled = true;
     window.setTimeout(() => {
       wpHitHandled = false;
