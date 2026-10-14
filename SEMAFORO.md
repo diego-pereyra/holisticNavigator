@@ -1,22 +1,20 @@
 ADELANTE
 
-TAREA ÚNICA: UX-1 — la app abre mostrando qué hacer: Aquí a media altura y ayuda de primer uso.
+TAREA ÚNICA: UX-2 — la posición manual no la pisa el GPS.
 
-Archivos: web/src/ui/app.ts, web/public/app.css. Nada más.
 
-1. Al montar: la hoja arranca en "half" con la pestaña Aquí (hoy arranca en peek). Excepciones:
-   si hay ruta activa y posición → peek con la tira Navegando (E9.1); si la URL trae ?route= →
-   la ficha, como ahora.
-2. Aquí, primera tarjeta cuando NO hay posición: título "Tu posición manda" y tres botones
-   grandes (44 px, ancho completo): "Usar GPS" (wireGpsStart), "Fijar en el mapa", "Escribir
-   coordenadas" (los mismos del menú de posición). Cuando hay posición, esa tarjeta no aparece.
-3. Ayuda de primer uso (una sola vez, hn.seenHelp): tarjeta al tope de Aquí, no modal:
-   "Tu posición manda · Elegí una ruta · Tocá Seguir" en una línea cada una, con un icono de texto
-   (📍 ▸ ⚑), y un botón "Entendido" que la cierra y guarda hn.seenHelp = "1". Máximo 4 líneas de
-   alto. Nunca tapa el mapa.
-4. En escritorio no cambia nada salvo la tarjeta de ayuda y la de posición, que van en la misma
-   pestaña Aquí del panel.
-5. Prueba: borrar datos del sitio, abrir → mapa + hoja a media altura con la ayuda y "Tu posición
-   manda"; tocar Usar GPS → la tarjeta de posición desaparece y aparecen cuenca y rutas cercanas;
-   recargar → la ayuda ya no vuelve.
-6. npm test, build-web.sh, commit "UX-1: apertura en Aquí y ayuda de primer uso", push, PARÁ.
+Diego (2026-10-14): fijás la posición a mano y enseguida vuelve a GPS. Causa: el watch del GPS sigue
+corriendo y cada fix pisa `ui.position`.
+
+Archivos: `web/src/ui/app.ts`, `web/src/platform/position.ts`. Commit `UX-2: la posición manual manda hasta que elijas GPS`.
+
+1. `watchGps` devuelve la función de parada; guardarla en `ui.gpsStop`. "Fijar en el mapa" y
+   "Escribir coordenadas" llaman `ui.gpsStop?.()`, ponen `gpsStatus = "off"` y `position.source = "manual"`.
+2. Mientras `position.source === "manual"`, ningún fix de GPS se aplica (guardia en el callback).
+3. Al abrir la app: si hay posición manual persistida, se restaura y **no** se arranca el GPS
+   aunque el permiso esté concedido; el chip dice "manual" y el menú ofrece "Usar GPS".
+4. "Usar GPS" vuelve a arrancar el watch y el primer fix reemplaza la manual.
+5. Prueba: escribir 15N 60W con GPS activo → la posición queda en 15N 60W y el chip dice "manual";
+   recargar → sigue manual; "Usar GPS" → vuelve a la real.
+
+6. npm test, build-web.sh, commit, push, PARÁ.
