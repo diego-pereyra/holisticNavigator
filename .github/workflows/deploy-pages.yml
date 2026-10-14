@@ -40,12 +40,14 @@ jobs:
           curl -fsSL "${RETRY[@]}" -o web/dist/tiles/world-z6.pmtiles \
             https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles
           # Zonas descargables (E10.2): se copian las que ya estén en la release.
-          # Si el workflow de teselas todavía no las publicó, el deploy sigue.
+          # GitHub aplana los assets, así que en la release la zona es
+          # `<id>.pmtiles` (no `zones/<id>.pmtiles`). Si el workflow de teselas
+          # todavía no las publicó, el deploy sigue.
           ids=$(python3 -c 'import json; print(" ".join(json.load(open("web/dist/tiles/tiles.json")).get("zones", {}).keys()))')
           for id in $ids; do
             echo "copiando zona $id"
             curl -fsSL "${RETRY[@]}" -o "web/dist/tiles/zones/$id.pmtiles" \
-              "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/zones/$id.pmtiles" \
+              "https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/$id.pmtiles" \
               || echo "aviso: la zona $id todavía no está en la release; queda sin copiar"
           done
 

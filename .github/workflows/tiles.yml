@@ -98,7 +98,7 @@ jobs:
                   "bbox": z["bbox"],
                   "bytes": b,
                   "sha256": h,
-                  "url": f"{base}/zones/{name}.pmtiles",
+                  "url": f"{base}/{name}.pmtiles",
               }
           print(json.dumps(out, ensure_ascii=False, indent=2))
           PY
