@@ -1,31 +1,26 @@
 ADELANTE
 
-TAREA ÚNICA: E9.2 — alarmas de desvío y de llegada.
+TAREA ÚNICA: E10.0 — batimetría en el piso del mapa (relieve del océano sin red).
 
-Archivos: web/src/core/alarms.ts (nuevo, con test), web/src/ui/app.ts, web/public/app.css,
-web/src/platform/sound.ts (nuevo). Nada más.
+Archivos: tools/build_basemap.py, web/src/main.ts, scripts/sync-catalog.sh (si copia basemap),
+web/public/service-worker.js solo si el precache no se genera solo. Nada más.
 
-1. core/alarms.ts (lógica pura, testeada):
-   export interface AlarmSettings { xteMaxNm: number; arrivalNm: number }   // defecto 2 y 1
-   export type AlarmKind = "xte" | "arrival";
-   export interface AlarmState { active: AlarmKind | null; silencedFor: AlarmKind | null }
-   export function evalAlarms(fix: NavFix, s: AlarmSettings, prev: AlarmState): AlarmState
-   Reglas: |xteNm| > xteMaxNm → "xte"; distanceNm < arrivalNm → "arrival" (tiene prioridad).
-   Si la condición desaparece, active = null y silencedFor = null (vuelve a poder sonar).
-   Si active == silencedFor, no suena (sigue activa pero silenciada).
-   Tests: 6 casos (cruza umbral, vuelve, silenciada no se repite, se repite tras resolverse, llegada
-   gana a desvío, sin fix → null).
-2. platform/sound.ts: export function beep(times: number): tono 880 Hz de 150 ms con
-   AudioContext (crearlo en el primer gesto del usuario; si no hay, silencio) + navigator.vibrate?.(200).
-3. Ajustes: en la pestaña Aquí, sección "Alarmas" (tarjeta): dos campos numéricos "Desvío máximo
-   (nm)" y "Radio de llegada (nm)", con los defectos; se guardan en hn.settings.alarms.
-4. En app.ts, un effect que lee ui.position y ui.active, llama activeNav(ui) y evalAlarms; cuando
-   active cambia de null a un valor y no está silenciada: beep(3) cada 10 s mientras siga activa,
-   y banda roja fija arriba de la hoja class="hn-alarm" con el texto
-   `⚠ Desvío de {d.d} nm · [Silenciar]` o `⚑ Llegando a {waypoint} · [Silenciar]`.
-   Silenciar: silencedFor = active; la banda queda en gris con el texto, sin sonido.
-5. Las alarmas solo corren con ruta activa. Al Dejar de seguir, se limpian.
-6. Prueba: Seguir AN12 con posición manual a 3 nm del trazado → suena y aparece la banda; Silenciar
-   → deja de sonar; mover la posición al trazado → banda desaparece; volver a desviarse → vuelve a
-   sonar. Posición a 0,5 nm de un waypoint → "Llegando a …".
-7. npm test, build-web.sh, commit "E9.2: alarmas de desvío y llegada", push, PARÁ.
+1. tools/build_basemap.py: descargar de https://naciscdn.org/naturalearth/10m/physical/
+   los zips ne_10m_bathymetry_K_200.zip, ne_10m_bathymetry_J_1000.zip, ne_10m_bathymetry_I_2000.zip,
+   ne_10m_bathymetry_H_3000.zip, ne_10m_bathymetry_G_4000.zip, ne_10m_bathymetry_F_5000.zip
+   (shapefiles, dominio público). Leerlos con el mismo lector stdlib que ya usás para países
+   (si el lector es solo GeoJSON, descargar en su lugar los GeoJSON equivalentes desde
+   https://github.com/nvkelso/natural-earth-vector/raw/master/geojson/ne_10m_bathymetry_K_200.geojson
+   etc.). Fusionar en web/public/basemap/bathy.geojson con una sola propiedad `depth` (200, 1000,
+   2000, 3000, 4000, 5000). Simplificar: redondear coordenadas a 2 decimales y eliminar puntos
+   consecutivos repetidos; quitar polígonos con menos de 4 puntos. Límite duro: 2 MB brutos; si se
+   supera, redondear a 1 decimal.
+2. main.ts, estilo base: fuente "bathy" y capa "bathy-fill" (type fill) entre "background" y
+   "country-fill", con fill-color por depth: 200 → #13223a, 1000 → #0f1d33, 2000 → #0c182b,
+   3000 → #0a1425, 4000 → #081120, 5000 → #060d1a. Sin contorno. El fondo "background" pasa a
+   #15263f (aguas someras, más claro que 200 m) para que la plataforma continental se lea.
+3. bathy.geojson entra al precache del SW (manifiesto automático de build-web.sh).
+4. Prueba: sin red, a zoom 2 se ven plataformas continentales claras y fosas oscuras; el archivo
+   pesa ≤ 2 MB; el presupuesto de primera carga no cambia (la batimetría se carga con el estilo,
+   medir y anotar el gzip en el commit).
+5. npm test, build-web.sh, commit "E10.0: batimetría en el piso del mapa", push, PARÁ.
