@@ -235,3 +235,33 @@ Archivos: `web/src/ui/app.ts`, `web/src/platform/position.ts`. Commit `UX-2: la 
 4. "Usar GPS" vuelve a arrancar el watch y el primer fix reemplaza la manual.
 5. Prueba: escribir 15N 60W con GPS activo → la posición queda en 15N 60W y el chip dice "manual";
    recargar → sigue manual; "Usar GPS" → vuelve a la real.
+
+## UX-3 — el zoom nunca se corta (principio de plotter)
+
+Diego (2026-10-14): "tengo que poder hacer zoom hasta ver que me voy a dar contra una boya".
+Hoy `maxZoom: 12` en main.ts.
+
+Archivos: `web/src/main.ts`, `web/src/ui/app.ts`, `web/public/app.css`. Commit `UX-3: zoom libre hasta 18`.
+
+1. `maxZoom: 18` en el mapa. Las fuentes conservan su `maxzoom` (6 mundo, 10 zonas): MapLibre
+   sobreamplía las teselas; no hay que tocar las fuentes.
+2. Nota discreta abajo a la izquierda, clase `hn-scale-note`, visible cuando el zoom supera el
+   detalle disponible en ese punto: `Sin detalle a esta escala · descargá la zona` (si no hay zona
+   descargada que cubra el centro) o `Detalle hasta zoom 10 · usá tu carta para el puerto` (si la
+   hay). Desaparece al alejar.
+3. Marcador de posición, ruta activa, waypoints y círculo de precisión se dibujan igual a cualquier
+   zoom (ya es así; verificar que el círculo de precisión no desaparezca por `minzoom`).
+4. Prueba: zoom 17 sobre Montevideo → el mapa sigue respondiendo, se ve la posición y la nota.
+
+## E10.3 — balizas, boyas y luces sin red (por zona)
+
+Las teselas de Protomaps no incluyen `seamark:*`. Por cada zona de `zones.json`, el job de teselas
+descarga de Overpass (`https://overpass-api.de/api/interpreter`) los nodos con `seamark:type` en
+`buoy_lateral, buoy_cardinal, buoy_safe_water, buoy_special, buoy_isolated_danger, beacon_lateral,
+beacon_cardinal, beacon_special, light_major, light_minor, lighthouse, harbour, mooring` dentro del
+bbox, y publica `zones/<id>-seamarks.geojson` (propiedades: `type`, `name`, `colour`, `shape`,
+`light` = carácter si existe). Tamaño típico: 100–500 KB. La app lo descarga junto con la zona y lo
+dibuja desde zoom 11 con `SymbolLayer`: texto del símbolo por tipo (● lateral con color
+rojo/verde, ◆ cardinal amarillo/negro, ✦ luz, ⚓ puerto/amarre), nombre desde zoom 13, y el
+carácter de la luz al tocar. Con red, además, capa raster OpenSeaMap `seamarks` (apagada por
+defecto, interruptor "Balizas OSM online"). Commit `E10.3: balizas sin red por zona`.
