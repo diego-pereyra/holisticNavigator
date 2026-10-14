@@ -45,6 +45,7 @@ import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
 import { navigate, haversineNm, type RouteTrack, type NavFix } from "../core/navigation.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
+import { evalAlarms, DEFAULT_ALARMS, type AlarmSettings, type AlarmState } from "../core/alarms.ts";
 import {
   voyageToGpx,
   voyageDistanceNm,
@@ -53,6 +54,7 @@ import {
 } from "../core/voyage.ts";
 import { sunTimes } from "../core/sun.ts";
 import { loadFact } from "../platform/catalog.ts";
+import { beep } from "../platform/sound.ts";
 import { KEYS, type KeyValueStore } from "../platform/store.ts";
 import { downloadText, pickTextFile } from "../platform/download.ts";
 import { watchGps, type Position, type PositionStatus } from "../platform/position.ts";
@@ -77,9 +79,11 @@ interface Geometry {
   names: string[];
 }
 
-// Estado de los acordeones de la ficha (W4.5 #3), recordado en `hn.settings`.
+// Estado de los acordeones de la ficha (W4.5 #3) y de las alarmas (E9.2),
+// recordado en `hn.settings`.
 interface Settings {
   acc: Record<string, boolean>;
+  alarms: AlarmSettings;
 }
 
 // Por defecto en escritorio (dos columnas) se abren Consejo y Waypoints; en
@@ -175,7 +179,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     voyage: signal<VoyageLog | null>(null),
     recording: signal(false),
     navFixes: [],
-    settings: { acc: defaultAcc() },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS } },
   };
 
   installBaseLayers(map);
@@ -217,6 +221,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
 
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
+  renderAlarmBand(ui);
   wireSelectedWp(ui);
   wireKeyboard(ui);
 
@@ -284,7 +289,10 @@ async function restore(ui: UiState): Promise<void> {
   ui.imported.set(readJson<ImportedRoute[]>(imported, []));
   ui.voyage.set(readJson<VoyageLog | null>(voyage, null));
   const s = readJson<Settings | null>(settings, null);
-  if (s && s.acc) ui.settings.acc = { ...defaultAcc(), ...s.acc };
+  if (s) {
+    if (s.acc) ui.settings.acc = { ...defaultAcc(), ...s.acc };
+    if (s.alarms) ui.settings.alarms = { ...DEFAULT_ALARMS, ...s.alarms };
+  }
   const pos = readJson<Position | null>(position, null);
   if (pos) {
     ui.position.set(pos);
@@ -832,10 +840,11 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     sheet.className = `hn-sheet hn-sheet-${state}${sel ? " hn-ficha-open" : ""}${hasNav ? " hn-nav" : ""}`;
     document.body.classList.toggle("hn-has-ficha", !!sel);
     const root = document.documentElement;
-    if (!window.matchMedia("(min-width: 700px)").matches && state === "peek") {
-      root.style.setProperty("--hn-sheet-h", hasNav ? "160px" : "96px");
-    } else {
+    if (window.matchMedia("(min-width: 700px)").matches) {
       root.style.removeProperty("--hn-sheet-h");
+    } else {
+      const h = state === "peek" ? (hasNav ? "160px" : "96px") : state === "half" ? "50vh" : "92vh";
+      root.style.setProperty("--hn-sheet-h", h);
     }
   });
 
@@ -957,6 +966,46 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
       if (active) renderActive(ui, activeSlot, active);
     }),
   );
+
+  body.append(alarmsCard(ui));
+}
+
+// Ajustes de alarmas (E9.2): dos umbrales numéricos, persistidos en hn.settings.
+function alarmsCard(ui: UiState): HTMLElement {
+  const card = el("div", { class: "hn-card" });
+  card.append(el("div", { class: "hn-card-title" }, "Alarmas"));
+  const row = el("div", { class: "hn-alarm-fields" });
+  const xte = el("input", {
+    class: "hn-search",
+    type: "number",
+    min: "0",
+    step: "0.1",
+    inputmode: "decimal",
+  });
+  xte.value = String(ui.settings.alarms.xteMaxNm);
+  const arrival = el("input", {
+    class: "hn-search",
+    type: "number",
+    min: "0",
+    step: "0.1",
+    inputmode: "decimal",
+  });
+  arrival.value = String(ui.settings.alarms.arrivalNm);
+  const save = (): void => {
+    const x = Number(xte.value);
+    const a = Number(arrival.value);
+    if (Number.isFinite(x) && x >= 0) ui.settings.alarms.xteMaxNm = x;
+    if (Number.isFinite(a) && a >= 0) ui.settings.alarms.arrivalNm = a;
+    saveSettings(ui);
+  };
+  xte.addEventListener("change", save);
+  arrival.addEventListener("change", save);
+  row.append(
+    el("label", { class: "hn-field" }, el("span", { class: "hn-field-label" }, "Desvío máximo (nm)"), xte),
+    el("label", { class: "hn-field" }, el("span", { class: "hn-field-label" }, "Radio de llegada (nm)"), arrival),
+  );
+  card.append(row);
+  return card;
 }
 
 function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void {
@@ -1077,6 +1126,68 @@ function sustainedSog(fixes: Fix[], nowMs: number): boolean {
   const span = last.t - first.t;
   if (span < 120_000) return false;
   return haversineNm(first.lat, first.lon, last.lat, last.lon) / (span / 3_600_000) >= 0.5;
+}
+
+// Banda de alarma (E9.2): fija arriba de la hoja. Solo con ruta activa. Al
+// aparecer una alarma nueva (no silenciada) suena beep(3) y repite cada 10 s
+// mientras siga activa; Silenciar la deja en gris, sin sonido.
+function renderAlarmBand(ui: UiState): void {
+  const band = el("div", { class: "hn-alarm" });
+  const text = el("span", { class: "hn-alarm-text" }, "");
+  const silence = el("button", { class: "hn-alarm-btn", type: "button" }, "Silenciar");
+  band.append(text, silence);
+  band.hidden = true;
+  document.body.append(band);
+
+  let state: AlarmState = { active: null, silencedFor: null };
+  let beepTimer: number | undefined;
+  const stopBeeps = (): void => {
+    if (beepTimer !== undefined) {
+      window.clearInterval(beepTimer);
+      beepTimer = undefined;
+    }
+  };
+
+  silence.addEventListener("click", () => {
+    if (!state.active) return;
+    state = { active: state.active, silencedFor: state.active };
+    stopBeeps();
+    band.className = "hn-alarm hn-alarm-silenced";
+  });
+
+  effect(() => {
+    const a = ui.active();
+    const nav = a ? activeNav(ui) : null;
+    if (!a || !nav) {
+      state = { active: null, silencedFor: null };
+      stopBeeps();
+      band.hidden = true;
+      return;
+    }
+    const next = evalAlarms(nav.fix, ui.settings.alarms, state);
+    const fresh = next.active !== null && next.active !== state.active;
+    state = next;
+    if (!state.active) {
+      stopBeeps();
+      band.hidden = true;
+      return;
+    }
+    const silenced = state.silencedFor === state.active;
+    band.hidden = false;
+    band.className = `hn-alarm${silenced ? " hn-alarm-silenced" : ""}`;
+    text.textContent =
+      state.active === "arrival"
+        ? `⚑ Llegando a ${nav.fix.nextName || "el waypoint"}`
+        : `⚠ Desvío de ${Math.abs(nav.fix.xteNm).toFixed(1).replace(".", ",")} nm`;
+    if (fresh && !silenced) {
+      beep(3);
+      stopBeeps();
+      beepTimer = window.setInterval(() => {
+        if (state.active && state.silencedFor !== state.active) beep(3);
+        else stopBeeps();
+      }, 10_000);
+    }
+  });
 }
 
 function navCell(label: string, value: string): HTMLElement {
