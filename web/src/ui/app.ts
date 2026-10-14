@@ -77,6 +77,29 @@ interface Geometry {
   names: string[];
 }
 
+// Estado de los acordeones de la ficha (W4.5 #3), recordado en `hn.settings`.
+interface Settings {
+  acc: Record<string, boolean>;
+}
+
+// Por defecto en escritorio (dos columnas) se abren Consejo y Waypoints; en
+// móvil, donde Diego ya está acostumbrado a todo abierto, se abren todos.
+function defaultAcc(): Record<string, boolean> {
+  const desktop =
+    typeof window !== "undefined" && window.matchMedia("(min-width: 1100px)").matches;
+  return desktop
+    ? { consejo: true, variantes: false, waypoints: true, referencias: false, libro: false }
+    : { consejo: true, variantes: true, waypoints: true, referencias: true, libro: true };
+}
+
+// Un clic sobre un waypoint en la carta no debe además abrir la ruta (el mismo
+// gesto llega a la capa del catálogo). La bandera se limpia en el mismo tick.
+let wpHitHandled = false;
+
+// Fichas ya cargadas: permiten volver a armarlas al cambiar de variante sin
+// mostrar "Cargando…" otra vez (W4.5).
+const fichaCache = new Map<string, RouteDetail>();
+
 interface ActiveRoute {
   code: string;
   chapter: string;
@@ -107,6 +130,7 @@ interface UiState {
   voyage: Signal<VoyageLog | null>;
   recording: Signal<boolean>;
   navFixes: Fix[];
+  settings: Settings;
 }
 
 export interface AppDeps {
@@ -151,6 +175,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     voyage: signal<VoyageLog | null>(null),
     recording: signal(false),
     navFixes: [],
+    settings: { acc: defaultAcc() },
   };
 
   installBaseLayers(map);
@@ -192,6 +217,8 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
 
   renderContextBar(ui, contextBar);
   renderSheet(ui, sheet);
+  wireSelectedWp(ui);
+  wireKeyboard(ui);
 
   effect(() => persist(ui, KEYS.month, String(ui.month())));
   effect(() => {
@@ -244,17 +271,20 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
 }
 
 async function restore(ui: UiState): Promise<void> {
-  const [month, active, imported, voyage, position] = await Promise.all([
+  const [month, active, imported, voyage, position, settings] = await Promise.all([
     ui.store.get(KEYS.month),
     ui.store.get(KEYS.active),
     ui.store.get(KEYS.imported),
     ui.store.get(KEYS.voyageCurrent),
     ui.store.get(KEYS.position),
+    ui.store.get(KEYS.settings),
   ]);
   if (month) ui.month.set(Number(month) || currentMonthUtc());
   ui.active.set(readJson<ActiveRoute | null>(active, null));
   ui.imported.set(readJson<ImportedRoute[]>(imported, []));
   ui.voyage.set(readJson<VoyageLog | null>(voyage, null));
+  const s = readJson<Settings | null>(settings, null);
+  if (s && s.acc) ui.settings.acc = { ...defaultAcc(), ...s.acc };
   const pos = readJson<Position | null>(position, null);
   if (pos) {
     ui.position.set(pos);
@@ -350,7 +380,7 @@ function persist(ui: UiState, key: string, value: string): void {
 
 function installBaseLayers(map: MlMap): void {
   const empty = featureCollection([]);
-  for (const id of ["selected", "active", "imported", "voyage", "me", "navline"]) {
+  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
 
@@ -395,6 +425,37 @@ function installBaseLayers(map: MlMap): void {
     type: "line",
     source: "selected",
     paint: { "line-color": "#4FC3F7", "line-opacity": 0.6, "line-width": 2.2 },
+  });
+  // Waypoints de la ruta elegida: puntos tocables para seleccionar la fila (W4.5 #3 bis).
+  map.addLayer({
+    id: "route-wps-selected",
+    type: "circle",
+    source: "selected",
+    filter: ["==", ["geometry-type"], "Point"],
+    paint: {
+      "circle-radius": 5,
+      "circle-color": "#FFCC80",
+      "circle-stroke-color": "#0b1626",
+      "circle-stroke-width": 1,
+    },
+  });
+  // Waypoint elegido en la tabla: agrandado con halo (patrón savvy navvy, W4.5 #3 bis).
+  map.addLayer({
+    id: "route-wp-selected-halo",
+    type: "circle",
+    source: "sel-wp",
+    paint: { "circle-radius": 16, "circle-color": "#FFCC80", "circle-opacity": 0.22 },
+  });
+  map.addLayer({
+    id: "route-wp-selected",
+    type: "circle",
+    source: "sel-wp",
+    paint: {
+      "circle-radius": 8,
+      "circle-color": "#FFCC80",
+      "circle-stroke-color": "#0b1626",
+      "circle-stroke-width": 2,
+    },
   });
   map.addLayer({
     id: "my-accuracy",
@@ -463,6 +524,7 @@ function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
     before,
   );
   map.on("click", "catalog-lines", (e) => {
+    if (wpHitHandled) return;
     const code = e.features?.[0]?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
@@ -573,7 +635,7 @@ function drawSelected(ui: UiState, code: string | null, variant: string | null):
     if (want !== null && key !== `${code}|${want}`) continue;
     features.push(lineFeature(g.coords));
     for (let i = 0; i < g.coords.length; i++) {
-      features.push(pointFeature(g.coords[i]![0], g.coords[i]![1], { name: g.names[i] ?? "" }));
+      features.push(pointFeature(g.coords[i]![0], g.coords[i]![1], { name: g.names[i] ?? "", wpIndex: i }));
     }
   }
   setSource(ui.map, "selected", featureCollection(features));
@@ -773,11 +835,19 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
   });
 
   // La ficha vive en su propia columna: elegir una ruta no rearma la lista.
+  // Se rearma al cambiar de variante para que la tabla de waypoints siga a la
+  // elegida; si es la misma ruta, se conserva el scroll.
+  let lastFichaCode: string | null = null;
   effect(() => {
     const sel = ui.selected();
+    ui.variant();
     untracked(() => {
+      const sameCode = sel?.code === lastFichaCode;
+      const top = fichaCol.scrollTop;
       clear(fichaCol);
       if (sel) renderFicha(ui, fichaCol, sel.code, sel.chapter);
+      lastFichaCode = sel?.code ?? null;
+      if (sameCode) fichaCol.scrollTop = top;
     });
   });
 
@@ -1207,39 +1277,166 @@ function openRoute(ui: UiState, code: string): void {
   ui.selected.set({ code, chapter: e.chapter });
   updateUrlForSelection(code, keep);
   if (ui.sheet() === "peek") ui.sheet.set("half");
+  clearWpMarker(ui);
   drawSelected(ui, code, keep || null);
   const g = (keep && ui.geometry.get(`${code}|${keep}`)) || firstGeometry(ui, code);
   if (g) fitTo(ui, g.coords);
 }
 
-function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
-  const back = el("button", { class: "hn-back" }, "‹ Rutas");
-  back.addEventListener("click", () => {
-    ui.selected.set(null);
-    ui.sheet.set("half");
-    drawSelected(ui, null, null);
+// Cierra la ficha y limpia la selección (botón ‹ Rutas y tecla Esc).
+function closeFicha(ui: UiState): void {
+  ui.selected.set(null);
+  ui.sheet.set("half");
+  clearWpMarker(ui);
+  drawSelected(ui, null, null);
+}
+
+function clearWpMarker(ui: UiState): void {
+  setSource(ui.map, "sel-wp", featureCollection([]));
+}
+
+// Tocar un waypoint en la carta selecciona su fila y la trae a la vista (W4.5 #3 bis).
+function selectWpByIndex(index: number): void {
+  const row = document.querySelector<HTMLElement>(
+    `.hn-wps .hn-wp-item[data-wp="${index}"] .hn-wp`,
+  );
+  if (!row) return;
+  row.click();
+  row.scrollIntoView({ block: "nearest" });
+}
+
+function wireSelectedWp(ui: UiState): void {
+  ui.map.on("click", "route-wps-selected", (e) => {
+    wpHitHandled = true;
+    window.setTimeout(() => {
+      wpHitHandled = false;
+    }, 0);
+    const i = e.features?.[0]?.properties?.["wpIndex"];
+    if (typeof i === "number") selectWpByIndex(i);
   });
-  body.append(back);
+}
+
+function saveSettings(ui: UiState): void {
+  void ui.store.put(KEYS.settings, JSON.stringify(ui.settings));
+}
+
+// Teclado de escritorio (regla 12 de §6 ter, W4.5 #4).
+function wireKeyboard(ui: UiState): void {
+  document.addEventListener("keydown", (ev) => {
+    const target = ev.target as HTMLElement | null;
+    const typing =
+      !!target &&
+      (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
+
+    if (ev.key === "Escape") {
+      if (ui.selected()) {
+        closeFicha(ui);
+        ev.preventDefault();
+      }
+      return;
+    }
+    if (typing) return;
+
+    if (ev.key === "/") {
+      if (ui.tab() !== "rutas") goTo(ui, "rutas");
+      const search = document.querySelector<HTMLInputElement>(".hn-search");
+      if (search) {
+        search.focus();
+        ev.preventDefault();
+      }
+      return;
+    }
+
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") {
+      const rows = Array.from(document.querySelectorAll<HTMLElement>(".hn-results .hn-row"));
+      if (rows.length === 0) return;
+      const current = rows.indexOf(document.activeElement as HTMLElement);
+      const next =
+        current === -1
+          ? ev.key === "ArrowDown"
+            ? 0
+            : rows.length - 1
+          : ev.key === "ArrowDown"
+            ? Math.min(rows.length - 1, current + 1)
+            : Math.max(0, current - 1);
+      rows[next]?.focus();
+      ev.preventDefault();
+    }
+  });
+}
+
+function monthVerdictText(d: RouteDetail, month: number): string {
+  const v = monthVerdict(d.whenInfo.bestMonths, d.whenInfo.stormMonths, month);
+  const name = MONTH_NAME[month - 1] ?? "";
+  if (v === "best") return `✔ ${name} está en la mejor época`;
+  if (v === "storm") return `⚠ ${name}: temporada de ciclones`;
+  return `— ${name}: fuera de la mejor época`;
+}
+
+// Acordeón de la ficha (W4.5 #3): cabecera de 44 px con título y cuenta,
+// estado recordado en hn.settings.
+function accordion(
+  ui: UiState,
+  host: HTMLElement,
+  id: string,
+  title: string,
+  count: number | undefined,
+  buildBody: (body: HTMLElement) => void,
+): void {
+  const open = ui.settings.acc[id] ?? false;
+  const acc = el("div", { class: `hn-acc${open ? " open" : ""}` });
+  const head = el("button", { class: "hn-acc-head", type: "button", "aria-expanded": open ? "true" : "false" });
+  head.append(el("span", { class: "hn-acc-title" }, title));
+  if (count !== undefined) head.append(el("span", { class: "hn-acc-count" }, String(count)));
+  head.append(el("span", { class: "hn-acc-chev" }, "▾"));
+  const body = el("div", { class: "hn-acc-body" });
+  buildBody(body);
+  head.addEventListener("click", () => {
+    const isOpen = acc.classList.toggle("open");
+    head.setAttribute("aria-expanded", isOpen ? "true" : "false");
+    ui.settings.acc[id] = isOpen;
+    saveSettings(ui);
+  });
+  acc.append(head, body);
+  host.append(acc);
+}
+
+function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
+  // Cabecera y acciones fijas (W4.5 #1): quedan pegadas arriba de la columna.
+  const head = el("div", { class: "hn-ficha-head" });
+  const back = el("button", { class: "hn-back" }, "‹ Rutas");
+  back.addEventListener("click", () => closeFicha(ui));
+  head.append(back);
 
   const e = entryOf(ui, code);
   if (!e) {
-    body.append(el("p", { class: "hn-muted" }, "Ruta no encontrada."));
+    body.append(head, el("p", { class: "hn-muted" }, "Ruta no encontrada."));
     return;
   }
 
-  body.append(el("h2", { class: "hn-h2" }, `${e.code} · ${e.from} → ${e.to}`));
-  body.append(el("p", { class: "hn-title-en" }, e.title));
-  body.append(el("p", { class: "hn-muted" }, `${rangeNm(e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`));
+  head.append(el("h2", { class: "hn-h2" }, `${e.code} · ${e.from} → ${e.to}`));
+  head.append(el("p", { class: "hn-title-en" }, e.title));
+  body.append(head);
 
   const host = el("div", { class: "hn-ficha-host" });
-  host.append(el("p", { class: "hn-muted" }, "Cargando ficha…"));
   body.append(host);
 
+  const cached = fichaCache.get(code);
+  if (cached) {
+    renderFichaDetail(ui, head, host, cached);
+    return;
+  }
+
+  host.append(el("p", { class: "hn-muted" }, "Cargando ficha…"));
   void loadFact(chapter, code).then(
     (detail) => {
       clear(host);
-      if (detail) renderFichaDetail(ui, host, detail);
-      else host.append(el("p", { class: "hn-muted" }, "Sin ficha para esta ruta."));
+      if (detail) {
+        fichaCache.set(code, detail);
+        renderFichaDetail(ui, head, host, detail);
+      } else {
+        host.append(el("p", { class: "hn-muted" }, "Sin ficha para esta ruta."));
+      }
     },
     () => {
       clear(host);
@@ -1248,7 +1445,8 @@ function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: stri
   );
 }
 
-function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void {
+function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d: RouteDetail): void {
+  const e = entryOf(ui, d.code);
   const actions = el("div", { class: "hn-actions" });
 
   const seguir = el("button", { class: "hn-btn hn-btn-primary" }, "Seguir");
@@ -1276,93 +1474,155 @@ function renderFichaDetail(ui: UiState, host: HTMLElement, d: RouteDetail): void
   const enlace = el("button", { class: "hn-btn" }, "Enlace");
   enlace.addEventListener("click", () => {
     const url = new URL(document.baseURI);
-    url.searchParams.set("ruta", d.code);
+    url.searchParams.set("route", d.code);
     void navigator.clipboard?.writeText(url.toString());
     enlace.textContent = "Copiado";
   });
 
   actions.append(seguir, exportar, recorrer, enlace);
-  host.append(actions);
+  head.append(actions);
 
-  host.append(el("h3", { class: "hn-h3" }, "Cuándo"));
-  host.append(monthStrip(ui, d));
+  // Datos en rejilla (W4.5 #2): la tira de meses va encima.
   const w = d.whenInfo;
-  if (w.bestEs) host.append(el("p", { class: "hn-line" }, el("span", { class: "hn-k" }, "Mejor época: "), w.bestEs));
-  if (w.stormsEs) host.append(el("p", { class: "hn-line" }, el("span", { class: "hn-k" }, "Ciclones: "), w.stormsEs));
+  const verdict = el("div", { class: "hn-fact-v hn-verdict" }, monthVerdictText(d, ui.month()));
+  const facts = el("div", { class: "hn-facts" });
+  const fact = (k: string, v: string): HTMLElement =>
+    el("div", { class: "hn-fact" }, el("div", { class: "hn-fact-k" }, k), el("div", { class: "hn-fact-v" }, v));
+  facts.append(
+    fact("Cuenca", e?.region || d.region || "—"),
+    fact("Millas", e ? rangeNm(e.nmMin, e.nmMax) : "—"),
+    fact("Variantes", String(e?.variantCount ?? d.variants.length)),
+    fact("Mejor época", w.bestEs || "—"),
+    fact("Ciclones", w.stormsEs || "—"),
+    el("div", { class: "hn-fact hn-fact-wide" }, el("div", { class: "hn-fact-k" }, "Veredicto del mes"), verdict),
+  );
+  host.append(monthStrip(ui, d, () => (verdict.textContent = monthVerdictText(d, ui.month()))));
+  host.append(facts);
+  if (d.needsReview) {
+    host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
+  }
+
+  // Acordeones (W4.5 #3).
+  const hasConsejo = !!d.tip || !!d.chapterTip;
+  if (hasConsejo) {
+    accordion(ui, host, "consejo", "Consejo", undefined, (b) => {
+      if (d.tip) b.append(el("div", { class: "hn-tip" }, d.tip));
+      if (d.chapterTip) {
+        b.append(
+          el(
+            "div",
+            { class: "hn-tip hn-tip-chapter" },
+            el("div", { class: "hn-tip-label" }, `Cómo encarar · ${e?.region || d.region || "la cuenca"}`),
+            d.chapterTip,
+          ),
+        );
+      }
+    });
+  }
 
   if (d.variants.length > 0) {
-    host.append(el("h3", { class: "hn-h3" }, "Variantes"));
-    const list = el("div", { class: "hn-variants" });
-    for (const v of d.variants) {
-      const item = el("button", { class: "hn-variant" });
-      item.append(
-        el(
-          "div",
-          { class: "hn-variant-main" },
-          el("div", { class: "hn-row-title" }, `${v.id} · ${v.from} → ${v.to}`),
-          el("div", { class: "hn-row-sub" }, `${nm(v.nm)}${v.coastal ? " · costera" : ""}`),
-        ),
-      );
-      if (v.needsReview) item.append(el("span", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
-      item.addEventListener("click", () => {
-        ui.variant.set(v.id);
-        updateUrlForSelection(d.code, v.id);
-        drawSelected(ui, d.code, v.id);
-        const g = ui.geometry.get(`${d.code}|${v.id}`);
-        if (g) fitTo(ui, g.coords);
-      });
-      list.append(item);
-    }
-    host.append(list);
+    accordion(ui, host, "variantes", "Variantes", d.variants.length, (b) => {
+      const list = el("div", { class: "hn-variants" });
+      for (const v of d.variants) {
+        const item = el("button", { class: "hn-variant" });
+        item.append(
+          el(
+            "div",
+            { class: "hn-variant-main" },
+            el("div", { class: "hn-row-title" }, `${v.id} · ${v.from} → ${v.to}`),
+            el("div", { class: "hn-row-sub" }, `${nm(v.nm)}${v.coastal ? " · costera" : ""}`),
+          ),
+        );
+        if (v.needsReview) item.append(el("span", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
+        item.addEventListener("click", () => {
+          ui.variant.set(v.id);
+          updateUrlForSelection(d.code, v.id);
+          clearWpMarker(ui);
+          drawSelected(ui, d.code, v.id);
+          const g = ui.geometry.get(`${d.code}|${v.id}`);
+          if (g) fitTo(ui, g.coords);
+        });
+        list.append(item);
+      }
+      b.append(list);
+    });
   }
 
   const selVariant = ui.variant().startsWith(d.code) ? ui.variant() : "";
   const wps = (d.variants.find((v) => v.id === selVariant) ?? d.variants[0])?.waypoints ?? [];
   if (wps.length > 0) {
-    host.append(el("h3", { class: "hn-h3" }, "Waypoints"));
-    const list = el("div", { class: "hn-list hn-wps" });
-    for (const wp of wps) {
-      const row = el("div", { class: "hn-wp" });
-      const name = wp.name || (wp.corrected ? "(corregido)" : "(sin nombre)");
-      row.append(
-        el("div", { class: "hn-wp-name" }, wp.dest ? `⚑ ${name}` : name),
-        el("div", { class: "hn-wp-coord" }, `${formatLat(wp.lat)}  ${formatLon(wp.lon)}`),
-      );
-      if (wp.corrected) row.append(el("span", { class: "hn-tag" }, "corregido"));
-      list.append(row);
-    }
-    host.append(list);
+    accordion(ui, host, "waypoints", "Waypoints", wps.length, (b) => {
+      const list = el("div", { class: "hn-list hn-wps" });
+      wps.forEach((wp, i) => {
+        const item = el("div", { class: "hn-wp-item", "data-wp": String(i) });
+        const row = el("button", { class: "hn-wp", type: "button" });
+        const name = wp.name || (wp.corrected ? "(corregido)" : "(sin nombre)");
+        row.append(
+          el("div", { class: "hn-wp-name" }, wp.dest ? `⚑ ${name}` : name),
+          el("div", { class: "hn-wp-coord" }, `${formatLat(wp.lat)}  ${formatLon(wp.lon)}`),
+        );
+        if (wp.corrected) row.append(el("span", { class: "hn-tag" }, "corregido"));
+        const detail = el("div", { class: "hn-wp-detail" });
+        const next = wps[i + 1];
+        const pos = `${formatLat(wp.lat)}  ${formatLon(wp.lon)}`;
+        detail.textContent = next
+          ? `${pos} · al siguiente (${next.name || "sin nombre"}): ${nmDecimal(haversineNm(wp.lat, wp.lon, next.lat, next.lon))}`
+          : `${pos} · último waypoint`;
+        row.addEventListener("click", () => {
+          const wasOn = item.classList.contains("on");
+          for (const it of list.querySelectorAll(".hn-wp-item.on")) it.classList.remove("on");
+          if (wasOn) {
+            clearWpMarker(ui);
+            return;
+          }
+          item.classList.add("on");
+          setSource(ui.map, "sel-wp", featureCollection([pointFeature(wp.lon, wp.lat, { name })]));
+          ui.map.flyTo({ center: [wp.lon, wp.lat], zoom: Math.max(ui.map.getZoom(), 7), duration: 600 });
+        });
+        item.append(row, detail);
+        list.append(item);
+      });
+      b.append(list);
+    });
   }
 
-  if (d.charts.length > 0) host.append(plainList("Cartas", d.charts));
-  if (d.guides.length > 0) host.append(plainList("Guías", d.guides));
-  if (d.planner.length > 0) host.append(plainList("Planificador", d.planner));
-  if (d.tip) host.append(el("div", { class: "hn-tip" }, d.tip));
-  if (d.chapterTip) host.append(el("div", { class: "hn-tip hn-tip-chapter" }, d.chapterTip));
-
-  if (d.quoteEs || d.quoteEn) {
-    const q = el("blockquote", { class: "hn-quote" });
-    if (d.quoteEs) q.append(el("p", {}, d.quoteEs));
-    else if (d.quoteEn) q.append(el("p", { class: "hn-quote-en" }, d.quoteEn));
-    if (d.quoteSource) q.append(el("cite", {}, d.quoteSource));
-    host.append(q);
+  const refLines: [string, string[]][] = [
+    ["Cartas", d.charts],
+    ["Guías", d.guides],
+    ["Planificador", d.planner],
+  ].filter(([, items]) => (items as string[]).length > 0) as [string, string[]][];
+  if (refLines.length > 0) {
+    accordion(ui, host, "referencias", "Referencias", undefined, (b) => {
+      for (const [label, items] of refLines) {
+        b.append(el("p", { class: "hn-ref" }, el("span", { class: "hn-k" }, `${label}: `), items.join(", ")));
+      }
+    });
   }
 
-  if (d.attribution) host.append(el("p", { class: "hn-attrib" }, d.attribution));
-  if (d.needsReview) host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
+  if (d.quoteEs || d.quoteEn || d.attribution) {
+    accordion(ui, host, "libro", "Del libro", undefined, (b) => {
+      if (d.quoteEs || d.quoteEn) {
+        const q = el("blockquote", { class: "hn-quote" });
+        if (d.quoteEs) q.append(el("p", {}, d.quoteEs));
+        else if (d.quoteEn) q.append(el("p", { class: "hn-quote-en" }, d.quoteEn));
+        if (d.quoteSource) q.append(el("cite", {}, d.quoteSource));
+        b.append(q);
+      }
+      if (d.attribution) b.append(el("p", { class: "hn-attrib" }, d.attribution));
+    });
+  }
 }
 
-function plainList(title: string, items: string[]): HTMLElement {
-  const wrap = el("div", { class: "hn-plain" });
-  wrap.append(el("h3", { class: "hn-h3" }, title));
-  const ul = el("ul", { class: "hn-plain-list" });
-  for (const i of items) ul.append(el("li", {}, i));
-  wrap.append(ul);
-  return wrap;
-}
-
-function monthStrip(ui: UiState, d: RouteDetail): HTMLElement {
+function monthStrip(ui: UiState, d: RouteDetail, onChange?: () => void): HTMLElement {
   const strip = el("div", { class: "hn-months" });
+  const buttons: HTMLElement[] = [];
+  const apply = (): void => {
+    for (let m = 1; m <= 12; m++) {
+      const v = monthVerdict(d.whenInfo.bestMonths, d.whenInfo.stormMonths, m);
+      const b = buttons[m - 1]!;
+      b.className = `hn-month hn-month-${v}${ui.month() === m ? " on" : ""}`;
+    }
+  };
   for (let m = 1; m <= 12; m++) {
     const v = monthVerdict(d.whenInfo.bestMonths, d.whenInfo.stormMonths, m);
     const b = el(
@@ -1370,7 +1630,12 @@ function monthStrip(ui: UiState, d: RouteDetail): HTMLElement {
       { class: `hn-month hn-month-${v}${ui.month() === m ? " on" : ""}`, title: MONTH_NAME[m - 1] ?? "" },
       MONTH_INITIAL[m - 1] ?? "",
     );
-    b.addEventListener("click", () => ui.month.set(m));
+    b.addEventListener("click", () => {
+      ui.month.set(m);
+      apply();
+      onChange?.();
+    });
+    buttons.push(b);
     strip.append(b);
   }
   const legend = el("div", { class: "hn-months-legend" });
