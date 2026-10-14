@@ -673,6 +673,37 @@
 }
 .hn-menu .hn-btn { min-width: 180px; justify-content: flex-start; }
 
+.hn-update {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  padding-bottom: max(10px, env(safe-area-inset-bottom));
+  background: var(--hn-panel-2);
+  border-top: 1px solid var(--hn-accent);
+  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4);
+  color: var(--hn-text);
+  font-size: 14px;
+}
+.hn-update-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 16px;
+  border-radius: 20px;
+  border: 1px solid var(--hn-accent);
+  background: var(--hn-accent);
+  color: #05121f;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
 @media (min-width: 700px) {
   .hn-sheet {
     left: 0;

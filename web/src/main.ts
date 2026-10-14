@@ -204,7 +204,62 @@ else map.on("load", start);
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("service-worker.js").catch(() => undefined);
+    void registerServiceWorker();
+  });
+}
+
+// Registro del service worker y aviso de versión nueva (W4.9). El shell queda
+// cacheado, así que una pestaña abierta no se entera del deploy hasta que el
+// usuario recarga: mostramos una banda cuando hay un worker nuevo instalado.
+async function registerServiceWorker(): Promise<void> {
+  let reg: ServiceWorkerRegistration;
+  try {
+    reg = await navigator.serviceWorker.register("service-worker.js");
+  } catch {
+    return;
+  }
+
+  reg.addEventListener("updatefound", () => {
+    const sw = reg.installing;
+    if (!sw) return;
+    sw.addEventListener("statechange", () => {
+      // Solo es una actualización si ya había un worker controlando la página;
+      // en la primera instalación no hay nada que avisar.
+      if (sw.state === "installed" && navigator.serviceWorker.controller) showUpdateBanner(reg);
+    });
+  });
+
+  // Al volver a primer plano, busquemos deploys sin esperar una navegación.
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) void reg.update().catch(() => undefined);
+  });
+}
+
+function showUpdateBanner(reg: ServiceWorkerRegistration): void {
+  const band = document.createElement("div");
+  band.className = "hn-update";
+  const text = document.createElement("span");
+  text.textContent = "Hay una versión nueva";
+  const btn = document.createElement("button");
+  btn.className = "hn-update-btn";
+  btn.type = "button";
+  btn.textContent = "Actualizar";
+  band.append(text, btn);
+  document.body.append(band);
+
+  let reloading = false;
+  const reload = (): void => {
+    if (reloading) return;
+    reloading = true;
+    location.reload();
+  };
+  btn.addEventListener("click", () => {
+    band.remove();
+    navigator.serviceWorker.addEventListener("controllerchange", reload);
+    // El worker ya hace skipWaiting al instalar; si todavía está en espera,
+    // lo apuramos. Si ya tomó el control, recargamos nosotros.
+    if (reg.waiting) reg.waiting.postMessage("skip");
+    else reload();
   });
 }
 
