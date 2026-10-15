@@ -384,8 +384,10 @@ html[data-theme="red"] {
 }
 .hn-sheet-body {
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 4px 14px 24px;
-  flex: 1;
+  flex: 1 1 auto;
+  min-height: 0;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
 }
@@ -395,17 +397,21 @@ html[data-theme="red"] {
 .hn-cols {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
 }
 .hn-col-list {
   display: flex;
   flex-direction: column;
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 0;
+  min-width: 0;
 }
 .hn-col-ficha {
   display: none;
+  min-height: 0;
+  min-width: 0;
 }
 .hn-sheet.hn-ficha-open .hn-col-list {
   display: none;
@@ -496,13 +502,11 @@ html[data-theme="red"] {
   flex: 1;
   min-width: 0;
 }
-.hn-row-title {
-  font-size: 14px;
-  font-weight: 600;
-}
+.hn-row-title,
 .hn-row-sub {
-  font-size: 12px;
-  color: var(--hn-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .hn-row-region {
   font-size: 11px;
@@ -657,6 +661,7 @@ html[data-theme="red"] {
   padding-bottom: 4px;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  max-width: 100%;
 }
 .hn-chip {
   flex: 0 0 auto;
@@ -730,6 +735,8 @@ html[data-theme="red"] {
   flex-direction: column;
   height: 100%;
   min-height: 0;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 .hn-rutas-head {
   flex: 0 0 auto;
