@@ -641,7 +641,7 @@ zona (~50 KB por zona). `core/tides.ts`: predicción de altura y corriente por e
 zoom 8; tocar una → curva del día y próximas pleamar/bajamar; en la ficha de puerto de destino, la
 marea a la ETA. Tareas: E16.1 datos por zona · E16.2 motor y tests · E16.3 UI.
 
-## Camino al plotter (orden tras E12)
+## Opción futura, no decidida: camino a un plotter completo (orden posible tras E12)
 
 E15.2 SignalK → E15.3 AIS → E14.1–E14.4 cartas propias y NOAA ENC → E16 mareas → E11 herramientas
 de carta → ADR-010 Capacitor (segundo plano, NMEA TCP).
