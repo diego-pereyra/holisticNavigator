@@ -10,6 +10,7 @@ import { Protocol, PMTiles, FileSource } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { mountApp, type AppHandle } from "./ui/app.ts";
+import { applyTheme, mapPalette, type ThemeName } from "./ui/theme.ts";
 import { loadBasins, loadIndex, loadRoutesGeoJson } from "./platform/catalog.ts";
 import { openStore, type KeyValueStore } from "./platform/store.ts";
 import {
@@ -292,6 +293,20 @@ function addZoneSeamarks(id: string, seamarks?: string): void {
   }
 }
 
+// Tema Día / Noche / Rojo (T11.5): la UI lo cambia desde app.ts; acá se
+// refleja en el mapa, en el color del navegador y en el fondo de <html>.
+let currentTheme: ThemeName = "night";
+
+function setTheme(theme: ThemeName): void {
+  currentTheme = theme;
+  document.documentElement.dataset.theme = theme;
+  applyTheme(map, theme);
+  const bg = mapPalette(theme).background;
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", bg);
+  document.documentElement.style.background = bg;
+}
+
 function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta, seamarks?: string): void {
   const name = zoneProtocolName(id);
   if (!registeredZones.has(name)) {
@@ -308,6 +323,7 @@ function addZoneToMap(id: string, blob: Blob, meta: ZoneMeta, seamarks?: string)
   zoneBounds.set(id, meta.bbox);
   updateZoneVisibility();
   updateScaleNote();
+  applyTheme(map, currentTheme);
 }
 
 function removeZoneFromMap(id: string): void {
@@ -439,7 +455,7 @@ function start(): void {
   boot.step("base", true);
   boot.hide();
   const store = lazyStore();
-  const app = mountApp(map, { store, zones: zoneHooks });
+  const app = mountApp(map, { store, zones: zoneHooks, onTheme: setTheme });
   setScaleNote = (text) => app.setScaleNote(text);
   map.on("move", updateScaleNote);
   map.on("zoom", updateScaleNote);

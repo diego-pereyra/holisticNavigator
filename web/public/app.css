@@ -1,15 +1,141 @@
+/* Temas Día / Noche / Rojo (T11.5). Todo color de la UI sale de estas
+   variables; main.ts pone `data-theme` en <html> y el tema Noche queda como
+   valor por defecto (el mismo de siempre). */
 :root {
   --hn-bg: #0b1626;
   --hn-panel: #101d2e;
   --hn-panel-2: #16263a;
   --hn-line: #223448;
   --hn-text: #e8f1fa;
-  --hn-muted: #7a8ea3;
+  --hn-text-2: #9FB0C0;
+  --hn-muted: var(--hn-text-2);
   --hn-accent: #2979FF;
+  --hn-error: #FF1744;
+  --hn-ok: #2E7D32;
+  --hn-warn: #C62828;
   --hn-best: #2979FF;
   --hn-storm: #f0a419;
   --hn-off: #47596e;
   --hn-review: #b98cff;
+  --hn-glass: rgba(9, 18, 30, 0.92);
+  --hn-shadow: rgba(0, 0, 0, 0.4);
+  --hn-hover: rgba(255, 255, 255, 0.04);
+  --hn-ink: #05121f;
+  --hn-tip-bg: rgba(74, 163, 223, 0.1);
+  --hn-tip-chapter-bg: rgba(46, 204, 113, 0.08);
+  --hn-info: #80CBC4;
+  --hn-scrim: rgba(0, 0, 0, 0.55);
+  --hn-scale-bg: rgba(11, 22, 38, 0.85);
+  --hn-alarm-bg: #b3261e;
+  --hn-alarm-ink: #ffffff;
+  --hn-alarm-edge: rgba(255, 255, 255, 0.25);
+  --hn-wp-on-bg: rgba(255, 204, 128, 0.08);
+  --hn-wp-on: #FFCC80;
+  --hn-mob-ring: #ffd54f;
+  --hn-mob-glow: rgba(255, 23, 68, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="night"] {
+  --hn-bg: #0b1626;
+  --hn-panel: #12233a;
+  --hn-panel-2: #16263a;
+  --hn-line: #2a3b4a;
+  --hn-text: #e8eef4;
+  --hn-text-2: #9FB0C0;
+  --hn-accent: #4FC3F7;
+  --hn-error: #FF1744;
+  --hn-ok: #2E7D32;
+  --hn-warn: #C62828;
+  --hn-best: #4FC3F7;
+  --hn-storm: #f0a419;
+  --hn-off: #47596e;
+  --hn-review: #b98cff;
+  --hn-glass: rgba(9, 18, 30, 0.92);
+  --hn-shadow: rgba(0, 0, 0, 0.4);
+  --hn-hover: rgba(255, 255, 255, 0.04);
+  --hn-ink: #05121f;
+  --hn-tip-bg: rgba(74, 163, 223, 0.1);
+  --hn-tip-chapter-bg: rgba(46, 204, 113, 0.08);
+  --hn-info: #80CBC4;
+  --hn-scrim: rgba(0, 0, 0, 0.55);
+  --hn-scale-bg: rgba(11, 22, 38, 0.85);
+  --hn-alarm-bg: #b3261e;
+  --hn-alarm-ink: #ffffff;
+  --hn-alarm-edge: rgba(255, 255, 255, 0.25);
+  --hn-wp-on-bg: rgba(255, 204, 128, 0.08);
+  --hn-wp-on: #FFCC80;
+  --hn-mob-ring: #ffd54f;
+  --hn-mob-glow: rgba(255, 23, 68, 0.45);
+  color-scheme: dark;
+}
+
+html[data-theme="day"] {
+  --hn-bg: #ffffff;
+  --hn-panel: #f4f7fa;
+  --hn-panel-2: #e8eef4;
+  --hn-line: #d8dee5;
+  --hn-text: #0f1a26;
+  --hn-text-2: #5b6b7a;
+  --hn-accent: #0b5aa8;
+  --hn-error: #d50000;
+  --hn-ok: #2e7d32;
+  --hn-warn: #c62828;
+  --hn-best: #0b5aa8;
+  --hn-storm: #b26a00;
+  --hn-off: #97a6b4;
+  --hn-review: #6a3fb5;
+  --hn-glass: rgba(244, 247, 250, 0.92);
+  --hn-shadow: rgba(15, 26, 38, 0.18);
+  --hn-hover: rgba(15, 26, 38, 0.05);
+  --hn-ink: #ffffff;
+  --hn-tip-bg: rgba(11, 90, 168, 0.08);
+  --hn-tip-chapter-bg: rgba(46, 125, 50, 0.1);
+  --hn-info: #00695c;
+  --hn-scrim: rgba(15, 26, 38, 0.45);
+  --hn-scale-bg: rgba(244, 247, 250, 0.9);
+  --hn-alarm-bg: #c62828;
+  --hn-alarm-ink: #ffffff;
+  --hn-alarm-edge: rgba(0, 0, 0, 0.15);
+  --hn-wp-on-bg: rgba(239, 108, 0, 0.1);
+  --hn-wp-on: #c25e00;
+  --hn-mob-ring: #ef6c00;
+  --hn-mob-glow: rgba(198, 40, 40, 0.35);
+  color-scheme: light;
+}
+
+html[data-theme="red"] {
+  --hn-bg: #000000;
+  --hn-panel: #0a0000;
+  --hn-panel-2: #1a0000;
+  --hn-line: #4a0000;
+  --hn-text: #ff3b30;
+  --hn-text-2: #b71c1c;
+  --hn-accent: #ff5252;
+  --hn-error: #ff1744;
+  --hn-ok: #ff8a80;
+  --hn-warn: #ff5252;
+  --hn-best: #ff5252;
+  --hn-storm: #ff8a80;
+  --hn-off: #7a1a1a;
+  --hn-review: #ff8a80;
+  --hn-glass: rgba(10, 0, 0, 0.92);
+  --hn-shadow: rgba(0, 0, 0, 0.6);
+  --hn-hover: rgba(255, 82, 82, 0.08);
+  --hn-ink: #000000;
+  --hn-tip-bg: rgba(255, 82, 82, 0.08);
+  --hn-tip-chapter-bg: rgba(255, 138, 128, 0.08);
+  --hn-info: #ff8a80;
+  --hn-scrim: rgba(0, 0, 0, 0.6);
+  --hn-scale-bg: rgba(10, 0, 0, 0.85);
+  --hn-alarm-bg: #1a0000;
+  --hn-alarm-ink: #ff3b30;
+  --hn-alarm-edge: rgba(255, 82, 82, 0.35);
+  --hn-wp-on-bg: rgba(255, 138, 128, 0.1);
+  --hn-wp-on: #ff8a80;
+  --hn-mob-ring: #ff8a80;
+  --hn-mob-glow: rgba(255, 23, 68, 0.45);
+  color-scheme: dark;
 }
 
 #hn-ui {
@@ -31,7 +157,7 @@
   right: 0;
   display: flex;
   gap: 1px;
-  background: rgba(9, 18, 30, 0.92);
+  background: var(--hn-glass);
   backdrop-filter: blur(6px);
   border-bottom: 1px solid var(--hn-line);
   padding: 6px 8px;
@@ -78,6 +204,22 @@
   gap: 6px;
   font-size: 12px;
 }
+.hn-ctx-theme {
+  min-height: 44px;
+  min-width: 40px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.hn-ctx-theme:hover {
+  background: var(--hn-panel-2);
+}
 .hn-dot {
   width: 8px;
   height: 8px;
@@ -92,7 +234,7 @@
 }
 .hn-dot-denied,
 .hn-dot-unavailable {
-  background: #e05a4a;
+  background: var(--hn-error);
 }
 
 .hn-sheet {
@@ -105,7 +247,7 @@
   border-radius: 14px 14px 0 0;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 -8px 30px var(--hn-shadow);
   transition: height 0.22s ease;
   padding-bottom: env(safe-area-inset-bottom);
   touch-action: pan-y;
@@ -161,7 +303,7 @@
 }
 /* Modo MOB en la tira (E9.3): "MOB" en rojo y botón para terminar. */
 .hn-navstrip-mob {
-  color: #ff5252;
+  color: var(--hn-error);
 }
 .hn-navstrip-end {
   align-self: flex-start;
@@ -358,7 +500,7 @@
   place-items: center;
   border-radius: 8px;
   font-size: 14px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--hn-hover);
 }
 .hn-badge-best {
   color: var(--hn-best);
@@ -416,7 +558,7 @@
 .hn-btn-primary {
   background: var(--hn-accent);
   border-color: var(--hn-accent);
-  color: #05121f;
+  color: var(--hn-ink);
 }
 
 .hn-search-row {
@@ -468,6 +610,52 @@
 .hn-chip.on {
   color: var(--hn-text);
   border-color: var(--hn-accent);
+}
+
+/* Interruptor de Ajustes (T11.5): "De noche usar Rojo". */
+.hn-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 12px;
+  min-height: 40px;
+  font-size: 14px;
+}
+.hn-toggle {
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  border-radius: 14px;
+  border: 1px solid var(--hn-line);
+  background: var(--hn-panel-2);
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.hn-toggle::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--hn-muted);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+.hn-toggle[aria-checked="true"] {
+  background: var(--hn-accent);
+  border-color: var(--hn-accent);
+}
+.hn-toggle[aria-checked="true"]::after {
+  transform: translateX(20px);
+  background: var(--hn-ink);
+}
+.hn-toggle:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* Pestaña Rutas: la lista es el único elemento con scroll (W4.8 #5). */
@@ -592,7 +780,7 @@
 }
 
 .hn-tip {
-  background: rgba(74, 163, 223, 0.1);
+  background: var(--hn-tip-bg);
   border-left: 3px solid var(--hn-accent);
   padding: 10px 12px;
   border-radius: 6px;
@@ -600,7 +788,7 @@
   margin: 12px 0;
 }
 .hn-tip-chapter {
-  background: rgba(46, 204, 113, 0.08);
+  background: var(--hn-tip-chapter-bg);
   border-left-color: var(--hn-best);
 }
 .hn-quote {
@@ -651,12 +839,12 @@
   cursor: pointer;
 }
 .hn-month-best {
-  color: #05121f;
+  color: var(--hn-ink);
   background: var(--hn-best);
   border-color: var(--hn-best);
 }
 .hn-month-storm {
-  color: #1a1200;
+  color: var(--hn-ink);
   background: var(--hn-storm);
   border-color: var(--hn-storm);
 }
@@ -682,7 +870,7 @@
 .hn-modal {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: var(--hn-scrim);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -700,7 +888,7 @@
 }
 .hn-info {
   font-size: 11px;
-  color: #80CBC4;
+  color: var(--hn-info);
 }
 
 .hn-fab {
@@ -713,11 +901,11 @@
   border-radius: 50%;
   border: 1px solid var(--hn-line);
   background: var(--hn-panel, #11202e);
-  color: #2979FF;
+  color: var(--hn-accent);
   font-size: 24px;
   line-height: 1;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 2px 8px var(--hn-shadow);
 }
 
 .hn-menu {
@@ -732,7 +920,7 @@
   border: 1px solid var(--hn-line);
   border-radius: 10px;
   background: var(--hn-panel, #11202e);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 4px 16px var(--hn-shadow);
 }
 .hn-menu .hn-btn { min-width: 180px; justify-content: flex-start; }
 
@@ -747,7 +935,7 @@
   padding: 6px 10px;
   border: 1px solid var(--hn-line);
   border-radius: 8px;
-  background: rgba(11, 22, 38, 0.85);
+  background: var(--hn-scale-bg);
   color: var(--hn-muted);
   font-size: 12px;
   line-height: 1.3;
@@ -776,7 +964,7 @@
   padding-bottom: max(10px, env(safe-area-inset-bottom));
   background: var(--hn-panel-2);
   border-top: 1px solid var(--hn-accent);
-  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 -6px 20px var(--hn-shadow);
   color: var(--hn-text);
   font-size: 14px;
 }
@@ -787,7 +975,7 @@
   border-radius: 20px;
   border: 1px solid var(--hn-accent);
   background: var(--hn-accent);
-  color: #05121f;
+  color: var(--hn-ink);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
@@ -805,12 +993,12 @@
   justify-content: space-between;
   gap: 12px;
   padding: 8px 14px;
-  background: #b3261e;
-  color: #fff;
+  background: var(--hn-alarm-bg);
+  color: var(--hn-alarm-ink);
   font-size: 15px;
   font-weight: 600;
-  border-top: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+  border-top: 1px solid var(--hn-alarm-edge);
+  box-shadow: 0 -6px 20px var(--hn-shadow);
 }
 .hn-alarm[hidden] {
   display: none;
@@ -872,13 +1060,13 @@
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  border: 1px solid #ff5252;
-  background: #b3261e;
-  color: #fff;
+  border: 1px solid var(--hn-error);
+  background: var(--hn-alarm-bg);
+  color: var(--hn-alarm-ink);
   font-size: 14px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 2px 8px var(--hn-shadow);
   user-select: none;
   -webkit-user-select: none;
   touch-action: none;
@@ -887,13 +1075,13 @@
   display: none;
 }
 .hn-mob-on {
-  box-shadow: 0 0 0 2px rgba(255, 23, 68, 0.45), 0 2px 8px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 0 0 2px var(--hn-mob-glow), 0 2px 8px var(--hn-shadow);
 }
 .hn-mob-ring {
   position: absolute;
   inset: -4px;
   border-radius: 50%;
-  border: 3px solid #ffd54f;
+  border: 3px solid var(--hn-mob-ring);
   opacity: 0;
   pointer-events: none;
 }
@@ -934,7 +1122,7 @@
     top: 62px;
     border-radius: 0 0 12px 12px;
     border-top: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+    border-bottom: 1px solid var(--hn-alarm-edge);
   }
 }
 
@@ -990,7 +1178,7 @@
     border-left: 1px solid var(--hn-line);
   }
 }
-.hn-error { color: #e05a4a; font-size: 13px; }
+.hn-error { color: var(--hn-error); font-size: 13px; }
 
 /* Ficha compacta (W4.5): cabecera y acciones fijas, datos en rejilla y
    acordeones, para que los waypoints queden a un toque. */
@@ -1107,10 +1295,10 @@
   cursor: pointer;
 }
 .hn-wp-item.on {
-  background: rgba(255, 204, 128, 0.08);
+  background: var(--hn-wp-on-bg);
 }
 .hn-wp-item.on .hn-wp-name {
-  color: #FFCC80;
+  color: var(--hn-wp-on);
   font-weight: 600;
 }
 .hn-wp-detail {
@@ -1169,11 +1357,11 @@
   gap: 12px;
   padding: 8px 14px;
   background: var(--hn-accent);
-  color: #05121f;
+  color: var(--hn-ink);
   font-size: 15px;
   font-weight: 600;
-  border-top: 1px solid rgba(0, 0, 0, 0.2);
-  box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.45);
+  border-top: 1px solid var(--hn-shadow);
+  box-shadow: 0 -6px 20px var(--hn-shadow);
 }
 .hn-fixband .hn-alarm-btn {
   border-color: currentColor;
@@ -1187,7 +1375,7 @@
     top: 62px;
     border-radius: 0 0 12px 12px;
     border-top: none;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+    border-bottom: 1px solid var(--hn-shadow);
   }
 }
 @media (min-width: 1100px) {

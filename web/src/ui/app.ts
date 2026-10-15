@@ -27,7 +27,7 @@ const bootParams = readUrlParams();
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
 import type { Map as MlMap, GeoJSONSource, FilterSpecification, MapMouseEvent } from "maplibre-gl";
-import { signal, effect, untracked, type Signal } from "../core/store.ts";
+import { signal, computed, effect, untracked, type Signal } from "../core/store.ts";
 import {
   filterEntries,
   monthVerdict,
@@ -84,6 +84,7 @@ import {
   nmDecimal,
   rangeNm,
 } from "./format.ts";
+import { resolveTheme, THEME_LABEL, THEME_ORDER, themeIcon, type ThemeChoice, type ThemeName } from "./theme.ts";
 
 type TabName = "aqui" | "rutas" | "travesia";
 type SheetState = "peek" | "half" | "full";
@@ -103,6 +104,8 @@ interface Settings {
   alarms: AlarmSettings;
   anchor: AnchorSettings;
   mob: Mob | null;
+  theme?: ThemeChoice;
+  redAtNight?: boolean;
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -167,6 +170,9 @@ interface UiState {
   helpSeen: Signal<boolean | null>;
   anchor: Signal<AnchorSettings>;
   mob: Signal<Mob | null>;
+  theme: Signal<ThemeChoice>;
+  redAtNight: Signal<boolean>;
+  now: Signal<number>;
   navFixes: Fix[];
   settings: Settings;
   zones?: ZoneHooks;
@@ -175,6 +181,7 @@ interface UiState {
 export interface AppDeps {
   store: KeyValueStore;
   zones?: ZoneHooks;
+  onTheme?: (theme: ThemeName) => void;
 }
 
 // El mapa y la UI se montan apenas carga el mapa base; el catálogo llega después
@@ -219,13 +226,30 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     helpSeen: signal<boolean | null>(null),
     anchor: signal<AnchorSettings>({ ...DEFAULT_ANCHOR }),
     mob: signal<Mob | null>(null),
+    theme: signal<ThemeChoice>("auto"),
+    redAtNight: signal<boolean>(false),
+    now: signal(Date.now()),
     navFixes: [],
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false },
     zones: deps.zones,
   };
 
   installBaseLayers(map);
   wireGps(ui);
+
+  // Tema Día / Noche / Rojo (T11.5): `theme` resuelve Auto con la posición y la
+  // hora; cada 5 minutos se reevalúa para cruzar el amanecer o el atardecer.
+  const theme = computed<ThemeName>(() => {
+    const pos = ui.position();
+    return resolveTheme(ui.theme(), ui.redAtNight(), pos?.lat ?? 40, pos?.lon ?? 0, ui.now());
+  });
+  effect(() => deps.onTheme?.(theme()));
+  const themeTimer = window.setInterval(() => ui.now.set(Date.now()), 5 * 60 * 1000);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) ui.now.set(Date.now());
+  });
+  window.addEventListener("pagehide", () => window.clearInterval(themeTimer), { once: true });
+
   let moveTimer: number | undefined;
   map.on("moveend", () => {
     if (moveTimer !== undefined) window.clearTimeout(moveTimer);
@@ -338,6 +362,14 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     ui.settings.mob = m;
     saveSettings(ui);
   });
+  ui.theme.subscribe((t) => {
+    ui.settings.theme = t;
+    saveSettings(ui);
+  });
+  ui.redAtNight.subscribe((v) => {
+    ui.settings.redAtNight = v;
+    saveSettings(ui);
+  });
 
   // UX-2: recién después de restaurar se decide arrancar el GPS, para no pisar
   // una posición manual persistida aunque el permiso esté concedido.
@@ -409,6 +441,8 @@ async function restore(ui: UiState): Promise<void> {
     if (s.alarms) ui.settings.alarms = { ...DEFAULT_ALARMS, ...s.alarms };
     if (s.anchor) ui.anchor.set({ ...DEFAULT_ANCHOR, ...s.anchor });
     if (s.mob) ui.mob.set(s.mob);
+    if (s.theme) ui.theme.set(s.theme);
+    if (typeof s.redAtNight === "boolean") ui.redAtNight.set(s.redAtNight);
   }
   const pos = readJson<Position | null>(position, null);
   if (pos) {
@@ -998,8 +1032,21 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
       setTimeout(() => document.addEventListener("click", rm), 0);
     });
 
-    bar.append(where, when, chip);
+    const themeBtn = el("button", { class: "hn-ctx-theme", type: "button" });
+    const choice = ui.theme();
+    const shown = choice === "auto" ? resolveTheme(choice, ui.redAtNight(), pos?.lat ?? 40, pos?.lon ?? 0, ui.now()) : choice;
+    themeBtn.textContent = themeIcon(shown);
+    themeBtn.title = `Tema ${THEME_LABEL[choice]}`;
+    themeBtn.setAttribute("aria-label", `Tema ${THEME_LABEL[choice]}. Tocar para cambiar.`);
+    themeBtn.addEventListener("click", () => cycleTheme(ui));
+
+    bar.append(where, when, themeBtn, chip);
   });
+}
+
+function cycleTheme(ui: UiState): void {
+  const i = THEME_ORDER.indexOf(ui.theme());
+  ui.theme.set(THEME_ORDER[(i + 1) % THEME_ORDER.length] ?? "auto");
 }
 
 function goTo(ui: UiState, tab: TabName): void {
@@ -1228,6 +1275,44 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
   body.append(alarmsCard(ui));
   body.append(anchorCard(ui, cleanup));
   body.append(offlineCard(ui));
+  body.append(themeCard(ui, cleanup));
+}
+
+// Ajustes de tema (T11.5): los mismos tres temas que el botón de la barra, más
+// Auto, y el interruptor para usar Rojo cuando ya es de noche.
+function themeCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
+  const card = el("div", { class: "hn-card" });
+  card.append(el("div", { class: "hn-card-title" }, "Ajustes"));
+
+  const chips = el("div", { class: "hn-chips" });
+  card.append(chips, el("p", { class: "hn-muted" }, "Auto sigue el día y la noche según tu posición."));
+
+  const row = el("div", { class: "hn-toggle-row" });
+  const label = el("span", {}, "De noche usar Rojo");
+  const toggle = el("button", { class: "hn-toggle", type: "button", role: "switch" });
+  toggle.addEventListener("click", () => ui.redAtNight.set(!ui.redAtNight()));
+  row.append(label, toggle);
+  card.append(row);
+
+  cleanup.push(
+    effect(() => {
+      const cur = ui.theme();
+      const red = ui.redAtNight();
+      clear(chips);
+      for (const choice of THEME_ORDER) {
+        const on = choice === cur;
+        const icon = choice === "auto" ? "◐" : themeIcon(choice);
+        const chip = el("button", { class: `hn-chip${on ? " on" : ""}`, type: "button" }, `${icon} ${THEME_LABEL[choice]}`);
+        chip.setAttribute("aria-pressed", on ? "true" : "false");
+        chip.addEventListener("click", () => ui.theme.set(choice));
+        chips.append(chip);
+      }
+      toggle.setAttribute("aria-checked", red ? "true" : "false");
+      toggle.setAttribute("aria-label", "De noche usar Rojo");
+      toggle.disabled = cur !== "auto";
+    }),
+  );
+  return card;
 }
 
 // Ayuda de primer uso (UX-1): tarjeta, no modal, máx. cuatro renglones.
