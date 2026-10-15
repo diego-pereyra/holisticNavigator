@@ -606,3 +606,17 @@ seguridad, carta) va antes que el tab Aquí.
 
 Cada bloque termina con build de producción, prueba offline y prueba móvil (§8 del documento de
 arquitectura).
+
+## E14 · Cartas propias (pregunta de Diego, 2026-10-15: "¿podría aceptar cartas de OpenCPN?")
+
+| Formato | Viabilidad | Cómo |
+|---|---|---|
+| GPX (rutas, waypoints) | hecho | importar / Enviar a plotter |
+| PMTiles | fácil | "Importar carta" → blob en IndexedDB, protocolo `pmtiles://` existente, capa raster o vectorial según metadatos |
+| MBTiles | fácil | igual, leyendo la SQLite con sql.js cargado bajo demanda (~600 KB) o pidiendo conversión a PMTiles |
+| BSB/KAP, GeoTIFF (raster) | medio | `tools/charts/convert.py` (GDAL: reproyectar + teselar → PMTiles) que corre el usuario en su PC |
+| S-57 ENC (.000) | medio/alto | mismo convertidor con GDAL (S57 → GeoJSON → teselas vectoriales) y un estilo S-52 mínimo (profundidades, peligros, boyas); zona "NOAA ENC EE. UU." publicada por nosotros (dominio público) |
+| oeSENC / o-charts / CM93 | no | cifradas o legalmente grises |
+
+Tareas, cuando toque: E14.1 Importar carta (PMTiles) · E14.2 MBTiles · E14.3 convertidor GDAL ·
+E14.4 estilo S-52 mínimo y zona NOAA ENC.
