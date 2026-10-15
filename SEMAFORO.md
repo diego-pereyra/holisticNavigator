@@ -1,22 +1,28 @@
 ADELANTE
 
-TAREA ÚNICA: PN-1 — Puente con Navionics (y cualquier plotter).
+TAREA ÚNICA: UX-4 — la lista de rutas scrollea dentro de la hoja (solo CSS).
 
 
-Archivos: `web/src/core/gpx.ts` (+test), `web/src/platform/download.ts`, `web/src/ui/app.ts`.
-Commit `PN-1: exportar a Navionics y detección de duplicados al importar`.
+Diego (2026-10-15): en móvil y en escritorio, con la hoja a media altura, la lista no queda dentro
+del contenedor. Causa: cadena de contenedores flex sin `min-height: 0` (y sin `min-width: 0`):
+`.hn-sheet-body` → `.hn-cols` → `.hn-col-list` → `.hn-rutas` → `.hn-list`. Un hijo flex no se
+encoge por debajo de su contenido salvo que se le permita, así que `.hn-rutas` crece al alto de
+toda la lista, `.hn-list` nunca scrollea y la hoja la recorta. La fila de chips con scroll
+horizontal hace lo mismo a lo ancho.
 
-1. Exportación: el botón "Exportar GPX" pasa a "Enviar a plotter". Genera el GPX de la variante
-   elegida (ya existe: `<rte>` con nombres, `<copyright>`) con nombre de archivo
-   `AN12A-Falmouth-Newport.gpx` y nombre de ruta dentro del GPX `AN12A Falmouth-Newport`
-   (sin caracteres fuera de ASCII en el nombre de archivo). Si `navigator.canShare?.({ files })`
-   existe, usa la hoja de compartir del sistema (`navigator.share({ files: [File], title })`):
-   en Android/iOS aparece Navionics como destino. Si no, descarga como hoy.
-2. Lo mismo para rutas propias/importadas y para la bitácora ("Enviar track").
-3. Importación: al importar un GPX con el mismo nombre o con ≥ 90 % de puntos coincidentes
-   (± 0,05 nm) con una ruta ya importada, preguntar "Ya tenés esta ruta. ¿Reemplazar?" (banda
-   inferior con Reemplazar / Guardar como nueva), sin modal. Test del detector de duplicados.
-4. Ayuda: línea "Enviá cualquier ruta a Navionics con el botón Enviar a plotter".
-5. Prueba: en Android, Enviar a plotter → hoja de compartir → Navionics abre la ruta con sus
-   waypoints nombrados; en escritorio descarga el archivo.
-6. npm test, build-web.sh, commit, push, PARÁ.
+Archivos: `web/public/app.css` (solo CSS). Commit `UX-4: la lista scrollea dentro de la hoja`.
+
+1. Agregar, fuera de cualquier @media:
+   .hn-sheet-body, .hn-cols, .hn-col-list, .hn-rutas { min-height: 0; min-width: 0; }
+   .hn-rutas { flex: 1 1 auto; }
+   .hn-rutas .hn-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+   .hn-chips { max-width: 100%; }
+   .hn-row, .hn-row-main { min-width: 0; }
+   .hn-row-title, .hn-row-sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+2. `.hn-sheet-body` pasa a `overflow: hidden` cuando la pestaña es Rutas (clase `hn-body-rutas`
+   que ya pone o se pone al renderizar) y sigue `overflow-y: auto` en Aquí y Travesía.
+3. Mismo tratamiento para la columna de ficha en escritorio (`.hn-col-ficha { min-height: 0 }`).
+4. Prueba: móvil a media altura → la lista scrollea dentro de la hoja y la última fila (Importar)
+   se alcanza; escritorio con ventana de 900 px de alto → igual; ningún texto desborda a lo ancho.
+
+5. build-web.sh, commit, push, PARÁ.
