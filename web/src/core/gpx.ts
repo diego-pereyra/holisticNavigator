@@ -1,11 +1,16 @@
 // Importación de rutas (GPX/KML/CSV) — portado de Gpx.kt.
-
 import type { TrackPoint, VoyageLog } from "./voyage.ts";
 
 export interface ImportedRoute {
   id: string;
   name: string;
   points: TrackPoint[];
+}
+
+export interface RouteDuplicate {
+  route: ImportedRoute;
+  sameName: boolean;
+  matchRatio: number;
 }
 
 function attr(attrs: string, key: string): number | null {
@@ -174,8 +179,6 @@ function xmlText(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-// Export GPX de la bitácora (E9.4): las notas salen como waypoints antes del
-// track, para que OpenCPN las muestre como puntos del viaje.
 export function voyageToGpx(log: VoyageLog): string {
   const sb: string[] = [];
   sb.push('<?xml version="1.0" encoding="UTF-8"?>\n');

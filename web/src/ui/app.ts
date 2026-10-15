@@ -1592,6 +1592,7 @@ function helpCard(ui: UiState): HTMLElement {
     ["▸", "Elegí una ruta"],
     ["⚑", "Tocá Seguir"],
     ["🆘", "Mantené apretado MOB si alguien cae al agua"],
+    ["📤", "Enviá cualquier ruta a Navionics con el botón Enviar a plotter."],
   ];
   for (const [icon, text] of lines) {
     card.append(
