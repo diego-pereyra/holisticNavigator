@@ -7,7 +7,38 @@ import {
   parseGpx,
   parseKml,
   parseRouteFile,
+  voyageToGpx,
 } from "./gpx.ts";
+
+test("voyageToGpx incluye trkpt con hora UTC", () => {
+  const log = {
+    name: "Travesía",
+    points: [{ t: Date.UTC(2024, 0, 1, 12, 0, 0), lat: 10, lon: -20 }],
+  };
+  const gpx = voyageToGpx(log);
+  assert.ok(gpx.includes("<trkpt"));
+  assert.ok(gpx.includes("2024-01-01T12:00:00Z"));
+  assert.ok(gpx.includes("<name>Travesía</name>"));
+});
+
+test("voyageToGpx pone las notas como wpt antes del trk", () => {
+  const log = {
+    name: "Travesía",
+    points: [{ t: Date.UTC(2024, 0, 1, 12, 0, 0), lat: 10, lon: -20 }],
+    notes: [
+      { t: Date.UTC(2024, 0, 1, 13, 0, 0), lat: 10.5, lon: -20.5, text: "Anclaje <b>buena</b>" },
+      { t: Date.UTC(2024, 0, 1, 14, 0, 0), lat: 11, lon: -21, text: "Cambio de guardia" },
+    ],
+  };
+  const gpx = voyageToGpx(log);
+  assert.ok(gpx.includes('<wpt lat="10.5" lon="-20.5">'));
+  assert.ok(gpx.includes("<name>Nota</name>"));
+  assert.ok(gpx.includes("2024-01-01T13:00:00Z"));
+  assert.ok(gpx.includes("<desc>Anclaje &lt;b&gt;buena&lt;/b&gt;</desc>"));
+  assert.equal((gpx.match(/<wpt /g) ?? []).length, 2);
+  assert.ok(gpx.indexOf("<wpt ") < gpx.indexOf("<trk>"));
+  assert.ok(gpx.indexOf("Cambio de guardia") < gpx.indexOf("<trk>"));
+});
 
 test("parseGpx toma trkpt y nombre", () => {
   const xml =

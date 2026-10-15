@@ -1,6 +1,6 @@
 // Importación de rutas (GPX/KML/CSV) — portado de Gpx.kt.
 
-import type { TrackPoint } from "./voyage.ts";
+import type { TrackPoint, VoyageLog } from "./voyage.ts";
 
 export interface ImportedRoute {
   id: string;
@@ -155,4 +155,47 @@ export function importedRouteToGeoJson(route: ImportedRoute): string {
     `"from":"","to":"","needsReview":false,"landNm":0},` +
     `"geometry":{"type":"LineString","coordinates":[${coords}]}}]}`
   );
+}
+
+function isoUtc(epochMs: number): string {
+  const d = new Date(epochMs);
+  const p = (n: number, w = 2): string => String(n).padStart(w, "0");
+  return (
+    `${p(d.getUTCFullYear(), 4)}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}` +
+    `T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())}Z`
+  );
+}
+
+function xmlText(s: string): string {
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// Export GPX de la bitácora (E9.4): las notas salen como waypoints antes del
+// track, para que OpenCPN las muestre como puntos del viaje.
+export function voyageToGpx(log: VoyageLog): string {
+  const sb: string[] = [];
+  sb.push('<?xml version="1.0" encoding="UTF-8"?>\n');
+  sb.push(
+    '<gpx version="1.1" creator="Holistic Navigator" ' +
+      'xmlns="http://www.topografix.com/GPX/1/1">\n',
+  );
+  for (const n of log.notes ?? []) {
+    sb.push(
+      `  <wpt lat="${n.lat}" lon="${n.lon}"><time>${isoUtc(n.t)}</time>` +
+        `<name>Nota</name><desc>${xmlText(n.text)}</desc></wpt>\n`,
+    );
+  }
+  sb.push(`  <trk>\n    <name>${xmlText(log.name)}</name>\n`);
+  sb.push("    <trkseg>\n");
+  for (const p of log.points) {
+    sb.push(
+      `      <trkpt lat="${p.lat}" lon="${p.lon}"><time>${isoUtc(p.t)}</time></trkpt>\n`,
+    );
+  }
+  sb.push("    </trkseg>\n  </trk>\n</gpx>\n");
+  return sb.join("");
 }

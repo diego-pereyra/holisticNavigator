@@ -56,11 +56,14 @@ import {
   type Mob,
 } from "../core/alarms.ts";
 import {
-  voyageToGpx,
   voyageDistanceNm,
+  dailyReport,
   withPoint,
+  type DailyReport,
+  type Note,
   type VoyageLog,
 } from "../core/voyage.ts";
+import { voyageToGpx } from "../core/gpx.ts";
 import { sunTimes } from "../core/sun.ts";
 import { loadFact } from "../platform/catalog.ts";
 import { beep } from "../platform/sound.ts";
@@ -1855,7 +1858,9 @@ function navCell(label: string, value: string): HTMLElement {
   return c;
 }
 
-function activeNav(ui: UiState): { fix: NavFix; kin: Kinematics; track: RouteTrack } | null {
+function activeNav(
+  ui: UiState,
+): { fix: NavFix; kin: Kinematics; track: RouteTrack; remainingNm: number } | null {
   const a = ui.active();
   const p = ui.position();
   if (!a || !p) return null;
@@ -1869,7 +1874,8 @@ function activeNav(ui: UiState): { fix: NavFix; kin: Kinematics; track: RouteTra
   };
   const fix = navigate(track, p.lat, p.lon);
   if (!fix) return null;
-  return { fix, kin: kinematics(ui.navFixes, fix, remainingToDest(g.coords, fix), Date.now()), track };
+  const remainingNm = remainingToDest(g.coords, fix);
+  return { fix, kin: kinematics(ui.navFixes, fix, remainingNm, Date.now()), track, remainingNm };
 }
 
 
@@ -2506,9 +2512,204 @@ function monthStrip(ui: UiState, d: RouteDetail, onChange?: () => void): HTMLEle
 
 // ------------------------------------------------------------ pestaña Travesía
 
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+
+function fechaCorta(t: number): string {
+  const d = new Date(t);
+  return `${pad2(d.getDate())}/${pad2(d.getMonth() + 1)}`;
+}
+
+function fechaHora(t: number): string {
+  const d = new Date(t);
+  return `${fechaCorta(t)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function duracionTexto(hours: number): string {
+  const totalMin = Math.max(0, Math.round(hours * 60));
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return h > 0 ? `${d} d ${h} h` : `${d} d`;
+  if (h > 0) return m > 0 ? `${h} h ${m} m` : `${h} h`;
+  return `${m} min`;
+}
+
+function diasTexto(d: number): string {
+  if (d >= 10) return `${Math.round(d).toLocaleString("es-AR")} días`;
+  return `${d.toFixed(1).replace(".", ",")} ${Math.round(d) === 1 ? "día" : "días"}`;
+}
+
+function knTexto(kn: number): string {
+  return kn.toFixed(1).replace(".", ",");
+}
+
+function rumboTexto(deg: number): string {
+  return String(Math.round(deg) % 360).padStart(3, "0");
+}
+
+function parte24(r: DailyReport): string {
+  if (r.nm24h <= 0) return "Últimas 24 h: sin movimiento";
+  return `Últimas 24 h: ${nm(r.nm24h)} · ${knTexto(r.avgKn24h)} kn · rumbo medio ${rumboTexto(r.avgCogDeg24h)}°`;
+}
+
+// Texto del parte diario (E9.4): fecha, posición, las tres líneas y la última
+// nota. Se usa tanto en pantalla como en el portapapeles.
+function parteDiarioTexto(ui: UiState, nowMs: number): string[] {
+  const log = ui.voyage();
+  const out: string[] = [`Parte diario — ${fechaHora(nowMs)}`];
+  const p = ui.position();
+  const last = log && log.points.length ? log.points[log.points.length - 1] : undefined;
+  const lat = p?.lat ?? last?.lat;
+  const lon = p?.lon ?? last?.lon;
+  if (lat !== undefined && lon !== undefined) out.push(`Posición: ${formatLat(lat)} ${formatLon(lon)}`);
+  if (!log || log.points.length === 0) {
+    out.push("Sin puntos todavía. Empezá a grabar con el GPS.");
+    return out;
+  }
+  const r = dailyReport(log, nowMs);
+  out.push(parte24(r));
+  out.push(`Total: ${nm(r.totalNm)} en ${duracionTexto(r.hours)}`);
+  const nav = activeNav(ui);
+  if (nav && nav.remainingNm > 0 && r.daysToGo !== undefined) {
+    out.push(`Faltan ${nm(nav.remainingNm)} · ~${diasTexto(r.daysToGo)} a este ritmo`);
+  }
+  const notes = log.notes ?? [];
+  const lastNote = notes[notes.length - 1];
+  if (lastNote) out.push(`Última nota (${fechaHora(lastNote.t)}): ${lastNote.text}`);
+  return out;
+}
+
+// Banda de deshacer (E9.4): genérica, caduca sola a los 8 s.
+let undoTimer: number | null = null;
+
+function showUndoBand(text: string, onUndo: () => void): void {
+  document.querySelector(".hn-undo")?.remove();
+  if (undoTimer !== null) window.clearTimeout(undoTimer);
+  const band = el("div", { class: "hn-undo" });
+  band.append(el("span", { class: "hn-undo-text" }, `${text} ·`));
+  const undo = el("button", { class: "hn-undo-btn", type: "button" }, "Deshacer");
+  band.append(undo);
+  document.body.append(band);
+  const done = (): void => {
+    band.remove();
+    if (undoTimer !== null) window.clearTimeout(undoTimer);
+    undoTimer = null;
+  };
+  undo.addEventListener("click", () => {
+    onUndo();
+    done();
+  });
+  undoTimer = window.setTimeout(done, 8000);
+}
+
+function persistVoyage(ui: UiState, log: VoyageLog): void {
+  ui.voyage.set(log);
+  persist(ui, KEYS.voyageCurrent, JSON.stringify(log));
+}
+
+function addNote(ui: UiState, text: string): boolean {
+  const log = ui.voyage() ?? { name: `Bitácora ${isoDate()}`, points: [], notes: [] };
+  const p = ui.position();
+  const last = log.points[log.points.length - 1];
+  const lat = p?.lat ?? last?.lat;
+  const lon = p?.lon ?? last?.lon;
+  if (lat === undefined || lon === undefined) return false;
+  const notes: Note[] = [...(log.notes ?? []), { t: Date.now(), lat, lon, text }];
+  persistVoyage(ui, { ...log, notes });
+  return true;
+}
+
+function deleteNote(ui: UiState, n: Note): void {
+  const log = ui.voyage();
+  if (!log) return;
+  persistVoyage(ui, { ...log, notes: (log.notes ?? []).filter((x) => x !== n) });
+  showUndoBand("Nota borrada", () => persistVoyage(ui, log));
+}
+
+function noteRow(ui: UiState, n: Note): HTMLElement {
+  const row = el("div", { class: "hn-note-row" });
+  const meta = `${fechaHora(n.t)} · ${formatLat(n.lat)} ${formatLon(n.lon)} ·`;
+  const text = el("div", { class: "hn-note-text" });
+  text.append(el("span", { class: "hn-note-meta" }, meta), ` ${n.text}`);
+  const del = el("button", { class: "hn-note-del", type: "button" }, "×");
+  del.title = "Borrar nota";
+  del.addEventListener("click", () => deleteNote(ui, n));
+  row.append(text, del);
+  return row;
+}
+
+function archiveRow(log: VoyageLog): HTMLElement {
+  const row = el("div", { class: "hn-note-row" });
+  const first = log.points[0];
+  const last = log.points[log.points.length - 1];
+  const fechas = first && last ? `${fechaCorta(first.t)} – ${fechaCorta(last.t)}` : "sin puntos";
+  const main = el("div", { class: "hn-note-main" });
+  main.append(
+    el("div", { class: "hn-note-text" }, log.name),
+    el("div", { class: "hn-note-meta" }, `${fechas} · ${nm(voyageDistanceNm(log))}`),
+  );
+  const exp = el("button", { class: "hn-btn", type: "button" }, "Exportar GPX");
+  exp.addEventListener("click", () => {
+    downloadText(`bitacora-${log.name.replace(/\s+/g, "_")}.gpx`, "application/gpx+xml", voyageToGpx(log));
+  });
+  row.append(main, exp);
+  return row;
+}
+
 function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
   body.append(el("h2", { class: "hn-h2" }, "Travesía"));
 
+  // Parte diario (E9.4): medición de las últimas 24 h, total y días restantes.
+  const parteCard = el("div", { class: "hn-card" });
+  parteCard.append(el("div", { class: "hn-card-title" }, "Parte diario"));
+  const parteLines = el("div", { class: "hn-parte" });
+  const copyBtn = el("button", { class: "hn-btn" }, "Copiar parte");
+  copyBtn.addEventListener("click", () => {
+    void navigator.clipboard?.writeText(parteDiarioTexto(ui, Date.now()).join("\n"));
+    copyBtn.textContent = "Copiado";
+    window.setTimeout(() => {
+      copyBtn.textContent = "Copiar parte";
+    }, 2500);
+  });
+  parteCard.append(parteLines, el("div", { class: "hn-actions" }, copyBtn));
+  body.append(parteCard);
+
+  cleanup.push(
+    effect(() => {
+      const log = ui.voyage();
+      const now = ui.now();
+      ui.position();
+      ui.active();
+      ui.variant();
+      ui.routes();
+      if (!log || log.points.length === 0) {
+        parteLines.replaceChildren(
+          el("p", { class: "hn-muted" }, "Sin puntos todavía. Empezá a grabar con el GPS."),
+        );
+        return;
+      }
+      const r = dailyReport(log, now);
+      const nav = activeNav(ui);
+      const nodes: HTMLElement[] = [
+        el("div", { class: "hn-parte-line" }, parte24(r)),
+        el("div", { class: "hn-parte-line" }, `Total: ${nm(r.totalNm)} en ${duracionTexto(r.hours)}`),
+      ];
+      if (nav && nav.remainingNm > 0 && r.daysToGo !== undefined) {
+        nodes.push(
+          el(
+            "div",
+            { class: "hn-parte-line" },
+            `Faltan ${nm(nav.remainingNm)} · ~${diasTexto(r.daysToGo)} a este ritmo`,
+          ),
+        );
+      }
+      parteLines.replaceChildren(...nodes);
+    }),
+  );
+
+  // Bitácora: contadores y grabación.
   const card = el("div", { class: "hn-card" });
   card.append(el("div", { class: "hn-card-title" }, "Bitácora"));
   const counters = el("div");
@@ -2540,7 +2741,7 @@ function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[])
     if (ui.recording()) {
       ui.recording.set(false);
     } else {
-      if (!ui.voyage()) ui.voyage.set({ name: `Bitácora ${isoDate()}`, points: [] });
+      if (!ui.voyage()) ui.voyage.set({ name: `Bitácora ${isoDate()}`, points: [], notes: [] });
       ui.recording.set(true);
       wireGpsStart();
     }
@@ -2552,24 +2753,110 @@ function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[])
       downloadText(`bitacora-${l.name.replace(/\s+/g, "_")}.gpx`, "application/gpx+xml", voyageToGpx(l));
     }
   });
-  const clearBtn = el("button", { class: "hn-btn" }, "Nueva");
+  const clearBtn = el("button", { class: "hn-btn" }, "Nueva travesía");
+  const notesCard = el("div", { class: "hn-card" });
   clearBtn.addEventListener("click", () => {
-    if (!confirm("¿Empezar una bitácora nueva? La actual se guarda en el archivo.")) return;
+    if (!confirm("¿Empezar una travesía nueva? La actual se guarda en el archivo.")) return;
     const l = ui.voyage();
-    if (l && l.points.length > 1) {
-      void ui.store.get(KEYS.voyageArchive).then((prev) => {
-        const arr = readJson<VoyageLog[]>(prev, []);
-        arr.push(l);
-        return ui.store.put(KEYS.voyageArchive, JSON.stringify(arr));
-      });
+    if (l && (l.points.length > 1 || (l.notes?.length ?? 0) > 0)) {
+      void ui.store
+        .get(KEYS.voyageArchive)
+        .then((prev) => {
+          const arr = readJson<VoyageLog[]>(prev, []);
+          arr.push(l);
+          return ui.store.put(KEYS.voyageArchive, JSON.stringify(arr));
+        })
+        .then(() => renderArchive(ui, archiveList));
     }
     ui.recording.set(false);
-    const next: VoyageLog = { name: `Bitácora ${isoDate()}`, points: [] };
+    const next: VoyageLog = { name: `Bitácora ${isoDate()}`, points: [], notes: [] };
     ui.voyage.set(next);
     persist(ui, KEYS.voyageCurrent, JSON.stringify(next));
   });
   actions.append(rec, exportBtn, clearBtn);
   body.append(actions);
+
+  // Notas de a bordo (E9.4): una línea por nota, con deshacer de 8 s.
+  notesCard.append(el("div", { class: "hn-card-title" }, "Notas"));
+  const noteForm = el("div", { class: "hn-note-form" });
+  noteForm.hidden = true;
+  const noteInput = el("input", {
+    class: "hn-note-input",
+    type: "text",
+    placeholder: "Una línea con la nota de a bordo",
+    maxlength: "140",
+  });
+  const noteSave = el("button", { class: "hn-btn hn-btn-primary" }, "Guardar");
+  const noteHint = el("p", { class: "hn-muted" }, "Sin posición: fijá una posición o empezá a grabar.");
+  noteHint.hidden = true;
+  noteForm.append(noteInput, noteSave);
+  const noteAdd = el("button", { class: "hn-btn" }, "+ Nota");
+  noteAdd.addEventListener("click", () => {
+    noteForm.hidden = !noteForm.hidden;
+    if (!noteForm.hidden) {
+      noteInput.focus();
+      return;
+    }
+    noteHint.hidden = true;
+  });
+  const saveNote = (): void => {
+    const text = noteInput.value.trim();
+    if (text === "") return;
+    if (!addNote(ui, text)) {
+      noteHint.hidden = false;
+      return;
+    }
+    noteHint.hidden = true;
+    noteInput.value = "";
+    noteForm.hidden = true;
+  };
+  noteSave.addEventListener("click", saveNote);
+  noteInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") saveNote();
+    if (e.key === "Escape") {
+      noteForm.hidden = true;
+      noteHint.hidden = true;
+    }
+  });
+  const noteList = el("div", { class: "hn-note-list" });
+  notesCard.append(el("div", { class: "hn-actions" }, noteAdd), noteForm, noteHint, noteList);
+  body.append(notesCard);
+
+  cleanup.push(
+    effect(() => {
+      const log = ui.voyage();
+      const notes = [...(log?.notes ?? [])].sort((a, b) => b.t - a.t);
+      if (notes.length === 0) {
+        noteList.replaceChildren(el("p", { class: "hn-muted" }, "Sin notas todavía."));
+        return;
+      }
+      noteList.replaceChildren(...notes.map((n) => noteRow(ui, n)));
+    }),
+  );
+
+  // Travesías archivadas (E9.4): nombre, fechas, millas y export GPX.
+  const archCard = el("div", { class: "hn-card" });
+  archCard.append(el("div", { class: "hn-card-title" }, "Travesías archivadas"));
+  const archiveList = el("div", { class: "hn-note-list" });
+  archCard.append(archiveList);
+  body.append(archCard);
+  renderArchive(ui, archiveList);
+}
+
+function renderArchive(ui: UiState, host: HTMLElement): void {
+  void ui.store
+    .get(KEYS.voyageArchive)
+    .then((raw) => {
+      const arr = readJson<VoyageLog[]>(raw, []);
+      if (arr.length === 0) {
+        host.replaceChildren(el("p", { class: "hn-muted" }, "Sin travesías archivadas todavía."));
+        return;
+      }
+      host.replaceChildren(...arr.map((l) => archiveRow(l)));
+    })
+    .catch(() => {
+      host.replaceChildren(el("p", { class: "hn-muted" }, "Sin travesías archivadas todavía."));
+    });
 }
 
 // ------------------------------------------------------ posición a mano

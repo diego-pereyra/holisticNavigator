@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 
-import { voyageDistanceNm, voyageToGpx, withPoint } from "./voyage.ts";
+import { dailyReport, voyageDistanceNm, withPoint } from "./voyage.ts";
 
 test("distancia de la bitácora suma tramos", () => {
   const log = {
@@ -22,13 +22,25 @@ test("withPoint ignora puntos sin movimiento ni tiempo", () => {
   assert.equal(moved.points.length, 2);
 });
 
-test("voyageToGpx incluye trkpt con hora UTC", () => {
-  const log = {
-    name: "Travesía",
-    points: [{ t: Date.UTC(2024, 0, 1, 12, 0, 0), lat: 10, lon: -20 }],
-  };
-  const gpx = voyageToGpx(log);
-  assert.ok(gpx.includes("<trkpt"));
-  assert.ok(gpx.includes("2024-01-01T12:00:00Z"));
-  assert.ok(gpx.includes("<name>Travesía</name>"));
+test("dailyReport mide 144 nm, 6 kn y rumbo 090 en 24 h", () => {
+  const now = Date.UTC(2024, 0, 3, 0, 0, 0);
+  const points = [];
+  for (let h = 0; h <= 48; h++) {
+    points.push({ t: now - (48 - h) * 3_600_000, lat: 0, lon: h * 0.1 });
+  }
+  const r = dailyReport({ name: "T", points }, now);
+  assert.ok(Math.abs(r.nm24h - 144) <= 1, `nm24h ${r.nm24h}`);
+  assert.ok(Math.abs(r.avgKn24h - 6) < 0.1, `avgKn24h ${r.avgKn24h}`);
+  assert.ok(Math.abs(r.avgCogDeg24h - 90) < 1, `cog ${r.avgCogDeg24h}`);
+  assert.ok(Math.abs(r.totalNm - 288) < 2);
+  assert.ok(Math.abs(r.hours - 48) < 0.01);
+});
+
+test("dailyReport estima días restantes a este ritmo", () => {
+  const now = Date.UTC(2024, 0, 3, 0, 0, 0);
+  const points = [];
+  for (let h = 0; h <= 24; h++) points.push({ t: now - (24 - h) * 3_600_000, lat: 0, lon: h * 0.1 });
+  const r = dailyReport({ name: "T", points }, now, 288);
+  assert.ok(r.daysToGo !== undefined);
+  assert.ok(Math.abs(r.daysToGo! - 2) < 0.05);
 });
