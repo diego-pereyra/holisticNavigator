@@ -1,0 +1,5 @@
+cdsapi>=0.7.6
+earthaccess>=0.13.0
+xarray>=2025.3.1
+netCDF4>=1.7.2
+numpy>=2.3.2
