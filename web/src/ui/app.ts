@@ -43,7 +43,7 @@ import {
 } from "../core/context.ts";
 import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
-import { navigate, haversineNm, type RouteTrack, type NavFix } from "../core/navigation.ts";
+import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix } from "../core/navigation.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
   evalAlarms,
@@ -250,6 +250,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   const themeTimer = window.setInterval(() => ui.now.set(Date.now()), 5 * 60 * 1000);
   document.addEventListener("visibilitychange", () => {
     if (!document.hidden) ui.now.set(Date.now());
+    simVisibility();
   });
   window.addEventListener("pagehide", () => window.clearInterval(themeTimer), { once: true });
 
@@ -951,8 +952,8 @@ function stopGps(ui: UiState): void {
   ui.gpsStop = null;
 }
 
-function pushFix(ui: UiState, p: Position): void {
-  ui.navFixes.push({ lat: p.lat, lon: p.lon, t: p.t, speedMps: null, headingDeg: null });
+function pushFix(ui: UiState, p: Position, speedMps: number | null = null): void {
+  ui.navFixes.push({ lat: p.lat, lon: p.lon, t: p.t, speedMps, headingDeg: null });
   if (ui.navFixes.length > 240) ui.navFixes.splice(0, ui.navFixes.length - 240);
   if (!ui.recording()) return;
   const log = ui.voyage() ?? { name: `Bitácora ${isoDate()}`, points: [] };
@@ -964,6 +965,8 @@ function pushFix(ui: UiState, p: Position): void {
 }
 
 function wireGpsStart(): void {
+  // Si el GPS vuelve a arrancar (p. ej. "Seguir"), el simulador deja de mandar.
+  if (sim.ui) simStop();
   (window as unknown as { hnStartGps?: () => void }).hnStartGps?.();
 }
 
@@ -987,6 +990,254 @@ function autoStartGps(ui: UiState): void {
       if (p.state === "granted") wireGpsStart();
     }).catch(() => {});
   } catch {}
+}
+
+// ------------------------------------------------- simulador "Recorrer" (SIM)
+
+const SIM_SPEEDS = [4, 16, 64] as const;
+type SimSpeed = (typeof SIM_SPEEDS)[number];
+
+// Estado del simulador de "Recorrer la ruta". Es único en la app: nace al tocar
+// "Recorrer" en la ficha y muere con "✕ Terminar". La fila `hn-sim` se reutiliza
+// y se vuelve a enganchar si la ficha se rearma por un cambio de variante.
+const sim = {
+  ui: null as UiState | null,
+  code: null as string | null,
+  track: null as RouteTrack | null,
+  totalNm: 0,
+  doneNm: 0,
+  speed: 4 as SimSpeed,
+  running: false,
+  finished: false,
+  pausedByVisibility: false,
+  prevPosition: null as Position | null,
+  prevGps: false,
+  prevStatus: "off" as PositionStatus,
+  raf: null as number | null,
+  lastTs: 0,
+  lastApply: 0,
+  row: null as HTMLElement | null,
+  playBtn: null as HTMLButtonElement | null,
+  speedBtn: null as HTMLButtonElement | null,
+  progress: null as HTMLElement | null,
+};
+
+function simTrackFrom(g: Geometry): RouteTrack {
+  return {
+    names: g.coords.map((_, i) => `WP ${i}`),
+    dests: g.coords.map(() => false),
+    corrected: g.coords.map(() => false),
+    coords: g.coords,
+  };
+}
+
+function simRowEnsure(): HTMLElement {
+  if (sim.row) return sim.row;
+  const row = el("div", { class: "hn-sim" });
+  const play = el("button", { class: "hn-sim-btn", type: "button" }, "▶");
+  play.title = "Empezar o pausar el recorrido";
+  play.setAttribute("aria-label", "Empezar");
+  const speed = el("button", { class: "hn-sim-btn hn-sim-speed", type: "button" }, "x4");
+  speed.title = "Velocidad del recorrido";
+  speed.setAttribute("aria-label", "Velocidad del recorrido");
+  const reset = el("button", { class: "hn-sim-btn", type: "button" }, "↺ Reiniciar");
+  const progress = el("div", { class: "hn-sim-progress" });
+  const stop = el("button", { class: "hn-sim-btn hn-sim-stop", type: "button" }, "✕ Terminar");
+  play.addEventListener("click", () => simToggle());
+  speed.addEventListener("click", () => simCycleSpeed());
+  reset.addEventListener("click", () => simReset());
+  stop.addEventListener("click", () => simStop());
+  row.append(play, speed, reset, progress, stop);
+  sim.row = row;
+  sim.playBtn = play;
+  sim.speedBtn = speed;
+  sim.progress = progress;
+  return row;
+}
+
+function simUpdateRow(): void {
+  if (sim.playBtn) {
+    sim.playBtn.textContent = sim.running ? "⏸" : "▶";
+    sim.playBtn.setAttribute("aria-label", sim.running ? "Pausar" : "Empezar");
+    sim.playBtn.className = `hn-sim-btn${sim.running ? " hn-sim-on" : ""}`;
+  }
+  if (sim.speedBtn) sim.speedBtn.textContent = `x${sim.speed}`;
+  if (sim.progress) {
+    sim.progress.textContent =
+      `${Math.round(sim.doneNm).toLocaleString("es-AR")} / ` +
+      `${Math.round(sim.totalNm).toLocaleString("es-AR")} nm`;
+  }
+}
+
+function simCancelRaf(): void {
+  if (sim.raf !== null) {
+    cancelAnimationFrame(sim.raf);
+    sim.raf = null;
+  }
+}
+
+// Un paso de simulación entra por la misma puerta que un fix de GPS: posición +
+// pushFix (que además alimenta la bitácora si se está grabando).
+function simApply(): void {
+  const ui = sim.ui;
+  const track = sim.track;
+  if (!ui || !track) return;
+  const at = pointAlongTrack(track, sim.doneNm);
+  if (!at) return;
+  const [lon, lat] = at;
+  // nm/s del avance a velocidad x1, pasados a m/s para que SOG y ETA muestren números.
+  const speedMps = (sim.totalNm / 90) * sim.speed * 1852;
+  const pos: Position = { lat, lon, accuracyM: 0, source: "simulated", t: Date.now() };
+  ui.position.set(pos);
+  setSource(ui.map, "me", featureCollection([pointFeature(lon, lat)]));
+  pushFix(ui, pos, speedMps);
+}
+
+function simTick(ts: number): void {
+  sim.raf = null;
+  if (!sim.ui || !sim.running) return;
+  if (sim.lastTs === 0) sim.lastTs = ts;
+  const dt = Math.min(0.5, Math.max(0, (ts - sim.lastTs) / 1000));
+  sim.lastTs = ts;
+  // A velocidad x4 una ruta entera dura 90/4 ≈ 22 s.
+  sim.doneNm = Math.min(sim.totalNm, sim.doneNm + (sim.totalNm / 90) * sim.speed * dt);
+  if (ts - sim.lastApply >= 200 || sim.doneNm >= sim.totalNm) {
+    sim.lastApply = ts;
+    simApply();
+    simUpdateRow();
+  }
+  if (sim.doneNm >= sim.totalNm) {
+    sim.running = false;
+    sim.finished = true;
+    simUpdateRow();
+    return;
+  }
+  sim.raf = requestAnimationFrame(simTick);
+}
+
+function simOpen(ui: UiState, d: RouteDetail, head: HTMLElement): void {
+  const g = selectedGeometry(ui, d.code);
+  if (!g || g.coords.length < 2) return;
+  if (sim.ui) simStop();
+  fitTo(ui, g.coords);
+  const track = simTrackFrom(g);
+  const totalNm = trackLengthNm(track);
+  if (!(totalNm > 0)) return;
+
+  sim.ui = ui;
+  sim.code = d.code;
+  sim.track = track;
+  sim.totalNm = totalNm;
+  sim.doneNm = 0;
+  sim.speed = 4;
+  sim.finished = false;
+  sim.pausedByVisibility = false;
+  sim.lastTs = 0;
+  sim.lastApply = 0;
+  sim.prevPosition = ui.position();
+  sim.prevGps = ui.gpsStop !== null;
+  sim.prevStatus = ui.gpsStatus();
+  stopGps(ui);
+
+  // La variante elegida pasa a ser la ruta activa (como Seguir): así la tira
+  // Navegando, las alarmas y la bitácora andan igual que con GPS real.
+  const variant = ui.variant().startsWith(d.code) ? ui.variant() : (d.variants[0]?.id ?? null);
+  ui.active.set({ code: d.code, chapter: d.chapter, variant });
+
+  head.append(simRowEnsure());
+  simApply();
+  sim.running = true;
+  simUpdateRow();
+  simCancelRaf();
+  sim.raf = requestAnimationFrame(simTick);
+}
+
+function simToggle(): void {
+  if (!sim.ui) return;
+  if (sim.finished) {
+    sim.finished = false;
+    sim.doneNm = 0;
+    sim.lastApply = 0;
+    simApply();
+  }
+  sim.pausedByVisibility = false;
+  sim.running = !sim.running;
+  simCancelRaf();
+  if (sim.running) {
+    sim.lastTs = 0;
+    sim.raf = requestAnimationFrame(simTick);
+  }
+  simUpdateRow();
+}
+
+function simCycleSpeed(): void {
+  if (!sim.ui) return;
+  const i = SIM_SPEEDS.indexOf(sim.speed);
+  sim.speed = SIM_SPEEDS[(i + 1) % SIM_SPEEDS.length] ?? 4;
+  simUpdateRow();
+}
+
+function simReset(): void {
+  if (!sim.ui) return;
+  sim.doneNm = 0;
+  sim.finished = false;
+  sim.lastTs = 0;
+  sim.lastApply = 0;
+  simApply();
+  simUpdateRow();
+}
+
+// ✕ Terminar: detiene, limpia la posición simulada, restaura la fuente anterior
+// (si era GPS, reanuda el watch) y deja de seguir la ruta.
+function simStop(): void {
+  simCancelRaf();
+  sim.running = false;
+  sim.finished = false;
+  sim.pausedByVisibility = false;
+  const ui = sim.ui;
+  const prev = sim.prevPosition;
+  const wasGps = sim.prevGps;
+  const prevStatus = sim.prevStatus;
+  sim.ui = null;
+  sim.track = null;
+  sim.code = null;
+  sim.doneNm = 0;
+  sim.totalNm = 0;
+  sim.row?.remove();
+  if (!ui) return;
+  ui.active.set(null);
+  ui.position.set(null);
+  setSource(ui.map, "me", featureCollection([]));
+  if (wasGps) {
+    ui.gpsStatus.set("searching");
+    wireGpsStart();
+    return;
+  }
+  ui.gpsStatus.set(prevStatus);
+  if (prev) {
+    ui.position.set(prev);
+    setSource(ui.map, "me", featureCollection([pointFeature(prev.lon, prev.lat)]));
+  }
+}
+
+// Pausa automática con la pestaña oculta; reanuda al volver.
+function simVisibility(): void {
+  if (!sim.ui) return;
+  if (document.hidden && sim.running) {
+    sim.running = false;
+    sim.pausedByVisibility = true;
+    simCancelRaf();
+    simUpdateRow();
+    return;
+  }
+  if (!document.hidden && sim.pausedByVisibility && !sim.finished) {
+    sim.pausedByVisibility = false;
+    sim.running = true;
+    sim.lastTs = 0;
+    simUpdateRow();
+    simCancelRaf();
+    sim.raf = requestAnimationFrame(simTick);
+  }
 }
 
 // --------------------------------------------------------- barra de contexto
@@ -2329,10 +2580,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   });
 
   const recorrer = el("button", { class: "hn-btn" }, "Recorrer");
-  recorrer.addEventListener("click", () => {
-    const g = selectedGeometry(ui, d.code);
-    if (g) fitTo(ui, g.coords);
-  });
+  recorrer.addEventListener("click", () => simOpen(ui, d, head));
 
   const enlace = el("button", { class: "hn-btn" }, "Enlace");
   enlace.addEventListener("click", () => {
@@ -2344,6 +2592,10 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
 
   actions.append(seguir, exportar, recorrer, enlace);
   head.append(actions);
+
+  // SIM: si el simulador sigue en camino de esta misma ruta, la fila de control
+  // vuelve a la ficha (que se rearma al cambiar de variante).
+  if (sim.ui === ui && sim.code === d.code && sim.row) head.append(sim.row);
 
   // Datos en rejilla (W4.5 #2): la tira de meses va encima.
   const w = d.whenInfo;

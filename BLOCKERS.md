@@ -86,17 +86,18 @@ SMOKE FAIL
 
 **Nota (desvío del enunciado).** El smoke de CI servía la dist con `python3 -m http.server`, que **no soporta HTTP Range**: responde 200 con el archivo entero y el `fetch` de pmtiles se aborta (`ERR_ABORTED` → `requestfailed`), así que el smoke habría seguido rojo aunque el CORS estuviera resuelto. Como Pages sí soporta rangos, el paso del smoke (en `deploy-pages.yml`, sin tocar `web/smoke.mjs`) ahora levanta un servidor con Range para que el test refleje a Pages. Verificado el servidor con `curl` (200/206/416 correctos) antes de subirlo.
 
-## E9.4 · Prueba manual con posición simulada ("Recorrer") no existe en la web
+## E9.4 · Prueba manual con posición simulada ("Recorrer") no existe en la web — resuelto (SIM)
 
-**Qué falla.** El paso 4 pide grabar 2 minutos con posición simulada usando "Recorrer" y luego
+**Qué fallaba.** El paso 4 pide grabar 2 minutos con posición simulada usando "Recorrer" y luego
 probar el portapapeles y el GPX en OpenCPN. En `web/` la acción `Recorrer` de la ficha
-(`web/src/ui/app.ts`) solo encuadra la ruta en la cámara (`fitTo`); **no hay simulador de
-posición**: no existe nada que produzca `PositionSource "simulated"` (solo hay estilos de color
-para ese caso) ni velocidades x4/x16/x64, que eran de T3.7 en la app Kotlin. Además, en WSL no
-abro un navegador (los browsers corren en CI, `web/smoke.mjs`).
+(`web/src/ui/app.ts`) solo encuadraba la ruta en la cámara (`fitTo`); **no había simulador de
+posición**: no existía nada que produjera `PositionSource "simulated"` (solo estilos de color para
+ese caso) ni velocidades x4/x16/x64, que eran de T3.7 en la app Kotlin. Además, en WSL no abro un
+navegador (los browsers corren en CI, `web/smoke.mjs`).
 
-**Qué propongo.** Lo automatizable ya quedó hecho y verificado: 55 tests (`npm test`), `tsc`
-limpio, build y presupuesto verdes (primera carga 542 KB / límite 1172 KB); el GPX de prueba con
-el track y las dos notas antes del `<trk>` se genera y se verificó con `voyageToGpx`. Para lo
-que falta: (a) probar con GPS real, o (b) agregar el simulador de "Recorrer" como tarea aparte y
-recién ahí correr la prueba de 2 minutos + OpenCPN.
+**Resuelto (SIM, 2026-10-15).** Se implementó el simulador real de "Recorrer la ruta"
+(`hn-sim`: ▶/⏸ · velocidad x4/x16/x64 · ↺ Reiniciar · avance `nnn / mmm nm` · ✕ Terminar), con
+avance por `requestAnimationFrame` sobre `pointAlongTrack`, fuente de posición `simulated`,
+pausa con la pestaña oculta, y restauración de la fuente anterior al terminar. La prueba manual de
+2 minutos + OpenCPN queda para Diego/CI (sigue sin haber navegador en WSL), pero el flujo ya se
+puede ejecutar de punta a punta en el navegador.

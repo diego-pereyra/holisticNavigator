@@ -561,6 +561,55 @@ html[data-theme="red"] {
   color: var(--hn-ink);
 }
 
+/* Fila del simulador "Recorrer la ruta" (SIM), bajo las acciones de la ficha. */
+.hn-sim {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line);
+  border-radius: 10px;
+}
+.hn-sim-btn {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 6px 12px;
+  border: 1px solid var(--hn-line);
+  border-radius: 9px;
+  background: var(--hn-hover);
+  color: var(--hn-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hn-sim-btn:hover {
+  border-color: var(--hn-accent);
+}
+.hn-sim-on {
+  background: var(--hn-accent);
+  border-color: var(--hn-accent);
+  color: var(--hn-ink);
+}
+.hn-sim-speed {
+  min-width: 52px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-sim-progress {
+  flex: 1 1 auto;
+  min-width: 96px;
+  text-align: right;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: var(--hn-text-2);
+}
+.hn-sim-stop {
+  color: var(--hn-error);
+}
+
 .hn-search-row {
   display: flex;
   flex: 0 0 auto;
