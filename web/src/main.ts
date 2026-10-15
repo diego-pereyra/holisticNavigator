@@ -1,6 +1,7 @@
 import { Map as MlMap, NavigationControl, Popup, addProtocol, setWorkerUrl } from "maplibre-gl";
 import type {
   ExpressionSpecification,
+  GeoJSONSource,
   GeoJSONSourceSpecification,
   LayerSpecification,
   MapLayerMouseEvent,
@@ -39,6 +40,11 @@ const BATHY = "basemap/bathy.geojson";
 const COUNTRIES = "basemap/countries.geojson";
 const CITIES = "basemap/cities.geojson";
 const GRATICULE = "basemap/graticule.geojson";
+
+// P-1: la batimetría y los países ya no viajan con el estilo (pesan ~370 KB gz
+// juntos y retrasaban el primer dibujo). El estilo arranca con estas fuentes
+// vacías; en cuanto el mapa está en pantalla se piden y se rellenan.
+const EMPTY_FC: GeoJSONSourceSpecification["data"] = { type: "FeatureCollection", features: [] };
 
 // Carta de detalle mundial (PMTiles de OSM, E10.1b). El workflow `tiles.yml`
 // publica `world-z6.pmtiles` como asset de la release `tiles-latest`; el deploy
@@ -119,8 +125,8 @@ export function baseMapStyle(): StyleSpecification {
   return {
     version: 8,
     sources: {
-      bathy: { type: "geojson", data: BATHY },
-      countries: { type: "geojson", data: COUNTRIES },
+      bathy: { type: "geojson", data: EMPTY_FC },
+      countries: { type: "geojson", data: EMPTY_FC },
       cities: { type: "geojson", data: CITIES },
       graticule: { type: "geojson", data: GRATICULE },
       detail: { type: "vector", url: "pmtiles://" + TILES_WORLD_URL, maxzoom: 6 },
@@ -450,6 +456,25 @@ async function restoreZones(store: KeyValueStore): Promise<void> {
   }
 }
 
+// P-1: la carta base pesada llega después del primer dibujo. Se piden en
+// paralelo y cada una se pinta al llegar (países primero, pesan menos). Sin red
+// o si fallan, el mapa se queda con fondo y retícula, sin bloquear ni avisar.
+async function loadBaseLayer(id: string, url: string): Promise<void> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return;
+    const data = (await res.json()) as GeoJSONSourceSpecification["data"];
+    (map.getSource(id) as GeoJSONSource | undefined)?.setData(data);
+  } catch {
+    /* el mapa sigue con lo que ya tiene */
+  }
+}
+
+function loadDeferredBase(): void {
+  void loadBaseLayer("countries", COUNTRIES);
+  void loadBaseLayer("bathy", BATHY);
+}
+
 function start(): void {
   // El mapa base ya está en pantalla: se monta la UI y se oculta la carga.
   boot.step("base", true);
@@ -461,6 +486,7 @@ function start(): void {
   map.on("zoom", updateScaleNote);
   updateScaleNote();
   window.hnRetryCatalog = () => void loadCatalog(app);
+  void loadDeferredBase();
   void loadCatalog(app);
   void loadRoutes(app);
   void restoreZones(store);
