@@ -1881,7 +1881,11 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
 function offlineCard(ui: UiState): HTMLElement {
   const card = el("div", { class: "hn-card" });
   card.append(el("div", { class: "hn-card-title" }, "Sin conexión"));
-  card.append(offlineRow("Carta base", "siempre"));
+  card.append(offlineRow("Carta base · 0,2 MB", "siempre"));
+  // Pilot charts (12 meses) · 1,8 MB · [Guardar]
+  card.append(pilotChartsRow(ui));
+  // Pronóstico de la travesía · 0,6 MB · hace X h · [Actualizar] (si hay paquete)
+  card.append(forecastRow(ui));
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
   card.append(onlineSeamarkRow(ui));
 
@@ -1924,6 +1928,78 @@ function onlineSeamarkRow(ui: UiState): HTMLElement {
     el("span", { class: "hn-offline-info" }, "con red"),
     action,
   );
+  return row;
+}
+
+// Pilot charts (E8.4): guardar los 12 meses en Cache Storage vía SW.
+function pilotChartsRow(_ui: UiState): HTMLElement {
+  const row = el("div", { class: "hn-offline-row" });
+  const info = el("span", { class: "hn-offline-info" }, "1,8 MB");
+  const action = el("span", { class: "hn-offline-action" });
+  const btn = el("button", { class: "hn-btn", type: "button" }, "Guardar");
+  let saving = false;
+
+  function setState(s: "idle" | "saving" | "done" | "error"): void {
+    saving = s === "saving";
+    if (s === "saving") {
+      btn.disabled = true;
+      btn.textContent = "Guardando…";
+      info.textContent = "0 / 12";
+    } else if (s === "done") {
+      btn.disabled = true;
+      btn.textContent = "Guardado";
+      info.textContent = "✓ 1,8 MB";
+    } else if (s === "error") {
+      btn.disabled = false;
+      btn.textContent = "Reintentar";
+      info.textContent = "error";
+    } else {
+      btn.disabled = false;
+      btn.textContent = "Guardar";
+      info.textContent = "1,8 MB";
+    }
+  }
+
+  const handleMsg = (ev: MessageEvent): void => {
+    const m = ev.data;
+    if (!m || typeof m !== "object") return;
+    if (m.type === "clim-start") {
+      info.textContent = `0 / ${m.total}`;
+    } else if (m.type === "clim-progress") {
+      info.textContent = `${m.done} / ${m.total}`;
+    } else if (m.type === "clim-done") {
+      if (m.ok) setState("done");
+      else setState("error");
+      navigator.serviceWorker.removeEventListener("message", handleMsg);
+      navigator.serviceWorker.controller?.postMessage("skip"); // no-op
+    }
+  };
+
+  btn.addEventListener("click", () => {
+    if (saving) return;
+    if (!("serviceWorker" in navigator)) {
+      setState("error");
+      return;
+    }
+    setState("saving");
+    navigator.serviceWorker.addEventListener("message", handleMsg);
+    navigator.serviceWorker.controller?.postMessage({ type: "clim-save" });
+  });
+
+  action.append(btn);
+  row.append(el("span", { class: "hn-offline-name" }, "Pilot charts (12 meses)"), info, action);
+  return row;
+}
+
+// Pronóstico de la travesía (E8.4): placeholder simple, compatible con spec.
+function forecastRow(_ui: UiState): HTMLElement {
+  const row = el("div", { class: "hn-offline-row" });
+  row.append(
+    el("span", { class: "hn-offline-name" }, "Pronóstico de la travesía"),
+    el("span", { class: "hn-offline-info" }, "0,6 MB · hace — h"),
+    el("span", { class: "hn-offline-action" }, el("button", { class: "hn-btn", type: "button" }, "Actualizar")),
+  );
+  (row.lastElementChild as HTMLElement)?.querySelector("button")?.setAttribute("disabled", "true");
   return row;
 }
 
