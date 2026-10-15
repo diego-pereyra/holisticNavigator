@@ -620,3 +620,14 @@ arquitectura).
 
 Tareas, cuando toque: E14.1 Importar carta (PMTiles) · E14.2 MBTiles · E14.3 convertidor GDAL ·
 E14.4 estilo S-52 mínimo y zona NOAA ENC.
+
+## E15 · Integración con OpenCPN y el bus del barco (Diego, 2026-10-15)
+
+| Tarea | Qué | Coste |
+|---|---|---|
+| E15.1 Capas GPX para OpenCPN | job que exporta el catálogo de Cornell como `layers/<cuenca>.gpx` (rutas con waypoints nombrados, atribución) publicados en Releases; instrucciones "copiá a la carpeta layers de OpenCPN" | bajo |
+| E15.2 Cliente SignalK | `platform/signalk.ts`: conexión WebSocket a `ws://<ip>:3000/signalk/v1/stream` en la red del barco; fuente de posición "barco" (navigation.position, speedOverGround, courseOverGroundTrue), viento real (environment.wind.*), profundidad; descubrimiento por mDNS no (browser), IP manual en Ajustes | medio |
+| E15.3 AIS desde SignalK | objetivos AIS (vessels.*) como capa `ais-targets` con rumbo, velocidad, nombre y CPA/TCPA simple; alarma de CPA | medio |
+| E15.4 Plugin OpenCPN | plugin C++ (plantilla oficial) que muestra el planificador de salida y las pilot charts como panel y dibuja rutas de Cornell sobre cualquier carta, incluidas o-charts | alto, proyecto aparte |
+
+No viable: embeber el motor de cartas de OpenCPN ni leer o-charts fuera de OpenCPN.
