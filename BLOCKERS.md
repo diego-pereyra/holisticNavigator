@@ -101,3 +101,20 @@ avance por `requestAnimationFrame` sobre `pointAlongTrack`, fuente de posición 
 pausa con la pestaña oculta, y restauración de la fuente anterior al terminar. La prueba manual de
 2 minutos + OpenCPN queda para Diego/CI (sigue sin haber navegador en WSL), pero el flujo ya se
 puede ejecutar de punta a punta en el navegador.
+
+## E8.1 · Punto de validación de hielo (75 N, 0 E) no se cumple en la realidad — desvío autorizado
+
+**Qué falla (en la spec).** El paso 4 de E8.1 exige "celda (75 N, 0 E) marzo: `ice` ≥ 15". Medido
+sobre ERA5 `sea_ice_cover` media mensual 1991–2020, esa celda da **≈ 2 %**: es mar abierto del mar
+de Groenlandia (el borde de hielo en 0° E en marzo está en ~78,5° N; `ice` ≥ 15 % recién en 79° N =
+35,6 % y 80° N = 74,8 %). No es un error de la rejilla (tierra = 0 en `land_sea_mask`, lon 0° E
+correcta): el punto elegido no tiene hielo.
+
+**Qué hice (autorizado por Diego).** Se dejó el pipeline y los 12 `.bin` con el dato real, y se
+movió **solo esa aserción** al punto válido más cercano, **(79 N, 0 E) marzo `ice` ≥ 15** (≈ 36 %),
+que prueba lo mismo (que el campo de hielo existe y llega bien). El resto de las validaciones del
+paso 4 quedan literales y pasan (15 N 60 W marzo: 14 kn, dir ≈ 81° ENE, constancia 97 %; Corriente
+del Golfo > 0,8 kn en (35 N, 75 W); `tc` = 4 en (18 N, 65 W) septiembre).
+
+**Decisión pendiente:** que Claude confirme el punto corregido en el ADR-009 §tarea E8.1.
+

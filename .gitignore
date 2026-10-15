@@ -13,6 +13,7 @@ node_modules/
 web/dist/
 web/public/basemap/
 web/public/catalog/
+web/public/clim/
 web/public/sw-manifest.json
 
 # --- Catálogo generado (se reconstruye con scripts/sync-catalog.sh) ---
@@ -26,6 +27,9 @@ composeApp/src/jsMain/resources/catalog/
 # --- Python ---
 __pycache__/
 *.pyc
+
+# --- Climatología: caché de descargas (los .bin/clim.json sí se commitean) ---
+data/clim/raw/
 
 # --- IDE / OS ---
 .idea/
