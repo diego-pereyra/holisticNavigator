@@ -321,3 +321,50 @@ Commit `T11.5: temas Día, Noche y Rojo`.
 6. Prueba: los tres temas sin ningún color fuera de la tabla en la UI (inspección); en Día, texto
    principal con contraste ≥ 7:1 sobre el panel; en Rojo no hay ningún píxel blanco ni azul; Auto
    cambia a Noche al anochecer con una posición simulada.
+
+## Orden vigente (Diego, 2026-10-15, tras docs/06-posicionamiento.md)
+
+SIM (en curso) → PS-1 Planificador de salida → PN-1 Puente con Navionics → E8 pilot charts →
+E11.4 rutas propias → E13 paquetes de pronóstico → E12 enrutado → E7 avisos NHC → E10.4 zonas.
+
+## PS-1 — Planificador de salida
+
+Archivos: `web/src/core/catalog.ts` (+test), `web/src/ui/app.ts`, `web/public/app.css`.
+Commit `PS-1: planificador de salida`.
+
+1. `core/catalog.ts`: `export function monthScore(e: { bestMonths, stormMonths }, m: number): { score: 0|1|2|3, label }`
+   3 = mejor época sin ciclones ("✔ ideal"), 2 = mejor época con ciclones posibles ("✔ con cuidado"),
+   1 = fuera de época sin ciclones ("— posible"), 0 = temporada de ciclones fuera de época ("⚠ evitar").
+   Tests: los 4 casos.
+2. Ficha, bloque "Cuándo": debajo de la tira de meses, una fila de 12 tarjetas chicas (scroll
+   horizontal en móvil, 2 filas de 6 en escritorio) con inicial del mes, color por score (verde
+   #2E7D32 / verde claro #66BB6A / gris / rojo #C62828) y la etiqueta; la del mes de planificación
+   con borde. Tocar una tarjeta cambia el mes de planificación (igual que la tira).
+   Cuando exista ADR-009 (E8), la tarjeta sumará viento medio, corriente y riesgo en ruta.
+3. Pestaña Rutas: chip "Salgo en {mes}" (usa el mes de planificación; tocar abre el selector de
+   mes). Activo: la lista se ordena por score descendente y cada fila muestra la etiqueta del
+   score en vez de la insignia simple. El filtro se combina con cuenca, búsqueda y cerca de mí.
+4. Aquí: en "Rutas que te pasan cerca", la etiqueta del score del mes al lado de cada ruta.
+5. Prueba: AN12 con mes octubre → "⚠ evitar"; chip "Salgo en octubre" en Atlántico Norte → arriba
+   aparecen las rutas con "✔ ideal" (p. ej. las de otoño hacia el sur).
+6. npm test, build-web.sh, commit, push, PARÁ.
+
+## PN-1 — Puente con Navionics (y cualquier plotter)
+
+Archivos: `web/src/core/gpx.ts` (+test), `web/src/platform/download.ts`, `web/src/ui/app.ts`.
+Commit `PN-1: exportar a Navionics y detección de duplicados al importar`.
+
+1. Exportación: el botón "Exportar GPX" pasa a "Enviar a plotter". Genera el GPX de la variante
+   elegida (ya existe: `<rte>` con nombres, `<copyright>`) con nombre de archivo
+   `AN12A-Falmouth-Newport.gpx` y nombre de ruta dentro del GPX `AN12A Falmouth-Newport`
+   (sin caracteres fuera de ASCII en el nombre de archivo). Si `navigator.canShare?.({ files })`
+   existe, usa la hoja de compartir del sistema (`navigator.share({ files: [File], title })`):
+   en Android/iOS aparece Navionics como destino. Si no, descarga como hoy.
+2. Lo mismo para rutas propias/importadas y para la bitácora ("Enviar track").
+3. Importación: al importar un GPX con el mismo nombre o con ≥ 90 % de puntos coincidentes
+   (± 0,05 nm) con una ruta ya importada, preguntar "Ya tenés esta ruta. ¿Reemplazar?" (banda
+   inferior con Reemplazar / Guardar como nueva), sin modal. Test del detector de duplicados.
+4. Ayuda: línea "Enviá cualquier ruta a Navionics con el botón Enviar a plotter".
+5. Prueba: en Android, Enviar a plotter → hoja de compartir → Navionics abre la ruta con sus
+   waypoints nombrados; en escritorio descarga el archivo.
+6. npm test, build-web.sh, commit, push, PARÁ.
