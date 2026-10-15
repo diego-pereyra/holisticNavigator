@@ -631,3 +631,17 @@ E14.4 estilo S-52 mínimo y zona NOAA ENC.
 | E15.4 Plugin OpenCPN | plugin C++ (plantilla oficial) que muestra el planificador de salida y las pilot charts como panel y dibuja rutas de Cornell sobre cualquier carta, incluidas o-charts | alto, proyecto aparte |
 
 No viable: embeber el motor de cartas de OpenCPN ni leer o-charts fuera de OpenCPN.
+
+
+## E16 · Mareas y corrientes de marea sin red (camino al plotter)
+
+Armónicos públicos (XTide `harmonics-dwf`, dominio público; ~5 000 estaciones) empaquetados por
+zona (~50 KB por zona). `core/tides.ts`: predicción de altura y corriente por estación y hora
+(suma de constituyentes), test contra tablas conocidas. UI: estaciones como capa `tide-station` desde
+zoom 8; tocar una → curva del día y próximas pleamar/bajamar; en la ficha de puerto de destino, la
+marea a la ETA. Tareas: E16.1 datos por zona · E16.2 motor y tests · E16.3 UI.
+
+## Camino al plotter (orden tras E12)
+
+E15.2 SignalK → E15.3 AIS → E14.1–E14.4 cartas propias y NOAA ENC → E16 mareas → E11 herramientas
+de carta → ADR-010 Capacitor (segundo plano, NMEA TCP).

@@ -25,9 +25,12 @@ Un solo lugar donde la **posición determina el contexto**: con una coordenada s
 estás, qué avisos te aplican, qué pilot chart te corresponde, qué rutas de Cornell son relevantes y
 qué estación local armar.
 
-## Qué somos y qué no (revisado 2026-10-13)
+## Qué somos y qué no (revisado 2026-10-15)
 
-Somos **casi un plotter**: planificamos la travesía y después la acompañamos en tiempo real
+**Horizonte (Diego, 2026-10-15): evolucionar a un plotter completo** basado en datos abiertos y
+cartas oficiales gratuitas o convertidas por el usuario, alimentado por los datos del barco
+(SignalK/NMEA: GPS, viento, profundidad, AIS), con mareas sin red y app instalada. El camino está en
+`docs/04-backlog-ux.md` (E11, E14, E15, E16, ADR-010). Hoy somos **casi un plotter**: planificamos la travesía y después la acompañamos en tiempo real
 (seguir ruta, ETA, alarmas, fondeo, hombre al agua, carta de detalle offline por zonas, balizas y
 batimetría de datos abiertos). Lo que **no** somos:
 
