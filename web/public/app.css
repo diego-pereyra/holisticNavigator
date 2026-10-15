@@ -16,6 +16,15 @@
   --hn-best: #2979FF;
   --hn-storm: #f0a419;
   --hn-off: #47596e;
+  /* Escala del planificador de salida (PS-1): 3 ideal, 2 con cuidado, 1 posible, 0 evitar. */
+  --hn-s3: #2E7D32;
+  --hn-s3-ink: #ffffff;
+  --hn-s2: #66BB6A;
+  --hn-s2-ink: #05121f;
+  --hn-s1: #47596e;
+  --hn-s1-ink: #e8f1fa;
+  --hn-s0: #C62828;
+  --hn-s0-ink: #ffffff;
   --hn-review: #b98cff;
   --hn-glass: rgba(9, 18, 30, 0.92);
   --hn-shadow: rgba(0, 0, 0, 0.4);
@@ -118,6 +127,14 @@ html[data-theme="red"] {
   --hn-best: #ff5252;
   --hn-storm: #ff8a80;
   --hn-off: #7a1a1a;
+  --hn-s3: #ff8a80;
+  --hn-s3-ink: #000000;
+  --hn-s2: #ff8a80;
+  --hn-s2-ink: #000000;
+  --hn-s1: #7a1a1a;
+  --hn-s1-ink: #ff3b30;
+  --hn-s0: #ff5252;
+  --hn-s0-ink: #000000;
   --hn-review: #ff8a80;
   --hn-glass: rgba(10, 0, 0, 0.92);
   --hn-shadow: rgba(0, 0, 0, 0.6);
@@ -914,6 +931,113 @@ html[data-theme="red"] {
   font-size: 11px;
   padding: 2px 8px;
   border-radius: 4px;
+}
+
+/* PS-1 #2: tarjetas de score del mes. Móvil: una fila con scroll horizontal;
+   escritorio (≥ 700px): dos filas de 6. */
+.hn-scores {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 84px;
+  gap: 4px;
+  margin-top: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.hn-score {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 44px;
+  padding: 5px 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  cursor: pointer;
+}
+.hn-score-m {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+}
+.hn-score-l {
+  font-size: 9px;
+  line-height: 1.1;
+  text-align: center;
+}
+.hn-score-3 {
+  background: var(--hn-s3);
+  color: var(--hn-s3-ink);
+}
+.hn-score-2 {
+  background: var(--hn-s2);
+  color: var(--hn-s2-ink);
+}
+.hn-score-1 {
+  background: var(--hn-s1);
+  color: var(--hn-s1-ink);
+}
+.hn-score-0 {
+  background: var(--hn-s0);
+  color: var(--hn-s0-ink);
+}
+.hn-score.on {
+  outline: 2px solid var(--hn-accent);
+  outline-offset: 1px;
+}
+@media (min-width: 700px) {
+  .hn-scores {
+    grid-auto-flow: row;
+    grid-auto-columns: auto;
+    grid-template-columns: repeat(6, 1fr);
+    overflow-x: visible;
+  }
+  .hn-score-l {
+    font-size: 10px;
+  }
+}
+
+/* PS-1 #3/#4: etiqueta del score en las filas de la lista. */
+.hn-score-tag {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 8px;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.hn-score-tag-3 {
+  background: var(--hn-s3);
+  color: var(--hn-s3-ink);
+}
+.hn-score-tag-2 {
+  background: var(--hn-s2);
+  color: var(--hn-s2-ink);
+}
+.hn-score-tag-1 {
+  background: var(--hn-s1);
+  color: var(--hn-s1-ink);
+}
+.hn-score-tag-0 {
+  background: var(--hn-s0);
+  color: var(--hn-s0-ink);
+}
+
+/* PS-1 #3: selector del mes de planificación. */
+.hn-month-menu {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  max-width: 260px;
+}
+.hn-month-menu .hn-chip {
+  justify-content: center;
+}
+.hn-month-menu .hn-month-hoy {
+  grid-column: 1 / -1;
+  min-width: 0;
+  justify-content: center;
 }
 
 .hn-modal {

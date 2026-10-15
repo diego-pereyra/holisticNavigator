@@ -225,3 +225,25 @@ export function monthVerdict(best: number[], storms: number[], month: number): M
   return "off";
 }
 
+// PS-1 #1: cuán conveniente es salir en un mes dado, para ordenar la lista de
+// rutas y mostrar la etiqueta al lado de cada una.
+export interface MonthScore {
+  score: 0 | 1 | 2 | 3;
+  label: string;
+}
+
+export function monthScore(
+  e: { bestMonths: number[]; stormMonths: number[] },
+  month: number,
+): MonthScore {
+  const best = e.bestMonths.includes(month);
+  const storm = e.stormMonths.includes(month);
+  if (best) {
+    return storm
+      ? { score: 2, label: "✔ con cuidado" }
+      : { score: 3, label: "✔ ideal" };
+  }
+  if (storm) return { score: 0, label: "⚠ evitar" };
+  return { score: 1, label: "— posible" };
+}
+

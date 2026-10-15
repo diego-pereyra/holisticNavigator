@@ -30,6 +30,7 @@ import type { Map as MlMap, GeoJSONSource, FilterSpecification, MapMouseEvent } 
 import { signal, computed, effect, untracked, type Signal } from "../core/store.ts";
 import {
   filterEntries,
+  monthScore,
   monthVerdict,
   type CatalogIndex,
   type IndexEntry,
@@ -167,6 +168,9 @@ interface UiState {
   query: Signal<string>;
   region: Signal<string>;
   nearMe: Signal<boolean>;
+  // PS-1 #3: "Salgo en {mes}" activo → la lista de Rutas se ordena por score del
+  // mes de planificación y muestra la etiqueta en vez de la insignia simple.
+  departSort: Signal<boolean>;
   imported: Signal<ImportedRoute[]>;
   voyage: Signal<VoyageLog | null>;
   recording: Signal<boolean>;
@@ -223,6 +227,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     query: signal(""),
     region: signal(""),
     nearMe: signal(false),
+    departSort: signal(false),
     imported: signal<ImportedRoute[]>([]),
     voyage: signal<VoyageLog | null>(null),
     recording: signal(false),
@@ -1016,6 +1021,9 @@ const sim = {
   raf: null as number | null,
   lastTs: 0,
   lastApply: 0,
+  // Reloj simulado (PS-1 #0): t = t0 + horas recorridas a 6 kn. La posición
+  // simulada usa ese reloj, no el de la máquina.
+  t0: 0,
   row: null as HTMLElement | null,
   playBtn: null as HTMLButtonElement | null,
   speedBtn: null as HTMLButtonElement | null,
@@ -1085,9 +1093,12 @@ function simApply(): void {
   const at = pointAlongTrack(track, sim.doneNm);
   if (!at) return;
   const [lon, lat] = at;
-  // nm/s del avance a velocidad x1, pasados a m/s para que SOG y ETA muestren números.
-  const speedMps = (sim.totalNm / 90) * sim.speed * 1852;
-  const pos: Position = { lat, lon, accuracyM: 0, source: "simulated", t: Date.now() };
+  // PS-1 #0: velocidad fija 6 kn (3,086666… m/s) para que SOG muestre 6 kn.
+  const speedMps = 6 * 1852 / 3600;
+  // Reloj simulado: t = t0 + (nm recorridas / 6 kn) en ms. Así la ETA es realista
+  // aunque el recorrido vaya a x64.
+  const tSim = sim.t0 + (sim.doneNm / 6) * 3_600_000;
+  const pos: Position = { lat, lon, accuracyM: 0, source: "simulated", t: tSim };
   ui.position.set(pos);
   setSource(ui.map, "me", featureCollection([pointFeature(lon, lat)]));
   pushFix(ui, pos, speedMps);
@@ -1134,6 +1145,8 @@ function simOpen(ui: UiState, d: RouteDetail, head: HTMLElement): void {
   sim.pausedByVisibility = false;
   sim.lastTs = 0;
   sim.lastApply = 0;
+  // El reloj simulado arranca acá: t = t0 + (nm recorridas / 6 kn) en ms.
+  sim.t0 = Date.now();
   sim.prevPosition = ui.position();
   sim.prevGps = ui.gpsStop !== null;
   sim.prevStatus = ui.gpsStatus();
@@ -1158,6 +1171,7 @@ function simToggle(): void {
     sim.finished = false;
     sim.doneNm = 0;
     sim.lastApply = 0;
+    sim.t0 = Date.now();
     simApply();
   }
   sim.pausedByVisibility = false;
@@ -1183,6 +1197,7 @@ function simReset(): void {
   sim.finished = false;
   sim.lastTs = 0;
   sim.lastApply = 0;
+  sim.t0 = Date.now();
   simApply();
   simUpdateRow();
 }
@@ -1507,7 +1522,7 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
         const list = el("div", { class: "hn-list" });
         for (const n of ctx.nearby) {
           const e = entryOf(ui, n.code);
-          if (e) list.append(routeRow(ui, e, n.distanceNm, n.nearestWp));
+          if (e) list.append(routeRow(ui, e, n.distanceNm, n.nearestWp, true));
         }
         nodes.push(list);
       }
@@ -1973,7 +1988,10 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
       return;
     }
     const state = ui.sheet();
-    if (!autoPeekDone && (state === "half" || state === "full") && sustainedSog(ui.navFixes, Date.now())) {
+    // PS-1 #0: con el reloj simulado las fijas van "en el futuro" y sustainedSog
+    // daría verdadero al toque, colapsando la hoja y tapando los controles del
+    // simulador. Mientras el simulador corre, no hay auto-peek.
+    if (!autoPeekDone && !sim.ui && (state === "half" || state === "full") && sustainedSog(ui.navFixes, Date.now())) {
       autoPeekDone = true;
       ui.sheet.set("peek");
     }
@@ -2151,7 +2169,13 @@ function remainingToDest(coords: [number, number][], fix: NavFix): number {
   return sum;
 }
 
-function routeRow(ui: UiState, e: IndexEntry, distanceNm?: number, nearestWp?: string): HTMLElement {
+function routeRow(
+  ui: UiState,
+  e: IndexEntry,
+  distanceNm?: number,
+  nearestWp?: string,
+  showScoreLabel = false,
+): HTMLElement {
   const row = el("button", { class: "hn-row" });
   const main = el("div", { class: "hn-row-main" });
   main.append(el("div", { class: "hn-row-title" }, `${e.code} · ${e.title}`));
@@ -2161,9 +2185,21 @@ function routeRow(ui: UiState, e: IndexEntry, distanceNm?: number, nearestWp?: s
       : `${e.from} → ${e.to} · ${rangeNm(e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`;
   main.append(el("div", { class: "hn-row-sub" }, sub));
   if (ui.region() === "" && e.region) main.append(el("div", { class: "hn-row-region" }, e.region));
-  row.append(main, monthBadge(e, ui.month()));
+  // PS-1: con el orden por mes de salida (o en "Rutas que te pasan cerca") la
+  // insignia simple se reemplaza por la etiqueta del score del mes.
+  row.append(showScoreLabel ? scoreTag(e, ui.month()) : monthBadge(e, ui.month()));
   row.addEventListener("click", () => openRoute(ui, e.code));
   return row;
+}
+
+// PS-1 #4: etiqueta del score del mes de planificación, al lado de la ruta.
+function scoreTag(e: IndexEntry, month: number): HTMLElement {
+  const s = monthScore(e, month);
+  return el(
+    "span",
+    { class: `hn-score-tag hn-score-tag-${s.score}`, title: `${MONTH_NAME[month - 1] ?? ""}: ${s.label}` },
+    s.label,
+  );
 }
 
 function monthBadge(e: IndexEntry, month: number): HTMLElement {
@@ -2231,6 +2267,17 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
       ui.nearMe.set(!ui.nearMe());
       list.scrollTop = 0;
     });
+    // PS-1 #3: "Salgo en {mes}": ordena por el score del mes de planificación y
+    // abre el selector de mes al activarse.
+    add(`Salgo en ${MONTH_NAME[ui.month() - 1] ?? ""}`, ui.departSort(), () => {
+      if (ui.departSort()) {
+        ui.departSort.set(false);
+        return;
+      }
+      ui.departSort.set(true);
+      list.scrollTop = 0;
+      openMonthPicker(ui);
+    });
     for (const r of uniqueRegions(ui)) {
       add(r, ui.region() === r, () => {
         ui.region.set(ui.region() === r ? "" : r);
@@ -2242,6 +2289,8 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
   const refresh = (): void => {
     clear(list);
     const pos = ui.position();
+    const month = ui.month();
+    const byScore = ui.departSort();
     if (ui.nearMe() && pos) {
       const scored = filterEntries(ui.index, { query: ui.query(), region: ui.region() })
         .map((e) => ({ e, d: bboxDistanceNm(e, pos.lat, pos.lon) }))
@@ -2249,14 +2298,19 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
         .sort((a, b) => a.d - b.d);
       setCount(scored.length);
       if (scored.length === 0) list.append(el("p", { class: "hn-muted" }, "Sin rutas a menos de 600 nm."));
-      for (const { e, d } of scored.slice(0, 80)) list.append(routeRow(ui, e, d));
+      for (const { e, d } of scored.slice(0, 80)) list.append(routeRow(ui, e, d, undefined, byScore));
     } else {
       const items = filterEntries(ui.index, { query: ui.query(), region: ui.region() });
-      setCount(items.length);
-      if (items.length === 0) {
+      // PS-1 #3: el orden por score combina con búsqueda y cuenca (y con "cerca
+      // de mí", donde manda la distancia). El sort es estable: empate = orden del índice.
+      const ordered = byScore
+        ? items.slice().sort((a, b) => monthScore(b, month).score - monthScore(a, month).score)
+        : items;
+      setCount(ordered.length);
+      if (ordered.length === 0) {
         list.append(el("p", { class: "hn-muted" }, "Sin resultados."));
       } else {
-        for (const e of items.slice(0, 120)) list.append(routeRow(ui, e));
+        for (const e of ordered.slice(0, 120)) list.append(routeRow(ui, e, undefined, undefined, byScore));
       }
     }
     const imported = ui.imported();
@@ -2282,12 +2336,15 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
     list.scrollTop = 0;
   });
 
-  // Chips y lista se redibujan al cambiar cuenca, "cerca de mí" o importadas.
+  // Chips y lista se redibujan al cambiar cuenca, "cerca de mí", el mes de
+  // planificación, el orden por mes o las importadas.
   // La búsqueda se refresca en el handler de input; se conserva el scroll.
   cleanup.push(
     effect(() => {
       ui.imported();
       ui.region();
+      ui.month();
+      ui.departSort();
       const near = ui.nearMe();
       if (near) ui.position();
       const top = list.scrollTop;
@@ -2332,6 +2389,37 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
 
 function variantLabel(id: string, code: string): string {
   return id.startsWith(code) ? id.slice(code.length) || id : id;
+}
+
+// PS-1 #3: selector del mes de planificación (12 chips + "Hoy"). Mismo patrón de
+// menú flotante y cierre por clic afuera que el chip de posición.
+function openMonthPicker(ui: UiState, onChange?: () => void): void {
+  const menu = el("div", { class: "hn-menu hn-month-menu" });
+  const pick = (month: number): void => {
+    ui.month.set(month);
+    menu.remove();
+    onChange?.();
+  };
+  for (let m = 1; m <= 12; m++) {
+    const chip = el(
+      "button",
+      { class: `hn-chip${ui.month() === m ? " on" : ""}`, type: "button", title: MONTH_NAME[m - 1] ?? "" },
+      MONTH_ABBR[m - 1] ?? "",
+    );
+    chip.addEventListener("click", () => pick(m));
+    menu.append(chip);
+  }
+  const hoy = el("button", { class: "hn-btn hn-month-hoy", type: "button" }, "Hoy");
+  hoy.addEventListener("click", () => pick(currentMonthUtc()));
+  menu.append(hoy);
+  document.body.appendChild(menu);
+  const rm = (ev: Event): void => {
+    if (!menu.contains(ev.target as Node)) {
+      menu.remove();
+      document.removeEventListener("click", rm);
+    }
+  };
+  setTimeout(() => document.addEventListener("click", rm), 0);
 }
 
 function showImported(ui: UiState, r: ImportedRoute): void {
@@ -2728,38 +2816,65 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   }
 }
 
+// PS-1 #2: tira de meses + fila de tarjetas chicas con el score del mes. Tocar
+// cualquiera de las dos cambia el mes de planificación.
 function monthStrip(ui: UiState, d: RouteDetail, onChange?: () => void): HTMLElement {
+  const w = d.whenInfo;
   const strip = el("div", { class: "hn-months" });
-  const buttons: HTMLElement[] = [];
+  const scores = el("div", { class: "hn-scores" });
+  const monthBtns: HTMLElement[] = [];
+  const scoreBtns: HTMLElement[] = [];
+
   const apply = (): void => {
+    const cur = ui.month();
     for (let m = 1; m <= 12; m++) {
-      const v = monthVerdict(d.whenInfo.bestMonths, d.whenInfo.stormMonths, m);
-      const b = buttons[m - 1]!;
-      b.className = `hn-month hn-month-${v}${ui.month() === m ? " on" : ""}`;
+      const on = cur === m ? " on" : "";
+      monthBtns[m - 1]!.className = `hn-month hn-month-${monthVerdict(w.bestMonths, w.stormMonths, m)}${on}`;
+      const s = monthScore(w, m);
+      const card = scoreBtns[m - 1]!;
+      card.className = `hn-score hn-score-${s.score}${on}`;
+      card.setAttribute("aria-pressed", cur === m ? "true" : "false");
     }
   };
+  const pick = (m: number): void => {
+    ui.month.set(m);
+    apply();
+    onChange?.();
+  };
+
   for (let m = 1; m <= 12; m++) {
-    const v = monthVerdict(d.whenInfo.bestMonths, d.whenInfo.stormMonths, m);
+    const on = ui.month() === m ? " on" : "";
     const b = el(
       "button",
-      { class: `hn-month hn-month-${v}${ui.month() === m ? " on" : ""}`, title: MONTH_NAME[m - 1] ?? "" },
+      { class: `hn-month hn-month-${monthVerdict(w.bestMonths, w.stormMonths, m)}${on}`, title: MONTH_NAME[m - 1] ?? "", type: "button" },
       MONTH_INITIAL[m - 1] ?? "",
     );
-    b.addEventListener("click", () => {
-      ui.month.set(m);
-      apply();
-      onChange?.();
-    });
-    buttons.push(b);
+    b.addEventListener("click", () => pick(m));
+    monthBtns.push(b);
     strip.append(b);
+
+    const s = monthScore(w, m);
+    const card = el("button", {
+      class: `hn-score hn-score-${s.score}${on}`,
+      title: `${MONTH_NAME[m - 1] ?? ""}: ${s.label}`,
+      type: "button",
+    });
+    card.append(
+      el("span", { class: "hn-score-m" }, MONTH_INITIAL[m - 1] ?? ""),
+      el("span", { class: "hn-score-l" }, s.label),
+    );
+    card.addEventListener("click", () => pick(m));
+    scoreBtns.push(card);
+    scores.append(card);
   }
+
   const legend = el("div", { class: "hn-months-legend" });
   legend.append(
     el("span", { class: "hn-month hn-month-best" }, "buena"),
     el("span", { class: "hn-month hn-month-storm" }, "ciclones"),
     el("span", { class: "hn-month hn-month-off" }, "fuera"),
   );
-  return el("div", { class: "hn-months-wrap" }, strip, legend);
+  return el("div", { class: "hn-months-wrap" }, strip, legend, scores);
 }
 
 // ------------------------------------------------------------ pestaña Travesía
