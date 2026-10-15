@@ -1,28 +1,23 @@
 ADELANTE
 
-TAREA ÚNICA: E9.4 — parte diario de la travesía y notas.
+TAREA ÚNICA: SIM — "Recorrer la ruta": simulador real (faltaba desde W4.1 #3).
 
-Archivos: web/src/core/voyage.ts (+test), web/src/ui/app.ts, web/src/core/gpx.ts (+test), web/public/app.css.
+Archivos: web/src/ui/app.ts, web/public/app.css. core/navigation.ts ya tiene trackLengthNm y
+pointAlongTrack: usarlos.
 
-1. core/voyage.ts:
-   export interface Note { t: number; lat: number; lon: number; text: string }
-   VoyageLog gana `notes: Note[]` (compatibilidad: si falta, []).
-   export function dailyReport(log, nowMs, remainingNm?: number): {
-     nm24h, avgKn24h, avgCogDeg24h, totalNm, hours, daysToGo? (remainingNm / (nm24h o avg total) )
-   }  — nm24h sobre los puntos de las últimas 24 h; avgCog con media vectorial. Tests: track
-   sintético de 48 h a 6 kn rumbo 090 → nm24h 144 ±1, avgKn 6,0, cog 90.
-2. core/gpx.ts: voyageToGpx incluye las notas como <wpt lat lon><time>…</time><name>Nota</name>
-   <desc>{text}</desc></wpt> antes del <trk>. Test.
-3. Pestaña Travesía:
-   - Tarjeta "Parte diario" arriba: `Últimas 24 h: 144 nm · 6,0 kn · rumbo medio 090°` ·
-     `Total: 812 nm en 5 d 14 h` · si hay ruta activa: `Faltan 1 230 nm · ~8,5 días a este ritmo`.
-     Botón "Copiar parte" → texto plano en el portapapeles con fecha, posición, esas tres líneas y
-     la última nota; confirmación "Copiado".
-   - Botón "+ Nota": campo de una línea + "Guardar"; guarda con hora y posición actual (o última).
-   - Línea de tiempo debajo: cada nota con `dd/mm hh:mm · lat lon · texto`; borrar con "×" y
-     deshacer 8 s (banda hn-undo reutilizable: "Nota borrada · Deshacer").
-   - "Nueva travesía" archiva (ya existe) con sus notas; las archivadas se listan con nombre,
-     fechas, millas y botón Exportar GPX.
-4. Prueba: grabar con posición simulada (Recorrer) 2 minutos, agregar dos notas, Copiar parte →
-   pegado legible; exportar GPX → abre en OpenCPN con el track y dos waypoints de nota.
-5. npm test, build-web.sh, commit "E9.4: parte diario y notas", push, PARÁ.
+1. Botón "Recorrer" de la ficha: abre bajo las acciones una fila `hn-sim` con: ▶/⏸ · velocidad
+   (chip que rota x4 → x16 → x64, defecto x4) · ↺ Reiniciar · `123 / 3 309 nm` · ✕ Terminar.
+2. Al iniciar: ui.gpsStop?.(); la posición pasa a source "simulated" (color ámbar #FF8F00, chip
+   "simulada"); la variante elegida se vuelve ruta activa (como Seguir), así la tira Navegando,
+   las alarmas y la bitácora funcionan igual que con GPS real.
+3. Avance con requestAnimationFrame: nm += (total/90 s) × factor × dt; a velocidad x4 una ruta
+   entera dura 90/4 ≈ 22 s; al llegar al final se detiene (no da la vuelta). Pausa automática en
+   `visibilitychange` → hidden, reanuda al volver. Cada paso llama a la misma ruta de entrada
+   que un fix de GPS (pushFix + posición), con `speedMps` derivado del avance para que SOG/ETA
+   muestren números.
+4. ✕ Terminar: detiene, limpia la posición simulada, restaura la fuente anterior (si era GPS,
+   reanuda el watch) y deja de seguir la ruta.
+5. Prueba: AN12 → Recorrer → la tira muestra waypoint, rumbo, SOG ≈ decenas de kn a x16 y ETA;
+   grabar bitácora durante el recorrido y Copiar parte → números coherentes; ✕ vuelve al GPS.
+6. npm test, build-web.sh, commit "SIM: Recorrer la ruta con simulador", push, PARÁ.
+   En BLOCKERS.md marcá el pendiente de E9.4 como resuelto por esta tarea.
