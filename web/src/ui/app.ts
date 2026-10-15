@@ -42,6 +42,7 @@ import {
   type Basin,
   type VariantGeometry,
 } from "../core/context.ts";
+import { loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
 import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
 import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix } from "../core/navigation.ts";
@@ -89,6 +90,18 @@ import {
   rangeNm,
 } from "./format.ts";
 import { resolveTheme, THEME_LABEL, THEME_ORDER, themeIcon, type ThemeChoice, type ThemeName } from "./theme.ts";
+import {
+  clearWeather,
+  initWeatherLayers,
+  summarizeRoute,
+  updateWeather,
+  WEATHER_LABEL,
+  WEATHER_ORDER,
+  WX_WIND_COLORS,
+  WX_WIND_STOPS,
+  type RouteWindSummary,
+  type WeatherMode,
+} from "./weather.ts";
 
 type TabName = "aqui" | "rutas" | "travesia";
 type SheetState = "peek" | "half" | "full";
@@ -180,6 +193,11 @@ interface UiState {
   theme: Signal<ThemeChoice>;
   redAtNight: Signal<boolean>;
   now: Signal<number>;
+  // E8.3: modo del interruptor "Tiempo", caché de meses de climatología ya
+  // cargados y cargas en curso (para no pedir el mismo mes dos veces).
+  weather: Signal<WeatherMode>;
+  clim: Map<number, ClimMonth>;
+  climInFlight: Map<number, Promise<ClimMonth | null>>;
   navFixes: Fix[];
   settings: Settings;
   zones?: ZoneHooks;
@@ -237,6 +255,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     theme: signal<ThemeChoice>("auto"),
     redAtNight: signal<boolean>(false),
     now: signal(Date.now()),
+    weather: signal<WeatherMode>("off"),
+    clim: new Map(),
+    climInFlight: new Map(),
     navFixes: [],
     settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false },
     zones: deps.zones,
@@ -262,7 +283,15 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   let moveTimer: number | undefined;
   map.on("moveend", () => {
     if (moveTimer !== undefined) window.clearTimeout(moveTimer);
-    moveTimer = window.setTimeout(() => applyCatalogFilter(ui), 300);
+    moveTimer = window.setTimeout(() => {
+      applyCatalogFilter(ui);
+      // E8.3: la climatología se dibuja solo en la vista actual; al mover el
+      // mapa hay que repintar las celdas visibles.
+      if (ui.weather() === "pilot") {
+        const clim = ui.clim.get(ui.month());
+        if (clim) updateWeather(ui.map, clim, ui.month());
+      }
+    }, 300);
   });
   effect(() => {
     ui.query();
@@ -270,6 +299,20 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     ui.nearMe();
     ui.catalog();
     applyCatalogFilter(ui);
+  });
+
+  // E8.3: al cambiar de modo o de mes, encender Pilot chart carga (y cachea) el
+  // mes de planificación y repinta; apagar limpia las capas.
+  effect(() => {
+    const mode = ui.weather();
+    const month = ui.month();
+    if (mode !== "pilot") {
+      clearWeather(ui.map);
+      return;
+    }
+    const cached = ui.clim.get(month);
+    if (cached) updateWeather(ui.map, cached, month);
+    else void ensureClim(ui, month);
   });
 
   const root = el("div", { id: "hn-ui" });
@@ -295,6 +338,13 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   const scaleNote = el("div", { class: "hn-scale-note" });
   scaleNote.hidden = true;
   root.append(scaleNote);
+
+  // E8.3: leyenda compacta abajo a la izquierda cuando el interruptor "Tiempo"
+  // no está apagado (rampa de nudos, aviso de flechas tenues y rayado).
+  const wxLegend = el("div", { class: "hn-wx-legend" });
+  wxLegend.hidden = true;
+  root.append(wxLegend);
+  effect(() => renderWeatherLegend(wxLegend, ui.weather(), ui.month()));
 
   // E9.3: botón flotante de hombre al agua. Mantener apretado 600 ms marca la
   // caída con la posición actual (un toque suelto no hace nada).
@@ -571,6 +621,10 @@ function installBaseLayers(map: MlMap): void {
     layout: { visibility: "none" },
     paint: { "raster-opacity": 0.9 },
   });
+
+  // Pilot charts (E8.3, ADR-009): las capas wx-* van por encima de las balizas
+  // y por debajo de catálogo, rutas y posición (nada tapa rutas ni avisos).
+  initWeatherLayers(map);
 
   for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp", "anchor", "mob"]) {
     map.addSource(id, { type: "geojson", data: empty });
@@ -1309,13 +1363,78 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
     themeBtn.setAttribute("aria-label", `Tema ${THEME_LABEL[choice]}. Tocar para cambiar.`);
     themeBtn.addEventListener("click", () => cycleTheme(ui));
 
-    bar.append(where, when, themeBtn, chip);
+    // E8.3: interruptor "Tiempo" (icono viento): apagado · Pilot chart · Pronóstico.
+    const wxMode = ui.weather();
+    const wxBtn = el("button", { class: "hn-ctx-wx", type: "button" });
+    wxBtn.textContent = "≈";
+    if (wxMode !== "off") wxBtn.classList.add("on");
+    wxBtn.title = `Tiempo: ${WEATHER_LABEL[wxMode]}. Tocar para cambiar.`;
+    wxBtn.setAttribute("aria-label", `Tiempo: ${WEATHER_LABEL[wxMode]}. Tocar para cambiar.`);
+    wxBtn.addEventListener("click", () => cycleWeather(ui));
+
+    bar.append(where, when, wxBtn, themeBtn, chip);
   });
 }
 
 function cycleTheme(ui: UiState): void {
   const i = THEME_ORDER.indexOf(ui.theme());
   ui.theme.set(THEME_ORDER[(i + 1) % THEME_ORDER.length] ?? "auto");
+}
+
+// E8.3: ciclo del interruptor "Tiempo" (Apagado → Pilot chart → Pronóstico).
+function cycleWeather(ui: UiState): void {
+  const i = WEATHER_ORDER.indexOf(ui.weather());
+  ui.weather.set(WEATHER_ORDER[(i + 1) % WEATHER_ORDER.length] ?? "off");
+}
+
+// Carga y cachea el mes de climatología. Si ya está pedido, reusa la promesa en
+// curso; si falla (sin red y sin caché del SW), devuelve null sin romper la UI.
+function ensureClim(ui: UiState, month: number): Promise<ClimMonth | null> {
+  const cached = ui.clim.get(month);
+  if (cached) return Promise.resolve(cached);
+  const inFlight = ui.climInFlight.get(month);
+  if (inFlight) return inFlight;
+  const p = loadMonth(month)
+    .then((clim) => {
+      ui.clim.set(month, clim);
+      ui.climInFlight.delete(month);
+      if (ui.weather() === "pilot" && ui.month() === month) updateWeather(ui.map, clim, month);
+      return clim;
+    })
+    .catch(() => {
+      ui.climInFlight.delete(month);
+      return null;
+    });
+  ui.climInFlight.set(month, p);
+  return p;
+}
+
+// Leyenda del Pilot chart (ADR-009 §6): rampa de nudos, avisos y fuente.
+function renderWeatherLegend(host: HTMLElement, mode: WeatherMode, month: number): void {
+  clear(host);
+  if (mode === "off") {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  if (mode === "forecast") {
+    host.append(el("div", { class: "hn-wx-note" }, "Pronóstico: todavía no hay un paquete descargado."));
+    return;
+  }
+  const ramp = el("div", { class: "hn-wx-ramp" });
+  for (let i = 0; i < WX_WIND_STOPS.length; i++) {
+    const cell = el("div", { class: "hn-wx-cell" });
+    const sw = el("div", { class: "hn-wx-sw" });
+    sw.style.background = WX_WIND_COLORS[i] ?? "#888";
+    cell.append(sw, el("div", { class: "hn-wx-kn" }, String(WX_WIND_STOPS[i])));
+    ramp.append(cell);
+  }
+  host.append(
+    el("div", { class: "hn-wx-title" }, `Pilot chart · ${MONTH_NAME[month - 1] ?? ""}`),
+    ramp,
+    el("div", { class: "hn-wx-note" }, "flechas tenues = viento variable · rayado = ciclones"),
+    el("div", { class: "hn-wx-src" }, "ERA5 · OSCAR · IBTrACS (1991–2020)"),
+  );
 }
 
 function goTo(ui: UiState, tab: TabName): void {
@@ -2700,8 +2819,19 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     fact("Ciclones", w.stormsEs || "—"),
     el("div", { class: "hn-fact hn-fact-wide" }, el("div", { class: "hn-fact-k" }, "Veredicto del mes"), verdict),
   );
-  host.append(monthStrip(ui, d, () => (verdict.textContent = monthVerdictText(d, ui.month()))));
+  // E8.3: bajo "Cuándo", el dato de pilot chart que el libro no puede dar.
+  const wxLine = el("div", { class: "hn-wx-line hn-muted" });
+  const refreshWx = (): void => updateRouteWind(ui, wxLine, d);
+  host.append(
+    monthStrip(ui, d, () => {
+      verdict.textContent = monthVerdictText(d, ui.month());
+      refreshWx();
+    }),
+  );
   host.append(facts);
+  host.append(wxLine);
+  refreshWx();
+
   if (d.needsReview) {
     host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
   }
@@ -2815,6 +2945,38 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
       if (d.attribution) b.append(el("p", { class: "hn-attrib" }, d.attribution));
     });
   }
+}
+
+// E8.3: "Viento medio en ruta". Muestrea la climatología del mes a lo largo del
+// trazado elegido (60 nm) y arma la línea de la ficha. Si el mes no está en
+// caché, lo carga y vuelve a intentar.
+function updateRouteWind(ui: UiState, host: HTMLElement, d: RouteDetail): void {
+  const month = ui.month();
+  const g = selectedGeometry(ui, d.code);
+  if (!g || g.coords.length < 2) {
+    host.textContent = "";
+    return;
+  }
+  const route: ClimLineString = { type: "LineString", coordinates: g.coords };
+  const cached = ui.clim.get(month);
+  if (cached) {
+    host.textContent = routeWindText(summarizeRoute(cached, route), month);
+    return;
+  }
+  host.textContent = "Cargando viento medio en ruta…";
+  void ensureClim(ui, month).then((clim) => {
+    host.textContent = clim ? routeWindText(summarizeRoute(clim, route), month) : "";
+  });
+}
+
+function routeWindText(s: RouteWindSummary | null, month: number): string {
+  if (!s) return "";
+  const cur = s.currentKn.toFixed(1).replace(".", ",");
+  const dir = s.currentFwd ? "a favor" : "en contra";
+  return (
+    `Viento medio en ruta (${MONTH_NAME[month - 1] ?? ""}): ${Math.round(s.ws)} kn del ${s.dirLabel}, ` +
+    `constancia ${Math.round(s.st)} % · corriente ${dir} ${cur} kn · riesgo ciclónico: ${s.risk}`
+  );
 }
 
 // PS-1 #2: tira de meses + fila de tarjetas chicas con el score del mes. Tocar
