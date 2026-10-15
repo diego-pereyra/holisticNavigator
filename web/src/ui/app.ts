@@ -2188,7 +2188,7 @@ function routeRow(
   if (ui.region() === "" && e.region) main.append(el("div", { class: "hn-row-region" }, e.region));
   // PS-1: con el orden por mes de salida (o en "Rutas que te pasan cerca") la
   // insignia simple se reemplaza por la etiqueta del score del mes.
-  row.append(showScoreLabel ? scoreTag(e, ui.month()) : monthBadge(e, ui.month()));
+  row.append(main, showScoreLabel ? scoreTag(e, ui.month()) : monthBadge(e, ui.month()));
   row.addEventListener("click", () => openRoute(ui, e.code));
   return row;
 }
