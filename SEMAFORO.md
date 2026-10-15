@@ -1,23 +1,26 @@
 ADELANTE
 
-TAREA ÚNICA: SIM — "Recorrer la ruta": simulador real (faltaba desde W4.1 #3).
+TAREA ÚNICA: PS-1 — Planificador de salida.
 
-Archivos: web/src/ui/app.ts, web/public/app.css. core/navigation.ts ya tiene trackLengthNm y
-pointAlongTrack: usarlos.
+0. Ajuste previo al simulador (2 líneas): la posición simulada lleva speedMps = 6 kn (3,09 m/s) fijo y un reloj simulado: t = t0 + (nm recorridas / 6 kn) en ms. Así SOG muestra 6 kn y la ETA es realista aunque el recorrido vaya a x64.
 
-1. Botón "Recorrer" de la ficha: abre bajo las acciones una fila `hn-sim` con: ▶/⏸ · velocidad
-   (chip que rota x4 → x16 → x64, defecto x4) · ↺ Reiniciar · `123 / 3 309 nm` · ✕ Terminar.
-2. Al iniciar: ui.gpsStop?.(); la posición pasa a source "simulated" (color ámbar #FF8F00, chip
-   "simulada"); la variante elegida se vuelve ruta activa (como Seguir), así la tira Navegando,
-   las alarmas y la bitácora funcionan igual que con GPS real.
-3. Avance con requestAnimationFrame: nm += (total/90 s) × factor × dt; a velocidad x4 una ruta
-   entera dura 90/4 ≈ 22 s; al llegar al final se detiene (no da la vuelta). Pausa automática en
-   `visibilitychange` → hidden, reanuda al volver. Cada paso llama a la misma ruta de entrada
-   que un fix de GPS (pushFix + posición), con `speedMps` derivado del avance para que SOG/ETA
-   muestren números.
-4. ✕ Terminar: detiene, limpia la posición simulada, restaura la fuente anterior (si era GPS,
-   reanuda el watch) y deja de seguir la ruta.
-5. Prueba: AN12 → Recorrer → la tira muestra waypoint, rumbo, SOG ≈ decenas de kn a x16 y ETA;
-   grabar bitácora durante el recorrido y Copiar parte → números coherentes; ✕ vuelve al GPS.
-6. npm test, build-web.sh, commit "SIM: Recorrer la ruta con simulador", push, PARÁ.
-   En BLOCKERS.md marcá el pendiente de E9.4 como resuelto por esta tarea.
+
+Archivos: `web/src/core/catalog.ts` (+test), `web/src/ui/app.ts`, `web/public/app.css`.
+Commit `PS-1: planificador de salida`.
+
+1. `core/catalog.ts`: `export function monthScore(e: { bestMonths, stormMonths }, m: number): { score: 0|1|2|3, label }`
+   3 = mejor época sin ciclones ("✔ ideal"), 2 = mejor época con ciclones posibles ("✔ con cuidado"),
+   1 = fuera de época sin ciclones ("— posible"), 0 = temporada de ciclones fuera de época ("⚠ evitar").
+   Tests: los 4 casos.
+2. Ficha, bloque "Cuándo": debajo de la tira de meses, una fila de 12 tarjetas chicas (scroll
+   horizontal en móvil, 2 filas de 6 en escritorio) con inicial del mes, color por score (verde
+   #2E7D32 / verde claro #66BB6A / gris / rojo #C62828) y la etiqueta; la del mes de planificación
+   con borde. Tocar una tarjeta cambia el mes de planificación (igual que la tira).
+   Cuando exista ADR-009 (E8), la tarjeta sumará viento medio, corriente y riesgo en ruta.
+3. Pestaña Rutas: chip "Salgo en {mes}" (usa el mes de planificación; tocar abre el selector de
+   mes). Activo: la lista se ordena por score descendente y cada fila muestra la etiqueta del
+   score en vez de la insignia simple. El filtro se combina con cuenca, búsqueda y cerca de mí.
+4. Aquí: en "Rutas que te pasan cerca", la etiqueta del score del mes al lado de cada ruta.
+5. Prueba: AN12 con mes octubre → "⚠ evitar"; chip "Salgo en octubre" en Atlántico Norte → arriba
+   aparecen las rutas con "✔ ideal" (p. ej. las de otoño hacia el sur).
+6. npm test, build-web.sh, commit, push, PARÁ.
