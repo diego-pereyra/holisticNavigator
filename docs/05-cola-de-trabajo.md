@@ -437,4 +437,52 @@ Archivos: `web/src/ui/weather.ts`, `web/src/ui/weather.test.ts`.
 4. npm test (en `web/`), `bash scripts/build-web.sh`, commit "E13.7: puntas en olas y puntas
    de corriente más chicas", push, PARÁ.
 
-Después de E13.7 sigue E12.5 (isócronas en Web Worker + "Optimizar con el viento").
+Después de E13.7 sigue E12.5 (spec abajo).
+
+## E12.5 — Isócronas + "Optimizar con el viento", siempre sobre una copia (Diego, 2026-10-16)
+
+Regla de Diego: la 12.5 tiene que tener un botón de optimización; las rutas del libro son de
+solo lectura; se crea una copia y las isócronas trabajan sobre esa copia.
+
+Especificación: docs/adr/008-weather-routing.md §Decisión (componentes 3–6) y §Plan (T12.5+T12.6
+juntas, con el botón incluido).
+
+Archivos: web/src/core/routing/isochrones.ts (nuevo), web/src/core/routing/isochrones.test.ts
+(nuevo), web/src/core/routing/windfield.ts (nuevo), web/src/core/routing/isochrones.worker.ts
+(nuevo), web/src/ui/app.ts, scripts/build-web.sh (bundle del worker), web/public/app.css.
+
+1. **Solo lectura garantizada:** en la ficha de una ruta del libro, el botón "Optimizar con el
+   viento" NO toca el catálogo: crea una copia en Mis rutas con nombre `<código> (optimizada
+   <fecha>)`; las isócronas y el resultado trabajan sobre esa copia; re-optimizar reemplaza esa
+   copia (nunca el original). Sobre rutas propias optimiza directamente. Sin paquete de
+   pronóstico, el mismo botón se llama "Ruta del mes" y usa la climatología.
+2. **Motor de isócronas (puro, en core/routing/isochrones.ts):** `routeOptimal(opts)` —
+   frontera por pasos Δt (1 h a menos de 2° de costa según la máscara, 3 h en océano), abanico
+   ±110° respecto del rumbo directo con 48 rumbos, velocidad = polar(TWA, TWS) (E12.3), poda
+   por sectores (un sobreviviente por sector angular desde el origen), coste de virada
+   (5 min por bordo) y límite de bordos; restricciones: máscara de tierra E12.1 con margen
+   (dilatación 1 celda), TWS máx 40 kn, hielo (ice ≥ 15) excluido. Termina al alcanzar el
+   destino; reconstrucción hacia atrás desde la llegada.
+3. **Campo de viento (windfield.ts):** interfaz `wind(lat, lon, t) → {dir, speed}` con dos
+   implementaciones: pronóstico del paquete E13.1 (interpolación bilineal en espacio, lineal
+   en tiempo) dentro del horizonte, empalme con climatología del mes más allá ("clima medio");
+   y climatología sola para "Ruta del mes".
+4. **Web Worker:** isochrones.worker.ts corre routeOptimal con progreso por frontera y
+   cancelación; el core queda puro para node:test. build-web.sh lo compila como bundle aparte
+   (`isochrones.worker.js`, mismo patrón que main.js; al precache del SW).
+5. **Salida:** copia optimizada = polilínea simplificada del camino óptimo (tol 0,1°, tope
+   ~40 waypoints; el primero y el último conservan los nombres del original), con ETA por
+   waypoint, viento previsto por tramo y tramos de ceñida marcados con número de bordos.
+6. **Capa `wx-isobars`… no: capa `wx-isochrones`** (id de "Nombres fijos"): una línea por paso,
+   `#80CBC4` α0,45, 1 px, debajo de rutas y posición. Al tocar la copia, se ve como cualquier
+   ruta propia (Seguir, Exportar, Recorrer).
+7. **Comparación en la ficha de la copia:** "vs AN12A: −12 h · +310 nm · viento máx 28 kn vs
+   34 kn" — el trazado original recorrido con el mismo viento y polar (comparación honesta).
+8. **Tests (node:test) del core:** viento uniforme de cola → una pata ~empopada; proa pura →
+   ceñida en zigzag dentro del cono muerto con bordos ≥ 1; calma → motor, línea recta; tierra
+   en el medio → rodeo con margen; Canarias → Barbados con viento sintético en < 5 s.
+9. npm test (en web/), bash scripts/build-web.sh, commit "E12.5: isócronas sobre copia +
+   Optimizar con el viento", push, PARÁ.
+
+Prueba de Diego en el celu: AN12 con pronóstico descargado → botón → aparece la copia en Mis
+rutas con isócronas en el mapa y la comparación en la ficha; el original intacto, sin brotes.
