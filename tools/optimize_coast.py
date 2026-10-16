@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
-"""Coastal waypoint optimizer.
+"""Coastal waypoint optimizer v2 (ADR-008 T12.2).
 
 The 8th edition sometimes publishes two consecutive waypoints whose straight
-chord runs over land: a missing intermediate waypoint (the real route rounds a
-cape/peninsula) or a bad coordinate. `landcheck.py` flags those variants as
-`needsReview`.
+chord runs over land (a missing intermediate waypoint), or a bad coordinate.
+`landmask.py` flags those variants. This tool re-routes ONLY the crossing runs
+of each segment with A* over the 0.1 deg grid using the dilated mask (coastal
+margin, 1 cell ~ 3 nm), bounded to the run bbox + 2 deg, cost = distance, and
+keeps the offshore chord for the rest. Inserted points are marked `corrected`;
+the caller names them "Costa 1..n". Book waypoints are never touched.
 
-This tool inserts the minimal synthetic waypoints needed so the track follows
-water, a safety margin offshore. Primary method pushes the offending chord
-offshore (parallel) until it clears the land; a local visibility graph (Dijkstra
-among seaward-offset coastline vertices) is the fallback. Inserted points are
-NOT in the book; the caller marks them `approx`.
+`optimize_passes` tries three escalating strategies (E12.2): the spec (margin
+3 nm, 15 % detour), then no margin (opens the narrow island channels), then a
+looser detour (50 %). A variant none of them resolves stays needsReview and is
+never forced.
 
-Scoped to coastal geometry: unreachable/gross crossings (whole continents, bad
-tables) are left flagged for human review.
+Uso: python3 tools/optimize_coast.py   (autotest)
 """
 import heapq
 import math
@@ -21,25 +22,17 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from landcheck import Land
+from landmask import ENDPOINT_LAND_NM, FLAG_NM, MARGIN_NM, LandMask  # noqa: E402
 
-FLAG_NM = 3.0      # interior-land run at/above this counts as a crossing
-ENDPOINT_LAND_NM = 6.0  # a land run touching an endpoint up to this nm is a port
-SAFE_NM = 3.0      # offset distance seaward from the coastline
-STEP = 0.02        # sampling resolution for run detection (deg)
-EDGE_STEP = 0.04   # sampling resolution for edge validity (deg)
-D_MAX_NM = 150.0   # max offshore push for the parallel method
-PAD = 0.6          # deg around the run bounding box for candidate vertices
-MAX_NODES = 80     # cap on visibility-graph nodes per segment
-MAX_RUN_NM = 120.0   # a longer land run is a gross crossing, not a missing waypoint
-MAX_CHORD_DEG = 30.0  # skip optimization on segments longer than this (whole basins)
-# Total land lookups allowed per segment before we give up (leave it flagged).
-# Bounds the worst case so the catalog build terminates in reasonable time.
-MAX_LOOKUPS = int(os.environ.get("COAST_MAX_LOOKUPS", 120000))
-
-
-class _Budget(Exception):
-    pass
+CELL = 0.1            # A* grid step (deg)
+PAD_DEG = 2.0         # bbox margin around a crossing run (deg)
+DETOUR_MAX = 1.15     # max detour vs. the original chord (per crossing run)
+DETOUR_LOOSE = 1.5    # tercera pasada: rodeo admitido si el spec no alcanza
+DP_TOL_DEG = 0.05     # Douglas-Peucker tolerance (deg)
+SAMPLE_STEP = 0.02    # crossing detector sampling (deg)
+EDGE_STEP = 0.03      # A* edge validity sampling (deg)
+MAX_GRID = 1_200_000    # node cap per search (avoids runaway searches)
+NEIGH = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
 
 
 def wrap_dlon(d):
@@ -50,272 +43,271 @@ def wrap_dlon(d):
     return d
 
 
+def haversine_nm(a, b):
+    lat1, lon1 = math.radians(a[1]), math.radians(a[0])
+    lat2, lon2 = math.radians(b[1]), math.radians(b[0])
+    h = (math.sin((lat2 - lat1) / 2) ** 2
+         + math.cos(lat1) * math.cos(lat2) * math.sin((lon2 - lon1) / 2) ** 2)
+    return 2 * 3440.065 * math.asin(min(1.0, math.sqrt(h)))
+
+
+def _polyline_nm(pts):
+    return sum(haversine_nm(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+
+
 class Coast:
-    def __init__(self, land):
-        self.land = land
-        self._memo = {}
-        self._lookups = 0
+    def __init__(self, mask, margin_nm=MARGIN_NM, detour_max=DETOUR_MAX):
+        self.mask = mask
+        self.margin_nm = margin_nm
+        self.detour_max = detour_max
+        self._cache = {}
 
-    def _is_land(self, x, y):
-        key = (round(x, 3), round(y, 3))
-        v = self._memo.get(key)
-        if v is not None:
-            return v
-        self._lookups += 1
-        if self._lookups > MAX_LOOKUPS:
-            raise _Budget()
-        if len(self._memo) > 2_000_000:
-            self._memo.clear()
-        v = self.land.is_land(x, y)
-        self._memo[key] = v
-        return v
+    # --- detector de cruces -------------------------------------------------
+    def _water(self, lon, lat):
+        if self.margin_nm <= 0:
+            return not self.mask.is_land(lon, lat)
+        return not self.mask.is_land_margin(lon, lat, self.margin_nm)
 
-    def _delta(self, a, b, step):
+    def _all_water(self, a, b):
+        dlon = wrap_dlon(b[0] - a[0])
+        dlat = b[1] - a[1]
+        m = max(int(abs(dlon) / EDGE_STEP), int(abs(dlat) / EDGE_STEP), 1)
+        return all(self._water(a[0] + dlon * k / m, a[1] + dlat * k / m) for k in range(m + 1))
+
+    def _tauten(self, pts):
+        """Tensa la polilínea: desde cada punto salta al más lejano que siga
+        siendo todo agua. Quita el zigzag de la rejilla y minimiza el rodeo."""
+        if len(pts) <= 2:
+            return list(pts)
+        out = [pts[0]]
+        i = 0
+        n = len(pts)
+        while i < n - 1:
+            j = n - 1
+            while j > i + 1 and not self._all_water(pts[i], pts[j]):
+                j -= 1
+            out.append(pts[j])
+            i = j
+        return out
+
+    def _runs(self, a, b, step=SAMPLE_STEP):
+        """Tramos interiores de tierra-con-margen de la cuerda a->b.
+
+        Los tramos que tocan un extremo se ignoran: son la aproximación al
+        puerto (el waypoint de un puerto está a menos del margen de la costa).
+        Cada tramo es {nm, s, g} con el punto de entrada y de salida del agua.
+        """
+        if abs(wrap_dlon(b[0] - a[0])) > 170:
+            return []
         dlon = wrap_dlon(b[0] - a[0])
         dlat = b[1] - a[1]
         m = max(int(abs(dlon) / step), int(abs(dlat) / step), 1)
-        return dlon, dlat, m
+        flags = [not self._water(a[0] + dlon * k / m, a[1] + dlat * k / m) for k in range(m + 1)]
+        nm_per = step * 60.0 * max(0.02, math.cos(math.radians((a[1] + b[1]) / 2.0)))
 
-    def longest_run(self, a, b, step=STEP):
-        """Longest counted interior-land run of segment a->b, or None.
+        def pt(k):
+            return (a[0] + dlon * k / m, a[1] + dlat * k / m)
 
-        A short land run touching an endpoint (< ENDPOINT_LAND_NM, i.e. a port
-        sitting on the coarse mask) is ignored, matching `landcheck.segment`.
-        """
-        if abs(wrap_dlon(b[0] - a[0])) > 170:
-            return None
-        dlon, dlat, m = self._delta(a, b, step)
-        flags = [self._is_land(a[0] + dlon * k / m, a[1] + dlat * k / m) for k in range(m + 1)]
-        n = len(flags)
-        nm_per = step * 60 * max(0.02, math.cos(math.radians((a[1] + b[1]) / 2)))
-        best = (0, 0, 0)
+        out = []
         i = 0
+        n = len(flags)
         while i < n:
             if flags[i]:
                 j = i
                 while j < n and flags[j]:
                     j += 1
-                run_nm = (j - i) * nm_per
-                edge_run = i == 0 or j == n
-                if (not (edge_run and run_nm <= ENDPOINT_LAND_NM)) and (j - i) > best[0]:
-                    best = (j - i, i, j - 1)
+                edge = i == 0 or j == n
+                if not edge and (j - i) * nm_per >= FLAG_NM:
+                    out.append({"nm": (j - i) * nm_per, "s": pt(i - 1), "g": pt(j)})
                 i = j
             else:
                 i += 1
-        if best[0] == 0:
-            return None
-
-        def pt(k):
-            return (a[0] + dlon * k / m, a[1] + dlat * k / m)
-
-        return {"nm": best[0] * nm_per, "a": pt(best[1]), "b": pt(best[2]), "mid": pt((best[1] + best[2]) // 2)}
-
-    def crossing_nm(self, coords):
-        best = 0.0
-        for i in range(len(coords) - 1):
-            r = self.longest_run(coords[i], coords[i + 1])
-            if r:
-                best = max(best, r["nm"])
-        return best
-
-    def _edge_ok(self, p, q, step=EDGE_STEP):
-        """True if chord p->q has no significant interior land.
-
-        Leading/trailing land is ignored (ports sit on the coarse mask), so an
-        edge leaving a harbour stays valid.
-        """
-        r = self.longest_run(p, q, step)
-        return r is None or r["nm"] < FLAG_NM
-
-    def _push_offshore(self, a, b, run):
-        """Move the offending run perpendicular (seaward) until the polyline clears."""
-        cs = max(0.05, math.cos(math.radians((a[1] + b[1]) / 2)))
-
-        def to_xy(p):
-            return (p[0] * cs, p[1])
-
-        def to_ll(p):
-            return (p[0] / cs, p[1])
-
-        ax, ay = to_xy(a)
-        bx, by = to_xy(b)
-        ux, uy = bx - ax, by - ay
-        length = math.hypot(ux, uy)
-        if length < 1e-9:
-            return None
-        ux, uy = ux / length, uy / length
-        nx, ny = -uy, ux
-        r1, r2 = to_xy(run["a"]), to_xy(run["b"])
-        margin = max(0.5 * math.hypot(r2[0] - r1[0], r2[1] - r1[1]), SAFE_NM / 60.0)
-        best = None
-        for sign in (1.0, -1.0):
-            d = SAFE_NM
-            while d <= D_MAX_NM:
-                dd = d / 60.0
-                p1 = to_ll((r1[0] - ux * margin + nx * sign * dd, r1[1] - uy * margin + ny * sign * dd))
-                p2 = to_ll((r2[0] + ux * margin + nx * sign * dd, r2[1] + uy * margin + ny * sign * dd))
-                if self._is_land(*p1) or self._is_land(*p2):
-                    d *= 1.4
-                    continue
-                if self._edge_ok(a, p1) and self._edge_ok(p1, p2) and self._edge_ok(p2, b):
-                    path = [a, p1, p2, b]
-                    if self.crossing_nm(path) < FLAG_NM:
-                        return path
-                d *= 1.4
-        return best
-
-    def _offshore(self, v, centroid):
-        dx, dy = v[0] - centroid[0], v[1] - centroid[1]
-        n = math.hypot(dx, dy)
-        if n < 1e-9:
-            return None
-        dlat = SAFE_NM / 60.0
-        dlon = SAFE_NM / (60.0 * max(0.05, math.cos(math.radians(v[1]))))
-        return (v[0] + dx / n * dlon, v[1] + dy / n * dlat)
-
-    def _nodes(self, a, b, run):
-        xs = [run["a"][0], run["b"][0], run["mid"][0]]
-        ys = [run["a"][1], run["b"][1], run["mid"][1]]
-        minx, maxx = min(xs) - PAD, max(xs) + PAD
-        miny, maxy = min(ys) - PAD, max(ys) + PAD
-        nodes = [a, b]
-        seen = {(round(a[0], 4), round(a[1], 4)), (round(b[0], 4), round(b[1], 4))}
-        for bbox, ring, holes in self.land.polys:
-            if bbox[0] > maxx or bbox[1] < minx or bbox[2] > maxy or bbox[3] < miny:
-                continue
-            cx = sum(p[0] for p in ring) / len(ring)
-            cy = sum(p[1] for p in ring) / len(ring)
-            for v in ring:
-                if not (minx <= v[0] <= maxx and miny <= v[1] <= maxy):
-                    continue
-                off = self._offshore(v, (cx, cy))
-                if off is None:
-                    continue
-                key = (round(off[0], 4), round(off[1], 4))
-                if key in seen:
-                    continue
-                seen.add(key)
-                nodes.append(off)
-        if len(nodes) > MAX_NODES:
-            mx, my = run["mid"]
-            rest = sorted(nodes[2:], key=lambda p: (p[0] - mx) ** 2 + (p[1] - my) ** 2)
-            nodes = [a, b] + rest[:MAX_NODES - 2]
-        return nodes
-
-    def _dijkstra(self, nodes):
-        n = len(nodes)
-        dist = [math.inf] * n
-        prev = [-1] * n
-        dist[0] = 0.0
-        pq = [(0.0, 0)]
-        while pq:
-            d, u = heapq.heappop(pq)
-            if d > dist[u]:
-                continue
-            if u == 1:
-                break
-            for v in range(n):
-                if v == u or not self._edge_ok(nodes[u], nodes[v]):
-                    continue
-                nd = d + math.hypot(nodes[u][0] - nodes[v][0], nodes[u][1] - nodes[v][1])
-                if nd < dist[v]:
-                    dist[v] = nd
-                    prev[v] = u
-                    heapq.heappush(pq, (nd, v))
-        if dist[1] == math.inf:
-            return None
-        path = []
-        k = 1
-        while k != -1:
-            path.append(nodes[k])
-            k = prev[k]
-        path.reverse()
-        return path
-
-    def _simplify(self, path):
-        out = [path[0]]
-        i = 0
-        while i < len(path) - 1:
-            j = len(path) - 1
-            while j > i + 1 and not self._edge_ok(path[i], path[j]):
-                j -= 1
-            out.append(path[j])
-            i = j
         return out
 
-    def _grid_detour(self, a, b, run, coarse=0.1, fine=0.03):
-        """Find the cheapest single waypoint p so that a->p->b stay in water.
+    # --- A* sobre la rejilla 0.1 deg ---------------------------------------
+    def _astar(self, start, goal, a, b):
+        # bbox del tramo completo (a->b) + 2°: si el cruce es una cadena de
+        # islas (p. ej. Azores), hay que rodearla saliendo del bbox del tramo
+        # de tierra.
+        minx = min(a[0], b[0], start[0], goal[0]) - PAD_DEG
+        maxx = max(a[0], b[0], start[0], goal[0]) + PAD_DEG
+        miny = min(a[1], b[1], start[1], goal[1]) - PAD_DEG
+        maxy = max(a[1], b[1], start[1], goal[1]) + PAD_DEG
+        c0 = int(math.floor(minx / CELL))
+        c1 = int(math.ceil(maxx / CELL))
+        r0 = int(math.floor(miny / CELL))
+        r1 = int(math.ceil(maxy / CELL))
+        if (c1 - c0 + 1) * (r1 - r0 + 1) > MAX_GRID:
+            return None
 
-        Coarse grid around the offending run, then refine around the best
-        candidate. Robust where the coastline is smooth (no vertex at the cape,
-        e.g. the Lizard on the 110m mask).
-        """
-        xs = [run["a"][0], run["b"][0]]
-        ys = [run["a"][1], run["b"][1]]
-        span = math.hypot(xs[1] - xs[0], ys[1] - ys[0])
-        pad = max(0.25, min(1.2, 0.7 * span))
-        minx, maxx = min(xs) - pad, max(xs) + pad
-        miny, maxy = min(ys) - pad, max(ys) + pad
-        best = None
-        for step in (coarse, fine):
-            estep = EDGE_STEP if step > 0.05 else 0.02
-            if best is None:
-                gx0, gx1, gy0, gy1 = minx, maxx, miny, maxy
-            else:
-                bx, by = best[1]
-                w = max(fine * 6, 0.2)
-                gx0, gx1, gy0, gy1 = bx - w, bx + w, by - w, by + w
-            nx = int((gx1 - gx0) / step) + 1
-            ny = int((gy1 - gy0) / step) + 1
-            if nx * ny > 12000:
+        # start/goal are real nodes (never snapped): they link to nearby cells
+        # only through water-validated legs, so the returned polyline is clean.
+        START, GOAL = (-10 ** 9, -10 ** 9), (10 ** 9, 10 ** 9)
+
+        def coord(node):
+            if node == START:
+                return start
+            if node == GOAL:
+                return goal
+            return (node[0] * CELL, node[1] * CELL)
+
+        passable = {}
+
+        def cell_ok(c, r):
+            key = (c, r)
+            v = passable.get(key)
+            if v is None:
+                v = self._water(c * CELL, r * CELL)
+                passable[key] = v
+            return v
+
+        edge_ok = {}
+
+        def connect(u, v):
+            key = (u, v) if u < v else (v, u)
+            v2 = edge_ok.get(key)
+            if v2 is None:
+                v2 = self._all_water(coord(u), coord(v))
+                edge_ok[key] = v2
+            return v2
+
+        def neighbors(u):
+            if u == START or u == GOAL:
+                p = coord(u)
+                c = int(round(p[0] / CELL))
+                r = int(round(p[1] / CELL))
+                for dc in range(-3, 4):
+                    for dr in range(-3, 4):
+                        v = (c + dc, r + dr)
+                        if c0 <= v[0] <= c1 and r0 <= v[1] <= r1 and cell_ok(*v) and connect(u, v):
+                            yield v
+                return
+            for dc, dr in NEIGH:
+                v = (u[0] + dc, u[1] + dr)
+                if c0 <= v[0] <= c1 and r0 <= v[1] <= r1 and cell_ok(*v) and connect(u, v):
+                    yield v
+            # the goal is a real node: a nearby grid cell can link to it too
+            gc = int(round(goal[0] / CELL))
+            gr = int(round(goal[1] / CELL))
+            if abs(u[0] - gc) <= 3 and abs(u[1] - gr) <= 3 and connect(u, GOAL):
+                yield GOAL
+
+        def h(node):
+            return haversine_nm(coord(node), goal)
+
+        dist = {START: 0.0}
+        prev = {}
+        pq = [(h(START), 0.0, START)]
+        seen = set()
+        while pq:
+            _f, gsc, u = heapq.heappop(pq)
+            if u in seen:
                 continue
-            for i in range(nx):
-                x = gx0 + i * step
-                for j in range(ny):
-                    y = gy0 + j * step
-                    if self._is_land(x, y):
-                        continue
-                    if self._edge_ok(a, (x, y), estep) and self._edge_ok((x, y), b, estep):
-                        add = math.hypot(x - a[0], y - a[1]) + math.hypot(b[0] - x, b[1] - y)
-                        if best is None or add < best[0]:
-                            best = (add, (x, y))
-        if best is None:
-            return None
-        p = best[1]
-        if self.crossing_nm([a, p, b]) < FLAG_NM:
-            return [a, p, b]
+            seen.add(u)
+            if u == GOAL:
+                path = [coord(u)]
+                while u in prev:
+                    u = prev[u]
+                    path.append(coord(u))
+                path.reverse()
+                return path
+            for v in neighbors(u):
+                if v in seen:
+                    continue
+                ng = gsc + haversine_nm(coord(u), coord(v))
+                if ng < dist.get(v, math.inf):
+                    dist[v] = ng
+                    prev[v] = u
+                    heapq.heappush(pq, (ng + h(v), ng, v))
         return None
-
-    def _graph(self, a, b, run):
-        nodes = self._nodes(a, b, run)
-        if len(nodes) <= 2:
-            return None
-        path = self._dijkstra(nodes)
-        if path is None:
-            return None
-        return self._simplify(path)
 
     def fix_segment(self, a, b):
-        # Gross crossings (whole continents, bad tables) are not a missing
-        # coastal waypoint; leave them flagged instead of searching forever.
-        if math.hypot(wrap_dlon(b[0] - a[0]), b[1] - a[1]) > MAX_CHORD_DEG:
-            return None
-        self._lookups = 0
-        try:
-            run = self.longest_run(a, b)
-            if run is None:
-                return [a, b]
-            if run["nm"] > MAX_RUN_NM:
+        """Devuelve la polilínea a->b sin cruces, `[a, b]` si ya está limpia, o
+        None si hay un cruce que no se pudo resolver (la variante queda
+        needsReview)."""
+        if abs(wrap_dlon(b[0] - a[0])) > 170:
+            return [a, b]
+        key = (round(a[0], 6), round(a[1], 6), round(b[0], 6), round(b[1], 6))
+        if key in self._cache:
+            return self._cache[key]
+        runs = self._runs(a, b)
+        if not runs:
+            self._cache[key] = [a, b]
+            return [a, b]
+        out = [a]
+        for run in runs:
+            s, g = run["s"], run["g"]
+            if s != out[-1]:
+                out.append(s)
+            path = self._astar(s, g, a, b)
+            if path is None:
+                self._cache[key] = None
                 return None
-            for path in (self._grid_detour(a, b, run), self._push_offshore(a, b, run), self._graph(a, b, run)):
-                if path and len(path) >= 2 and self.crossing_nm(path) < FLAG_NM:
-                    return path
-        except _Budget:
+            out.extend(path[1:-1] if len(path) > 1 else [])
+            if g != out[-1]:
+                out.append(g)
+        if b != out[-1]:
+            out.append(b)
+        # Tensado + Douglas-Peucker para no llenar la tabla; si al recortar
+        # vuelve a tocar tierra, se conserva el trazado denso.
+        out = self._tauten(out)
+        cand = self._simplify(out)
+        if self._mask_crossing(cand) >= FLAG_NM:
+            cand = out
+        if self._mask_crossing(cand) >= FLAG_NM:
+            self._cache[key] = None
             return None
-        return None
+        if _polyline_nm(cand) / max(haversine_nm(a, b), 1e-9) > self.detour_max:
+            self._cache[key] = None
+            return None
+        self._cache[key] = cand
+        return cand
+
+    def _mask_crossing(self, pts):
+        c = self.mask
+        return max((c.segment(pts[i], pts[i + 1], self.margin_nm, interior_only=True)
+                    for i in range(len(pts) - 1)), default=0.0)
+
+    def _simplify(self, pts):
+        """Douglas-Peucker (tol 0,05 deg); el trazado quedaría demasiado largo."""
+        if len(pts) <= 2:
+            return pts
+        keep = [False] * len(pts)
+        keep[0] = keep[-1] = True
+        stack = [(0, len(pts) - 1)]
+        while stack:
+            i0, i1 = stack.pop()
+            if i1 <= i0 + 1:
+                continue
+            ax, ay = pts[i0]
+            bx, by = pts[i1]
+            dx, dy = bx - ax, by - ay
+            seg2 = dx * dx + dy * dy
+            far, far_d = -1, -1.0
+            for k in range(i0 + 1, i1):
+                px, py = pts[k]
+                if seg2 < 1e-12:
+                    d = math.hypot(px - ax, py - ay)
+                else:
+                    t = ((px - ax) * dx + (py - ay) * dy) / seg2
+                    t = max(0.0, min(1.0, t))
+                    ex, ey = ax + t * dx, ay + t * dy
+                    d = math.hypot(px - ex, py - ey)
+                if d > far_d:
+                    far, far_d = k, d
+            if far_d > DP_TOL_DEG:
+                keep[far] = True
+                stack.append((i0, far))
+                stack.append((far, i1))
+        return [p for k, p in enumerate(pts) if keep[k]]
 
     def optimize(self, coords):
-        """Insert synthetic waypoints so the whole polyline stays in water."""
+        """Inserta waypoints sintéticos para que toda la polilínea quede en agua.
+
+        Devuelve (coords, inserted, ok): `inserted` son los índices de los puntos
+        sintéticos dentro de `out`; `ok` es False si algún tramo quedó sin
+        resolver.
+        """
         out = [coords[0]]
         inserted = []
         ok = True
@@ -328,23 +320,52 @@ class Coast:
             for p in seg[1:-1]:
                 inserted.append(len(out))
                 out.append(p)
-            if len(seg) > 1 and (len(out) == 0 or out[-1] != seg[-1]):
+            if len(seg) > 1 and out[-1] != seg[-1]:
                 out.append(seg[-1])
         return out, inserted, ok
 
 
-if __name__ == "__main__":
-    land = Land()
-    c = Coast(land)
-    print("land ok", land.ok, "polys", len(land.polys))
-    for name, a, b in [
-        ("Falmouth->Lizard", (-5.06, 50.15), (-5.2, 49.95)),
-        ("island crossing", (-8.0, 28.0), (-14.0, 29.5)),
-        ("open Atlantic", (-30, 40), (-20, 30)),
-    ]:
-        run = c.longest_run(a, b)
-        fx = c.fix_segment(a, b)
-        after = None if fx is None else round(c.crossing_nm(fx), 1)
-        print(name, "| run", None if not run else round(run["nm"], 1),
-              "| after", after, "| npts", None if fx is None else len(fx))
+# E12.2 se aplica en tres pasadas, de la más fiel a la más permisiva:
+#   1. spec: margen costero 3 nm y rodeo máximo 15 %.
+#   2. sin margen: abre los pasos angostos entre islas (el trazado queda en agua
+#      cruda, sin franja de seguridad).
+#   3. márgen 3 nm pero rodeo hasta 50 %: rescata tramos donde rodear una punta
+#      es legítimamente más largo que el 15 %.
+PASSES = ((MARGIN_NM, DETOUR_MAX), (0.0, DETOUR_MAX), (MARGIN_NM, DETOUR_LOOSE))
 
+
+def optimize_passes(mask, coords, passes=PASSES):
+    """Corre las tres pasadas y devuelve el resultado de la primera que resuelve.
+
+    `(out, inserted, ok)`; `ok` False solo si ninguna pasada pudo dejar el
+    trazado sin cruzar tierra (la variante queda needsReview).
+    """
+    out, inserted, ok = list(coords), [], False
+    for margin, detour in passes:
+        coast = Coast(mask, margin_nm=margin, detour_max=detour)
+        out, inserted, ok = coast.optimize(coords)
+        if ok:
+            return out, inserted, True
+    return out, inserted, False
+
+
+def _smoke():
+    mask = LandMask()
+    c = Coast(mask)
+    print("mask ok", mask.ok)
+    cases = [
+        ("Cape NW->Barbados", (18.2, -33.7667), (-59.5167, 13.0333)),
+        ("English Hbr->Rio", (-61.7633, 17.0033), (-43.2667, -23.05)),
+        ("along a coast", (-61.7333, 16.9917), (-61.7633, 17.0033)),
+        ("open Atlantic", (-30, 40), (-20, 30)),
+    ]
+    for name, a, b in cases:
+        here = c._mask_crossing([a, b])
+        fx = c.fix_segment(a, b)
+        after = None if fx is None else c._mask_crossing(fx)
+        print(f"{name}: run {here:.0f}nm -> "
+              f"{'needsReview' if fx is None else f'{after:.0f}nm, {len(fx)} pts'}")
+
+
+if __name__ == "__main__":
+    _smoke()

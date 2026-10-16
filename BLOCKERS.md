@@ -141,4 +141,29 @@ enunciado (36 N, 5 W) cae en agua del estrecho; el test queda en el Peñón real
 de la franja costera (ahí la máscara 10m manda sobre la referencia 110m de `landcheck.py`); el
 umbral de 99 % del enunciado estaba mal planteado contra una referencia más gruesa.
 
+## E12.2 · umbral de `needsReview` y variantes que no se pueden sacar de tierra — desvío
+
+**Qué falla (en la spec).** El paso 5 de E12.2 exige "ninguna variante cruza tierra con margen" y
+`needsReview < 20`. Con el optimizador pedido (A* sobre la máscara 10m dilatada 1 celda ≈ 3 nm,
+rodeo ≤ 15 %) quedan **28 variantes** que no se pueden sacar de tierra sin forzar canales no
+navegables, así que el umbral no se alcanza tal como está escrito.
+
+**Qué hice.**
+- **Detector de cruces** (en `tools/landmask.py`): cuenta un cruce de tierra **solo si es interior**
+  (ignora los tramos que tocan un extremo del tramo ruteado, es decir las aproximaciones a puerto).
+  Sin esto el conteo nunca baja de 20 (los puertos están sobre tierra). La medición del build usa
+  el resultado del propio optimizador (`ok` de `optimize_passes`), porque a margen 0 el detector
+  marca aproximaciones a puerto como "cruces" que no lo son.
+- **Tres pasadas** (`optimize_passes`): (1) margen 3 nm, rodeo ≤ 15 %; (2) **sin margen** (abre los
+  pasos navegables entre islas), rodeo ≤ 15 %; (3) margen 3 nm, rodeo ≤ 50 %. Resultado: 751/779
+  variantes resueltas, **28 `needsReview`** (rutas como AN104/AN115/IS16/PN74/PS17 que pasan por
+  encima de Uruguay/islotes: acortar el rodeo exigiría canales que no existen).
+- **Conteo real:** el catálogo tiene **400 rutas / 779 variantes** (la spec asumía 2 268; el "164"
+  del ADR era con la máscara 110m). Se insertaron **2 090** waypoints `Costa 1..n`
+  (`corrected:true`), alineados 1:1 con `routes.geojson` (779 features, 0 desalineados).
+
+**Decisión pendiente:** aceptar el umbral real (**28**, documentado) o ampliar el rodeo/afinar la
+rejilla (con margen 0 + rodeo 300 % + celda 0,05° baja a 17, pero a costa de rutas mar adentro
+poco realistas). Los 3 waypoints del libro intactos en todas las variantes.
+
 

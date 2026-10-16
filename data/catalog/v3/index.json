@@ -1,5 +1,5 @@
 {
- "catalogVersion": 11,
+ "catalogVersion": 12,
  "chapters": [
   "AN",
   "AT",
@@ -24,7 +24,7 @@
    "from": "Falmouth",
    "to": "Halifax",
    "nmMin": 9,
-   "nmMax": 2421,
+   "nmMax": 2440,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -43,7 +43,7 @@
     -63.566667,
     43.7,
     -5.033333,
-    50.0
+    50.1
    ],
    "searchNames": [
     "St John’s",
@@ -62,7 +62,7 @@
    "from": "Falmouth",
    "to": "Norfolk",
    "nmMin": 1176,
-   "nmMax": 3309,
+   "nmMax": 3273,
    "variantCount": 3,
    "bestMonths": [
     6
@@ -100,7 +100,7 @@
    "from": "Brunsbüttel",
    "to": "Dover",
    "nmMin": 5,
-   "nmMax": 1950,
+   "nmMax": 1949,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -133,7 +133,7 @@
    "from": "Falmouth",
    "to": "La Coruña",
    "nmMin": 5,
-   "nmMax": 525,
+   "nmMax": 531,
    "variantCount": 3,
    "bestMonths": [
     5,
@@ -158,8 +158,8 @@
    "region": "Atlántico Norte",
    "from": "Falmouth",
    "to": "Lisbon",
-   "nmMin": 780,
-   "nmMax": 780,
+   "nmMin": 750,
+   "nmMax": 750,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -184,8 +184,8 @@
    "region": "Atlántico Norte",
    "from": "Falmouth",
    "to": "Europa Point",
-   "nmMin": 1053,
-   "nmMax": 1053,
+   "nmMin": 1056,
+   "nmMax": 1056,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -196,7 +196,7 @@
    "stormMonths": [],
    "bbox": [
     -10.333333,
-    35.973333000000004,
+    35.983333,
     -5.033333,
     50.133333
    ],
@@ -302,8 +302,8 @@
    "region": "Atlántico Norte",
    "from": "Lisbon",
    "to": "Queensway Marina",
-   "nmMin": 395,
-   "nmMax": 395,
+   "nmMin": 406,
+   "nmMax": 406,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -315,7 +315,7 @@
    "stormMonths": [],
    "bbox": [
     -9.4,
-    35.951667,
+    35.991667,
     -5.35,
     38.6
    ],
@@ -415,8 +415,8 @@
    "region": "Atlántico Norte",
    "from": "Lisbon",
    "to": "Brest",
-   "nmMin": 889,
-   "nmMax": 889,
+   "nmMin": 907,
+   "nmMax": 907,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -439,8 +439,8 @@
    "region": "Atlántico Norte",
    "from": "Lisbon",
    "to": "Marina Agadir",
-   "nmMin": 762,
-   "nmMax": 762,
+   "nmMin": 677,
+   "nmMax": 677,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -466,8 +466,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Funchal",
-   "nmMin": 576,
-   "nmMax": 626,
+   "nmMin": 573,
+   "nmMax": 624,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -492,8 +492,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Las Palmas",
-   "nmMin": 763,
-   "nmMax": 763,
+   "nmMin": 764,
+   "nmMax": 764,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -518,8 +518,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "English Harbour",
-   "nmMin": 3520,
-   "nmMax": 3520,
+   "nmMin": 3558,
+   "nmMax": 3558,
    "variantCount": 1,
    "bestMonths": [
     11
@@ -533,7 +533,7 @@
     11
    ],
    "bbox": [
-    -61.766667,
+    -62.0,
     13.033333,
     -5.383333,
     36.125
@@ -548,8 +548,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Brest",
-   "nmMin": 1183,
-   "nmMax": 1183,
+   "nmMin": 1202,
+   "nmMax": 1202,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -560,7 +560,7 @@
    "stormMonths": [],
    "bbox": [
     -9.6,
-    35.951667,
+    35.991667,
     -4.483333,
     50.133333
    ],
@@ -574,8 +574,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Lisbon",
-   "nmMin": 313,
-   "nmMax": 313,
+   "nmMin": 319,
+   "nmMax": 319,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -586,7 +586,7 @@
    "stormMonths": [],
    "bbox": [
     -9.4,
-    35.951667,
+    35.991667,
     -5.383333,
     38.673333
    ],
@@ -600,8 +600,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Horta",
-   "nmMin": 34,
-   "nmMax": 1124,
+   "nmMin": 17,
+   "nmMax": 1122,
    "variantCount": 3,
    "bestMonths": [
     5,
@@ -619,8 +619,8 @@
    ],
    "bbox": [
     -28.616667,
-    35.9278125,
-    -5.28796875,
+    35.991667,
+    -5.383,
     38.566667
    ],
    "searchNames": [],
@@ -633,8 +633,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "St George’s",
-   "nmMin": 2913,
-   "nmMax": 3022,
+   "nmMin": 2911,
+   "nmMax": 3019,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -664,8 +664,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Norfolk",
-   "nmMin": 580,
-   "nmMax": 4855,
+   "nmMin": 577,
+   "nmMax": 4836,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -707,8 +707,8 @@
    "region": "Atlántico Norte",
    "from": "Gibraltar",
    "to": "Marina Agadir",
-   "nmMin": 661,
-   "nmMax": 661,
+   "nmMin": 559,
+   "nmMax": 559,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -760,8 +760,8 @@
    "region": "Atlántico Norte",
    "from": "Funchal",
    "to": "English Harbour",
-   "nmMin": 2912,
-   "nmMax": 2912,
+   "nmMin": 2952,
+   "nmMax": 2952,
    "variantCount": 1,
    "bestMonths": [
     11,
@@ -780,7 +780,7 @@
     11
    ],
    "bbox": [
-    -61.766667,
+    -62.0,
     13.033333,
     -16.9,
     32.641667
@@ -855,7 +855,7 @@
    "region": "Atlántico Norte",
    "from": "Porto Santo",
    "to": "Lisbon",
-   "nmMin": 471,
+   "nmMin": 470,
    "nmMax": 480,
    "variantCount": 2,
    "bestMonths": [
@@ -879,8 +879,8 @@
    "region": "Atlántico Norte",
    "from": "Funchal",
    "to": "Gibraltar",
-   "nmMin": 622,
-   "nmMax": 622,
+   "nmMin": 615,
+   "nmMax": 615,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -890,7 +890,7 @@
    "bbox": [
     -16.9,
     32.633333,
-    -5.301110777777778,
+    -5.383333,
     36.125
    ],
    "searchNames": [],
@@ -904,7 +904,7 @@
    "from": "Las Palmas",
    "to": "English Harbour",
    "nmMin": 78,
-   "nmMax": 2940,
+   "nmMax": 2980,
    "variantCount": 4,
    "bestMonths": [
     11,
@@ -923,7 +923,7 @@
     11
    ],
    "bbox": [
-    -61.808333,
+    -62.0,
     11.966667,
     -13.483333,
     28.975
@@ -968,8 +968,8 @@
    "region": "Atlántico Norte",
    "from": "Las Palmas",
    "to": "Banjul",
-   "nmMin": 982,
-   "nmMax": 982,
+   "nmMin": 981,
+   "nmMax": 981,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -998,8 +998,8 @@
    "region": "Atlántico Norte",
    "from": "Las Palmas",
    "to": "San Salvador",
-   "nmMin": 3209,
-   "nmMax": 3209,
+   "nmMin": 3218,
+   "nmMax": 3218,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -1031,7 +1031,7 @@
    "from": "Las Palmas",
    "to": "St George’s",
    "nmMin": 2423,
-   "nmMax": 2580,
+   "nmMax": 2595,
    "variantCount": 2,
    "bestMonths": [
     4
@@ -1120,8 +1120,8 @@
    "region": "Atlántico Norte",
    "from": "Las Palmas",
    "to": "Gibraltar",
-   "nmMin": 710,
-   "nmMax": 710,
+   "nmMin": 703,
+   "nmMax": 703,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -1132,7 +1132,7 @@
    "bbox": [
     -15.4,
     28.121667,
-    -5.301110777777778,
+    -5.383333,
     36.125
    ],
    "searchNames": [],
@@ -1146,7 +1146,7 @@
    "from": "Las Palmas",
    "to": "Crosshaven",
    "nmMin": 1836,
-   "nmMax": 2153,
+   "nmMax": 2132,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -1240,8 +1240,8 @@
    "region": "Atlántico Norte",
    "from": "Dakar",
    "to": "Ponta Delgada",
-   "nmMin": 1470,
-   "nmMax": 1559,
+   "nmMin": 1468,
+   "nmMax": 1558,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -1275,7 +1275,7 @@
    "from": "Dakar",
    "to": "Bridgetown",
    "nmMin": 1,
-   "nmMax": 2530,
+   "nmMax": 2550,
    "variantCount": 4,
    "bestMonths": [
     12,
@@ -1310,7 +1310,7 @@
    "from": "Dakar",
    "to": "Fernando de Noronha",
    "nmMin": 1426,
-   "nmMax": 3262,
+   "nmMax": 3263,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -1339,7 +1339,7 @@
    "from": "Mindelo",
    "to": "Estaca",
    "nmMin": 765,
-   "nmMax": 838,
+   "nmMax": 849,
    "variantCount": 3,
    "bestMonths": [
     2,
@@ -1363,7 +1363,7 @@
    "from": "Praia",
    "to": "Dakar",
    "nmMin": 358,
-   "nmMax": 579,
+   "nmMax": 596,
    "variantCount": 3,
    "bestMonths": [
     10,
@@ -1393,7 +1393,7 @@
    "from": "Mindelo",
    "to": "Fernando de Noronha",
    "nmMin": 1,
-   "nmMax": 3164,
+   "nmMax": 3067,
    "variantCount": 3,
    "bestMonths": [
     11,
@@ -1421,8 +1421,8 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "12°02.’N, 61°46.0’W",
-   "nmMin": 193,
-   "nmMax": 193,
+   "nmMin": 206,
+   "nmMax": 206,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -1455,8 +1455,8 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "Kralendijk",
-   "nmMin": 214,
-   "nmMax": 884,
+   "nmMin": 222,
+   "nmMax": 885,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -1490,7 +1490,7 @@
    "from": "English Harbour",
    "to": "Cristobal",
    "nmMin": 1098,
-   "nmMax": 1459,
+   "nmMax": 1477,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -1520,8 +1520,8 @@
    "region": "Atlántico Norte",
    "from": "English Harbour",
    "to": "Zarpar",
-   "nmMin": 337,
-   "nmMax": 1228,
+   "nmMin": 341,
+   "nmMax": 1234,
    "variantCount": 7,
    "bestMonths": [
     12,
@@ -1554,8 +1554,8 @@
    "region": "Atlántico Norte",
    "from": "English Harbour",
    "to": "Placencia",
-   "nmMin": 1176,
-   "nmMax": 2130,
+   "nmMin": 1172,
+   "nmMax": 2170,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -1589,7 +1589,7 @@
    "from": "English Harbour",
    "to": "Miami",
    "nmMin": 196,
-   "nmMax": 1635,
+   "nmMax": 1667,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -1622,8 +1622,8 @@
    "region": "Atlántico Norte",
    "from": "St Martin",
    "to": "New York",
-   "nmMin": 1718,
-   "nmMax": 3062,
+   "nmMin": 1723,
+   "nmMax": 3096,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -1727,8 +1727,8 @@
    "region": "Atlántico Norte",
    "from": "Virgin Gorda",
    "to": "Cristobal",
-   "nmMin": 1005,
-   "nmMax": 1060,
+   "nmMin": 1006,
+   "nmMax": 1061,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -1758,8 +1758,8 @@
    "region": "Atlántico Norte",
    "from": "Virgin Gorda",
    "to": "Zarpar",
-   "nmMin": 318,
-   "nmMax": 1015,
+   "nmMin": 319,
+   "nmMax": 1017,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -1778,7 +1778,7 @@
    ],
    "bbox": [
     -81.25,
-    17.45,
+    17.3,
     -64.436667,
     23.416667
    ],
@@ -1792,8 +1792,8 @@
    "region": "Atlántico Norte",
    "from": "Virgin Gorda",
    "to": "Placencia",
-   "nmMin": 949,
-   "nmMax": 3385,
+   "nmMin": 966,
+   "nmMax": 3446,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -1860,8 +1860,8 @@
    "region": "Atlántico Norte",
    "from": "Charlotte Amalie",
    "to": "Jacksonville",
-   "nmMin": 1512,
-   "nmMax": 1555,
+   "nmMin": 1412,
+   "nmMax": 1532,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -1895,7 +1895,7 @@
    "from": "Charlotte Amalie",
    "to": "New York",
    "nmMin": 5,
-   "nmMax": 3093,
+   "nmMax": 3085,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -1974,7 +1974,7 @@
    "from": "Charlotte Amalie",
    "to": "Lajes",
    "nmMin": 21,
-   "nmMax": 2396,
+   "nmMax": 2401,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -2006,7 +2006,7 @@
    "from": "Cristobal",
    "to": "Placencia",
    "nmMin": 261,
-   "nmMax": 981,
+   "nmMax": 980,
    "variantCount": 6,
    "bestMonths": [
     12,
@@ -2036,8 +2036,8 @@
    "region": "Atlántico Norte",
    "from": "Cristobal",
    "to": "Galveston",
-   "nmMin": 1285,
-   "nmMax": 1499,
+   "nmMin": 1294,
+   "nmMax": 1500,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -2068,7 +2068,7 @@
    "from": "Cristobal",
    "to": "Kingston",
    "nmMin": 551,
-   "nmMax": 591,
+   "nmMax": 593,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -2130,8 +2130,8 @@
    "region": "Atlántico Norte",
    "from": "Cristobal",
    "to": "Virgin Gorda",
-   "nmMin": 1060,
-   "nmMax": 1060,
+   "nmMin": 1061,
+   "nmMax": 1061,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -2162,7 +2162,7 @@
    "region": "Atlántico Norte",
    "from": "Cristobal",
    "to": "Cartagena",
-   "nmMin": 469,
+   "nmMin": 462,
    "nmMax": 880,
    "variantCount": 2,
    "bestMonths": [
@@ -2219,8 +2219,8 @@
    "region": "Atlántico Norte",
    "from": "Cristobal",
    "to": "Miami",
-   "nmMin": 1244,
-   "nmMax": 1609,
+   "nmMin": 1254,
+   "nmMax": 1604,
    "variantCount": 2,
    "bestMonths": [
     3,
@@ -2251,8 +2251,8 @@
    "region": "Atlántico Norte",
    "from": "Cristobal",
    "to": "Newport",
-   "nmMin": 2289,
-   "nmMax": 3275,
+   "nmMin": 2284,
+   "nmMax": 3253,
    "variantCount": 3,
    "bestMonths": [
     4
@@ -2294,7 +2294,7 @@
    "from": "Porlamar",
    "to": "10°39.0’N, 61°46.5.0’N",
    "nmMin": 89,
-   "nmMax": 497,
+   "nmMax": 517,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -2325,7 +2325,7 @@
    "from": "Porlamar",
    "to": "Virgin Gorda",
    "nmMin": 22,
-   "nmMax": 496,
+   "nmMax": 497,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -2356,7 +2356,7 @@
    "from": "Porlamar",
    "to": "Newport S",
    "nmMin": 391,
-   "nmMax": 4099,
+   "nmMax": 4108,
    "variantCount": 5,
    "bestMonths": [
     4,
@@ -2393,7 +2393,7 @@
    "chapter": "AN",
    "region": "Atlántico Norte",
    "from": "Puerto Cruz",
-   "to": "Cartagena",
+   "to": "Boca",
    "nmMin": 5,
    "nmMax": 908,
    "variantCount": 3,
@@ -2428,8 +2428,8 @@
    "region": "Atlántico Norte",
    "from": "Livingston",
    "to": "Galveston",
-   "nmMin": 1235,
-   "nmMax": 3397,
+   "nmMin": 1243,
+   "nmMax": 3435,
    "variantCount": 4,
    "bestMonths": [
     4,
@@ -2467,8 +2467,8 @@
    "region": "Atlántico Norte",
    "from": "Puerto Cruz",
    "to": "East Snake",
-   "nmMin": 1408,
-   "nmMax": 2168,
+   "nmMin": 1412,
+   "nmMax": 2188,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -2501,7 +2501,7 @@
    "region": "Atlántico Norte",
    "from": "Montego Bay",
    "to": "Cristobal",
-   "nmMin": 551,
+   "nmMin": 552,
    "nmMax": 578,
    "variantCount": 2,
    "bestMonths": [
@@ -2572,7 +2572,7 @@
    "from": "Galveston",
    "to": "Porvenir",
    "nmMin": 23,
-   "nmMax": 1570,
+   "nmMax": 1569,
    "variantCount": 4,
    "bestMonths": [
     12,
@@ -2607,7 +2607,7 @@
    "from": "Miami",
    "to": "St John’s",
    "nmMin": 9,
-   "nmMax": 2397,
+   "nmMax": 2388,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -2650,7 +2650,7 @@
    "from": "Miami",
    "to": "St George’s",
    "nmMin": 9,
-   "nmMax": 2710,
+   "nmMax": 2765,
    "variantCount": 4,
    "bestMonths": [
     4,
@@ -2681,7 +2681,7 @@
    "from": "Miami",
    "to": "Charlotte Amalie",
    "nmMin": 16,
-   "nmMax": 1409,
+   "nmMax": 1419,
    "variantCount": 5,
    "bestMonths": [
     12,
@@ -2714,8 +2714,8 @@
    "region": "Atlántico Norte",
    "from": "Miami",
    "to": "Cristobal",
-   "nmMin": 769,
-   "nmMax": 1810,
+   "nmMin": 776,
+   "nmMax": 1830,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -2748,8 +2748,8 @@
    "region": "Atlántico Norte",
    "from": "Miami",
    "to": "Belize City",
-   "nmMin": 769,
-   "nmMax": 1428,
+   "nmMin": 776,
+   "nmMax": 1429,
    "variantCount": 4,
    "bestMonths": [
     12,
@@ -2782,8 +2782,8 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "Halifax",
-   "nmMin": 1004,
-   "nmMax": 1606,
+   "nmMin": 1009,
+   "nmMax": 1607,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -2861,7 +2861,7 @@
    "from": "St George’s",
    "to": "Brest",
    "nmMin": 2768,
-   "nmMax": 3575,
+   "nmMax": 3584,
    "variantCount": 4,
    "bestMonths": [
     5
@@ -2896,8 +2896,8 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "Europa Point",
-   "nmMin": 2920,
-   "nmMax": 2920,
+   "nmMin": 2924,
+   "nmMax": 2924,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -2959,7 +2959,7 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "Charlotte Amalie",
-   "nmMin": 633,
+   "nmMin": 656,
    "nmMax": 885,
    "variantCount": 4,
    "bestMonths": [
@@ -2989,8 +2989,8 @@
    "region": "Atlántico Norte",
    "from": "St George’s",
    "to": "Cozumel",
-   "nmMin": 1665,
-   "nmMax": 1925,
+   "nmMin": 1669,
+   "nmMax": 1934,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -3022,9 +3022,9 @@
    "chapter": "AN",
    "region": "Atlántico Norte",
    "from": "St George’s",
-   "to": "Puerto Cruz",
-   "nmMin": 1403,
-   "nmMax": 1723,
+   "to": "Puerto Cruz NW",
+   "nmMin": 1413,
+   "nmMax": 1770,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -3057,8 +3057,8 @@
    "region": "Atlántico Norte",
    "from": "Horta",
    "to": "Crosshaven",
-   "nmMin": 1320,
-   "nmMax": 1429,
+   "nmMin": 1337,
+   "nmMax": 1446,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -3150,7 +3150,7 @@
    "region": "Atlántico Norte",
    "from": "Horta",
    "to": "Europa Point",
-   "nmMin": 1133,
+   "nmMin": 1134,
    "nmMax": 2332,
    "variantCount": 2,
    "bestMonths": [
@@ -3167,7 +3167,7 @@
    ],
    "bbox": [
     -30.833333,
-    35.951667,
+    35.991667,
     -5.341667,
     38.566667
    ],
@@ -3211,8 +3211,8 @@
    "region": "Atlántico Norte",
    "from": "Vila do Porto",
    "to": "La Sociedad",
-   "nmMin": 632,
-   "nmMax": 751,
+   "nmMin": 635,
+   "nmMax": 755,
    "variantCount": 3,
    "bestMonths": [
     5,
@@ -3272,7 +3272,7 @@
    "from": "Horta",
    "to": "Norfolk",
    "nmMin": 6,
-   "nmMax": 2522,
+   "nmMax": 2466,
    "variantCount": 2,
    "bestMonths": [
     5
@@ -3309,8 +3309,8 @@
    "region": "Atlántico Norte",
    "from": "Horta",
    "to": "St John’s",
-   "nmMin": 2184,
-   "nmMax": 2197,
+   "nmMin": 2181,
+   "nmMax": 2222,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -3347,7 +3347,7 @@
    "from": "Norfolk",
    "to": "Brest",
    "nmMin": 12,
-   "nmMax": 4177,
+   "nmMax": 4187,
    "variantCount": 6,
    "bestMonths": [
     6,
@@ -3392,8 +3392,8 @@
    "region": "Atlántico Norte",
    "from": "Bay",
    "to": "Europa Point",
-   "nmMin": 3700,
-   "nmMax": 3700,
+   "nmMin": 3672,
+   "nmMax": 3672,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -3409,7 +3409,7 @@
    ],
    "bbox": [
     -76.366667,
-    35.951667,
+    35.991667,
     -5.341667,
     47.566667
    ],
@@ -3432,7 +3432,7 @@
    "from": "Norfolk",
    "to": "St George’s",
    "nmMin": 657,
-   "nmMax": 2288,
+   "nmMax": 2257,
    "variantCount": 2,
    "bestMonths": [
     5
@@ -3473,8 +3473,8 @@
    "region": "Atlántico Norte",
    "from": "Spear",
    "to": "Horta",
-   "nmMin": 3796,
-   "nmMax": 3796,
+   "nmMin": 3787,
+   "nmMax": 3787,
    "variantCount": 1,
    "bestMonths": [
     5
@@ -3514,7 +3514,7 @@
    "from": "start",
    "to": "Charlotte Amalie",
    "nmMin": 1187,
-   "nmMax": 2939,
+   "nmMax": 2927,
    "variantCount": 3,
    "bestMonths": [
     11
@@ -3553,8 +3553,8 @@
    "region": "Atlántico Norte",
    "from": "Charleston",
    "to": "San Salvador",
-   "nmMin": 54,
-   "nmMax": 2414,
+   "nmMin": 52,
+   "nmMax": 2425,
    "variantCount": 4,
    "bestMonths": [
     4,
@@ -3596,7 +3596,7 @@
    "from": "Morehead City",
    "to": "Cristobal",
    "nmMin": 172,
-   "nmMax": 2644,
+   "nmMax": 2640,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -3634,8 +3634,8 @@
    "region": "Atlántico Norte",
    "from": "Norfolk",
    "to": "Belize City",
-   "nmMin": 2726,
-   "nmMax": 7879,
+   "nmMin": 2733,
+   "nmMax": 7929,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -3681,8 +3681,8 @@
    "region": "Atlántico Norte",
    "from": "St John’s",
    "to": "Boca",
-   "nmMin": 4365,
-   "nmMax": 4365,
+   "nmMin": 4440,
+   "nmMax": 4440,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -3724,8 +3724,8 @@
    "region": "Atlántico Norte",
    "from": "Dover",
    "to": "Brunsbüttel",
-   "nmMin": 471,
-   "nmMax": 471,
+   "nmMin": 448,
+   "nmMax": 448,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -3750,8 +3750,8 @@
    "region": "Atlántico Norte",
    "from": "Dover",
    "to": "Thyborön",
-   "nmMin": 526,
-   "nmMax": 627,
+   "nmMin": 519,
+   "nmMax": 629,
    "variantCount": 4,
    "bestMonths": [
     5,
@@ -3780,8 +3780,8 @@
    "region": "Atlántico Norte",
    "from": "Peterhead",
    "to": "Gothenburg",
-   "nmMin": 485,
-   "nmMax": 1109,
+   "nmMin": 477,
+   "nmMax": 1105,
    "variantCount": 4,
    "bestMonths": [
     6,
@@ -3814,7 +3814,7 @@
    "from": "Peterhead",
    "to": "Longyearbyen",
    "nmMin": 314,
-   "nmMax": 1491,
+   "nmMax": 1472,
    "variantCount": 4,
    "bestMonths": [
     6,
@@ -3844,8 +3844,8 @@
    "region": "Atlántico Norte",
    "from": "Oban",
    "to": "Djupivogur",
-   "nmMin": 637,
-   "nmMax": 741,
+   "nmMin": 639,
+   "nmMax": 739,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -3873,8 +3873,8 @@
    "region": "Atlántico Norte",
    "from": "Crosshaven",
    "to": "Djupivogur",
-   "nmMin": 923,
-   "nmMax": 954,
+   "nmMin": 886,
+   "nmMax": 923,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -3884,7 +3884,7 @@
    "stormMonths": [],
    "bbox": [
     -22.75,
-    51.24393100966388,
+    51.366667,
     -8.26,
     64.663333
    ],
@@ -3898,8 +3898,8 @@
    "region": "Atlántico Norte",
    "from": "Crosshaven",
    "to": "Nuuk",
-   "nmMin": 1117,
-   "nmMax": 2066,
+   "nmMin": 1121,
+   "nmMax": 2079,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -3927,8 +3927,8 @@
    "region": "Atlántico Norte",
    "from": "Gothenburg",
    "to": "end",
-   "nmMin": 1143,
-   "nmMax": 1143,
+   "nmMin": 1135,
+   "nmMax": 1135,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -3957,7 +3957,7 @@
    "from": "Oslo",
    "to": "Peterhead",
    "nmMin": 206,
-   "nmMax": 994,
+   "nmMax": 1001,
    "variantCount": 4,
    "bestMonths": [
     6,
@@ -3967,7 +3967,7 @@
    "stormMonths": [],
    "bbox": [
     -3.95,
-    55.37066864377179,
+    55.4,
     14.543333,
     68.226667
    ],
@@ -3987,8 +3987,8 @@
    "region": "Atlántico Norte",
    "from": "Bergen",
    "to": "Longyearbyen",
-   "nmMin": 1189,
-   "nmMax": 3016,
+   "nmMin": 1196,
+   "nmMax": 3024,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -4018,8 +4018,8 @@
    "region": "Atlántico Norte",
    "from": "Bergen",
    "to": "Djupivogur",
-   "nmMin": 721,
-   "nmMax": 889,
+   "nmMin": 733,
+   "nmMax": 922,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -4048,7 +4048,7 @@
    "from": "Bergen",
    "to": "Nuuk",
    "nmMin": 829,
-   "nmMax": 1874,
+   "nmMax": 1886,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -4078,8 +4078,8 @@
    "region": "Atlántico Norte",
    "from": "Norfolk",
    "to": "Greenland S",
-   "nmMin": 808,
-   "nmMax": 4856,
+   "nmMin": 823,
+   "nmMax": 5021,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -4088,7 +4088,7 @@
    ],
    "stormMonths": [],
    "bbox": [
-    -78.09613526951036,
+    -77.983333,
     36.7,
     -42.916667,
     72.783333
@@ -4108,7 +4108,7 @@
    "from": "Ammassalik",
    "to": "Isafjördur",
    "nmMin": 204,
-   "nmMax": 1375,
+   "nmMax": 1406,
    "variantCount": 4,
    "bestMonths": [
     6,
@@ -4138,8 +4138,8 @@
    "region": "Atlántico Norte",
    "from": "Isafjördur",
    "to": "Solvaer",
-   "nmMin": 173,
-   "nmMax": 1438,
+   "nmMin": 176,
+   "nmMax": 1444,
    "variantCount": 5,
    "bestMonths": [
     6,
@@ -4169,8 +4169,8 @@
    "region": "Atlántico Norte",
    "from": "Nuuk",
    "to": "St George’s",
-   "nmMin": 3434,
-   "nmMax": 3434,
+   "nmMin": 3466,
+   "nmMax": 3466,
    "variantCount": 1,
    "bestMonths": [
     7,
@@ -4212,8 +4212,8 @@
    "region": "Atlántico Norte",
    "from": "Reykjavik",
    "to": "St George’s",
-   "nmMin": 6355,
-   "nmMax": 6355,
+   "nmMin": 6378,
+   "nmMax": 6378,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -4256,7 +4256,7 @@
    "from": "Nuuk",
    "to": "Longyearbyen",
    "nmMin": 4,
-   "nmMax": 2129,
+   "nmMax": 2146,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -4280,8 +4280,8 @@
    "region": "Atlántico Norte",
    "from": "Longyearbyen",
    "to": "Nuuk",
-   "nmMin": 578,
-   "nmMax": 2512,
+   "nmMin": 582,
+   "nmMax": 2543,
    "variantCount": 4,
    "bestMonths": [
     7,
@@ -4332,7 +4332,7 @@
    "from": "Cape Town",
    "to": "Jamestown",
    "nmMin": 1703,
-   "nmMax": 1860,
+   "nmMax": 1874,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -4392,8 +4392,8 @@
    "region": "Atlántico Sur",
    "from": "Jamestown",
    "to": "Fortaleza",
-   "nmMin": 3842,
-   "nmMax": 3842,
+   "nmMin": 3849,
+   "nmMax": 3849,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -4452,8 +4452,8 @@
    "region": "Atlántico Sur",
    "from": "Cape Town",
    "to": "Buenos Aires",
-   "nmMin": 8013,
-   "nmMax": 8013,
+   "nmMin": 8002,
+   "nmMax": 8002,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -4477,8 +4477,8 @@
    "region": "Atlántico Sur",
    "from": "Cape Town",
    "to": "Cape W",
-   "nmMin": 19,
-   "nmMax": 19,
+   "nmMin": 8,
+   "nmMax": 8,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -4487,7 +4487,7 @@
    "stormMonths": [],
    "bbox": [
     18.266667,
-    -34.003333000000005,
+    -33.883333,
     18.433333,
     -33.866667
    ],
@@ -4502,7 +4502,7 @@
    "from": "Rio de Janeiro",
    "to": "34˚57.0’S, 56˚13.5’W",
    "nmMin": 2139,
-   "nmMax": 4933,
+   "nmMax": 5049,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -4528,8 +4528,8 @@
    "region": "Atlántico Sur",
    "from": "Rio de Janeiro",
    "to": "Port Stanley",
-   "nmMin": 2378,
-   "nmMax": 2378,
+   "nmMin": 2381,
+   "nmMax": 2381,
    "variantCount": 1,
    "bestMonths": [
     11,
@@ -4553,8 +4553,8 @@
    "region": "Atlántico Sur",
    "from": "Salvador",
    "to": "Buenos Aires",
-   "nmMin": 1923,
-   "nmMax": 1923,
+   "nmMin": 1930,
+   "nmMax": 1930,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -4610,7 +4610,7 @@
    "from": "Ushuaia",
    "to": "Fernando de Noronha",
    "nmMin": 28,
-   "nmMax": 4837,
+   "nmMax": 4817,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -4621,7 +4621,7 @@
    "stormMonths": [],
    "bbox": [
     -70.9,
-    -55.655007126872846,
+    -55.091667,
     -32.405,
     -3.816667
    ],
@@ -4639,8 +4639,8 @@
    "region": "Atlántico Sur",
    "from": "Mar del Plata",
    "to": "Fernando de Noronha",
-   "nmMin": 2776,
-   "nmMax": 2776,
+   "nmMin": 2786,
+   "nmMax": 2786,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -4690,8 +4690,8 @@
    "region": "Atlántico Sur",
    "from": "Port Stanley",
    "to": "Grytviken",
-   "nmMin": 801,
-   "nmMax": 801,
+   "nmMin": 805,
+   "nmMax": 805,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -4716,7 +4716,7 @@
    "from": "Port Stanley",
    "to": "Peninsula NW",
    "nmMin": 853,
-   "nmMax": 857,
+   "nmMax": 863,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -4740,8 +4740,8 @@
    "region": "Atlántico Sur",
    "from": "Port Stanley",
    "to": "Punta Arenas",
-   "nmMin": 490,
-   "nmMax": 522,
+   "nmMin": 447,
+   "nmMax": 531,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -4751,7 +4751,7 @@
    "stormMonths": [],
    "bbox": [
     -70.9,
-    -55.655007126872846,
+    -55.091667,
     -57.708333,
     -51.666667
    ],
@@ -4770,7 +4770,7 @@
    "from": "Ushuaia",
    "to": "Port Stanley",
    "nmMin": 161,
-   "nmMax": 492,
+   "nmMax": 454,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -4780,7 +4780,7 @@
    "stormMonths": [],
    "bbox": [
     -70.9,
-    -55.655007126872846,
+    -55.091667,
     -57.708333,
     -51.666667
    ],
@@ -4798,8 +4798,8 @@
    "region": "Atlántico Sur",
    "from": "Ushuaia",
    "to": "Deception Island",
-   "nmMin": 579,
-   "nmMax": 707,
+   "nmMin": 595,
+   "nmMax": 712,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -4846,8 +4846,8 @@
    "region": "Atlántico Sur",
    "from": "Melchior",
    "to": "Port Stanley",
-   "nmMin": 213,
-   "nmMax": 1186,
+   "nmMin": 216,
+   "nmMax": 1208,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -4897,7 +4897,7 @@
    "from": "Las Palmas",
    "to": "Salvador",
    "nmMin": 932,
-   "nmMax": 3036,
+   "nmMax": 3041,
    "variantCount": 3,
    "bestMonths": [
     9,
@@ -4929,7 +4929,7 @@
    "from": "Banjul",
    "to": "Salvador",
    "nmMin": 2126,
-   "nmMax": 2377,
+   "nmMax": 2384,
    "variantCount": 2,
    "bestMonths": [
     10,
@@ -4959,8 +4959,8 @@
    "region": "Atlántico Tropical",
    "from": "Horta",
    "to": "Salvador",
-   "nmMin": 3402,
-   "nmMax": 3402,
+   "nmMin": 3399,
+   "nmMax": 3399,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -4989,8 +4989,8 @@
    "region": "Atlántico Tropical",
    "from": "Norfolk",
    "to": "Salvador",
-   "nmMin": 4221,
-   "nmMax": 4221,
+   "nmMin": 4218,
+   "nmMax": 4218,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -5031,8 +5031,8 @@
    "region": "Atlántico Tropical",
    "from": "Scarborough",
    "to": "Rio de Janeiro",
-   "nmMin": 2423,
-   "nmMax": 3833,
+   "nmMin": 2464,
+   "nmMax": 3794,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -5064,8 +5064,8 @@
    "region": "Atlántico Tropical",
    "from": "Fernando de Noronha",
    "to": "Scarborough",
-   "nmMin": 2182,
-   "nmMax": 2985,
+   "nmMin": 2217,
+   "nmMax": 3004,
    "variantCount": 2,
    "bestMonths": [
     2,
@@ -5135,7 +5135,7 @@
    "from": "Salvador",
    "to": "Las Palmas",
    "nmMin": 25,
-   "nmMax": 2914,
+   "nmMax": 2917,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -5160,8 +5160,8 @@
    "region": "Atlántico Tropical",
    "from": "Salvador",
    "to": "Dakar",
-   "nmMin": 2193,
-   "nmMax": 2193,
+   "nmMin": 2196,
+   "nmMax": 2196,
    "variantCount": 1,
    "bestMonths": [
     7,
@@ -5186,7 +5186,7 @@
    "from": "Cape Town",
    "to": "English Harbour",
    "nmMin": 5354,
-   "nmMax": 9623,
+   "nmMax": 9694,
    "variantCount": 3,
    "bestMonths": [
     1,
@@ -5203,7 +5203,7 @@
     11
    ],
    "bbox": [
-    -61.766667,
+    -62.0,
     -33.883333,
     18.433333,
     17.003333
@@ -5302,8 +5302,8 @@
    "region": "Atlántico Tropical",
    "from": "Cape Town",
    "to": "Queensway Marina",
-   "nmMin": 5676,
-   "nmMax": 5676,
+   "nmMin": 5669,
+   "nmMax": 5669,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5328,8 +5328,8 @@
    "region": "Índico Norte",
    "from": "Singapore",
    "to": "Kuah",
-   "nmMin": 565,
-   "nmMax": 565,
+   "nmMin": 567,
+   "nmMax": 567,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -5339,7 +5339,7 @@
    "stormMonths": [],
    "bbox": [
     99.833333,
-    1.21041675,
+    1.245,
     103.75,
     6.305
    ],
@@ -5473,9 +5473,9 @@
    "chapter": "IN",
    "region": "Índico Norte",
    "from": "Ao Chalong",
-   "to": "Singapore W",
-   "nmMin": 753,
-   "nmMax": 753,
+   "to": "Singapore",
+   "nmMin": 749,
+   "nmMax": 749,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5495,7 +5495,7 @@
    ],
    "bbox": [
     98.341667,
-    1.21041675,
+    1.245,
     103.75,
     7.8
    ],
@@ -5505,7 +5505,8 @@
     "Penang",
     "Pangkor",
     "Port Klang",
-    "Malacca"
+    "Malacca",
+    "Singapore"
    ],
    "ports": [
     "Ao Chalong",
@@ -5513,7 +5514,8 @@
     "Penang",
     "Pangkor",
     "Port Klang",
-    "Malacca"
+    "Malacca",
+    "Singapore"
    ]
   },
   {
@@ -5561,8 +5563,8 @@
    "region": "Índico Norte",
    "from": "Ao Chalong",
    "to": "Khawtung",
-   "nmMin": 174,
-   "nmMax": 174,
+   "nmMin": 175,
+   "nmMax": 175,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5669,8 +5671,8 @@
    "region": "Índico Norte",
    "from": "Magalle",
    "to": "Panaji",
-   "nmMin": 736,
-   "nmMax": 736,
+   "nmMin": 756,
+   "nmMax": 756,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -5687,7 +5689,7 @@
     12
    ],
    "bbox": [
-    73.716667,
+    73.7,
     6.008333,
     80.228333,
     15.495
@@ -5739,7 +5741,7 @@
    "from": "Magalle",
    "to": "Ao Chalong",
    "nmMin": 1101,
-   "nmMax": 1763,
+   "nmMax": 1759,
    "variantCount": 3,
    "bestMonths": [
     1,
@@ -5755,7 +5757,7 @@
    ],
    "bbox": [
     80.223333,
-    1.21041675,
+    1.245,
     103.75,
     7.8
    ],
@@ -5783,8 +5785,8 @@
    "region": "Índico Norte",
    "from": "Malé",
    "to": "Panaji",
-   "nmMin": 761,
-   "nmMax": 761,
+   "nmMin": 773,
+   "nmMax": 773,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5815,8 +5817,8 @@
    "region": "Índico Norte",
    "from": "Malé",
    "to": "Salalah",
-   "nmMin": 1463,
-   "nmMax": 1463,
+   "nmMin": 1464,
+   "nmMax": 1464,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5851,8 +5853,8 @@
    "region": "Índico Norte",
    "from": "Malé",
    "to": "Heron N",
-   "nmMin": 2151,
-   "nmMax": 2151,
+   "nmMin": 2155,
+   "nmMax": 2155,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5887,8 +5889,8 @@
    "region": "Índico Norte",
    "from": "Panaji",
    "to": "Heron N",
-   "nmMin": 2389,
-   "nmMax": 2389,
+   "nmMin": 2405,
+   "nmMax": 2405,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5919,8 +5921,8 @@
    "region": "Índico Norte",
    "from": "Salalah",
    "to": "Heron N",
-   "nmMin": 745,
-   "nmMax": 745,
+   "nmMin": 746,
+   "nmMax": 746,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -5951,8 +5953,8 @@
    "region": "Índico Norte",
    "from": "Djibouti",
    "to": "Magalle",
-   "nmMin": 2577,
-   "nmMax": 2577,
+   "nmMin": 2581,
+   "nmMax": 2581,
    "variantCount": 1,
    "bestMonths": [
     8
@@ -5982,8 +5984,8 @@
    "region": "Índico Norte",
    "from": "Salalah",
    "to": "Magalle",
-   "nmMin": 3229,
-   "nmMax": 3229,
+   "nmMin": 3306,
+   "nmMax": 3306,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -6014,8 +6016,8 @@
    "region": "Índico Norte",
    "from": "Djibouti",
    "to": "Malé",
-   "nmMin": 2260,
-   "nmMax": 2260,
+   "nmMin": 2264,
+   "nmMax": 2264,
    "variantCount": 1,
    "bestMonths": [
     8
@@ -6046,7 +6048,7 @@
    "from": "Djibouti",
    "to": "Panaji",
    "nmMin": 1325,
-   "nmMax": 2151,
+   "nmMax": 2156,
    "variantCount": 2,
    "bestMonths": [
     8
@@ -6076,8 +6078,8 @@
    "region": "Índico Norte",
    "from": "Panaji",
    "to": "Salalah",
-   "nmMin": 2299,
-   "nmMax": 2299,
+   "nmMin": 2318,
+   "nmMax": 2318,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -6185,7 +6187,7 @@
    "from": "Thursday",
    "to": "Ambon",
    "nmMin": 962,
-   "nmMax": 1618,
+   "nmMax": 1626,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -6226,8 +6228,8 @@
    "region": "Índico Sur",
    "from": "Darwin",
    "to": "Dili",
-   "nmMin": 441,
-   "nmMax": 618,
+   "nmMin": 438,
+   "nmMax": 672,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -6266,7 +6268,7 @@
    "region": "Índico Sur",
    "from": "Darwin",
    "to": "Kupang",
-   "nmMin": 472,
+   "nmMin": 471,
    "nmMax": 2020,
    "variantCount": 3,
    "bestMonths": [
@@ -6346,8 +6348,8 @@
    "region": "Índico Sur",
    "from": "Fremantle",
    "to": "Devonport",
-   "nmMin": 1983,
-   "nmMax": 1983,
+   "nmMin": 1985,
+   "nmMax": 1985,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -6375,8 +6377,8 @@
    "region": "Índico Sur",
    "from": "Benoa",
    "to": "Port Louis",
-   "nmMin": 1114,
-   "nmMax": 8775,
+   "nmMin": 1140,
+   "nmMax": 8786,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -6414,8 +6416,8 @@
    "region": "Índico Sur",
    "from": "Benoa",
    "to": "Fremantle",
-   "nmMin": 1867,
-   "nmMax": 1867,
+   "nmMin": 1925,
+   "nmMax": 1925,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -6449,7 +6451,7 @@
    "region": "Índico Sur",
    "from": "Benoa",
    "to": "Darwin",
-   "nmMin": 572,
+   "nmMin": 573,
    "nmMax": 973,
    "variantCount": 2,
    "bestMonths": [
@@ -6487,7 +6489,7 @@
    "from": "Benoa",
    "to": "Thursday",
    "nmMin": 438,
-   "nmMax": 3201,
+   "nmMax": 3206,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -6823,7 +6825,7 @@
    "region": "Índico Sur",
    "from": "Victoria",
    "to": "Antsiranana",
-   "nmMin": 613,
+   "nmMin": 615,
    "nmMax": 1020,
    "variantCount": 3,
    "bestMonths": [
@@ -6861,8 +6863,8 @@
    "region": "Índico Sur",
    "from": "Victoria",
    "to": "Hell-Ville",
-   "nmMin": 757,
-   "nmMax": 1011,
+   "nmMin": 760,
+   "nmMax": 1015,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -6938,8 +6940,8 @@
    "region": "Índico Sur",
    "from": "Mombasa",
    "to": "Anne W",
-   "nmMin": 1219,
-   "nmMax": 1219,
+   "nmMin": 1220,
+   "nmMax": 1220,
    "variantCount": 1,
    "bestMonths": [
     4
@@ -7014,7 +7016,7 @@
    "region": "Índico Sur",
    "from": "Hell-Ville",
    "to": "Victoria",
-   "nmMin": 536,
+   "nmMin": 538,
    "nmMax": 713,
    "variantCount": 2,
    "bestMonths": [
@@ -7056,7 +7058,7 @@
    "from": "Hell-Ville",
    "to": "Mombasa",
    "nmMin": 455,
-   "nmMax": 901,
+   "nmMax": 904,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -7097,7 +7099,7 @@
    "from": "Sainte Marie",
    "to": "Durban",
    "nmMin": 681,
-   "nmMax": 1883,
+   "nmMax": 1650,
    "variantCount": 3,
    "bestMonths": [
     10
@@ -7288,8 +7290,8 @@
    "region": "Índico Sur",
    "from": "Port Louis",
    "to": "Dar es Salaam",
-   "nmMin": 2810,
-   "nmMax": 2810,
+   "nmMin": 2811,
+   "nmMax": 2811,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -7329,8 +7331,8 @@
    "region": "Índico Sur",
    "from": "Port Louis",
    "to": "Durban",
-   "nmMin": 1649,
-   "nmMax": 1649,
+   "nmMin": 1650,
+   "nmMax": 1650,
    "variantCount": 1,
    "bestMonths": [
     10
@@ -7360,8 +7362,8 @@
    "region": "Índico Sur",
    "from": "Durban",
    "to": "Port Louis",
-   "nmMin": 1632,
-   "nmMax": 1632,
+   "nmMin": 1634,
+   "nmMax": 1634,
    "variantCount": 1,
    "bestMonths": [
     6
@@ -7391,8 +7393,8 @@
    "region": "Índico Sur",
    "from": "Durban",
    "to": "Cape Town",
-   "nmMin": 992,
-   "nmMax": 992,
+   "nmMin": 1010,
+   "nmMax": 1010,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -7420,7 +7422,7 @@
    "region": "Índico Sur",
    "from": "Cape Town",
    "to": "Fremantle",
-   "nmMin": 4332,
+   "nmMin": 4337,
    "nmMax": 4716,
    "variantCount": 2,
    "bestMonths": [
@@ -7456,8 +7458,8 @@
    "region": "Índico Sur",
    "from": "Richards Bay",
    "to": "Nacala",
-   "nmMin": 1129,
-   "nmMax": 1634,
+   "nmMin": 1134,
+   "nmMax": 1637,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -7497,7 +7499,7 @@
    "region": "Índico Tropical",
    "from": "Benoa",
    "to": "Singapore SE",
-   "nmMin": 982,
+   "nmMin": 985,
    "nmMax": 1383,
    "variantCount": 2,
    "bestMonths": [
@@ -7530,8 +7532,8 @@
    "region": "Índico Tropical",
    "from": "Benoa",
    "to": "Magalle",
-   "nmMin": 1839,
-   "nmMax": 2319,
+   "nmMin": 1866,
+   "nmMax": 2328,
    "variantCount": 2,
    "bestMonths": [
     8
@@ -7694,8 +7696,8 @@
    "region": "Índico Tropical",
    "from": "Victoria",
    "to": "Heron N",
-   "nmMin": 1799,
-   "nmMax": 1799,
+   "nmMin": 1800,
+   "nmMax": 1800,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -7734,8 +7736,8 @@
    "region": "Índico Tropical",
    "from": "Mombasa",
    "to": "Heron N",
-   "nmMin": 2409,
-   "nmMax": 2409,
+   "nmMin": 2417,
+   "nmMax": 2417,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -7771,7 +7773,7 @@
    "region": "Índico Tropical",
    "from": "Ari SE",
    "to": "Ao Chalong",
-   "nmMin": 1635,
+   "nmMin": 1633,
    "nmMax": 4333,
    "variantCount": 2,
    "bestMonths": [
@@ -7812,8 +7814,8 @@
    "region": "Índico Tropical",
    "from": "Darwin",
    "to": "Ao Chalong",
-   "nmMin": 2631,
-   "nmMax": 5340,
+   "nmMin": 2693,
+   "nmMax": 5383,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -7861,7 +7863,7 @@
    "from": "Djibouti",
    "to": "Anne W",
    "nmMin": 47,
-   "nmMax": 2062,
+   "nmMax": 2066,
    "variantCount": 2,
    "bestMonths": [
     4
@@ -7943,7 +7945,7 @@
    "region": "Índico Tropical",
    "from": "Magalle",
    "to": "Direction",
-   "nmMin": 3005,
+   "nmMin": 3013,
    "nmMax": 7574,
    "variantCount": 2,
    "bestMonths": [
@@ -7979,8 +7981,8 @@
    "region": "Índico Tropical",
    "from": "Singapore",
    "to": "Thursday",
-   "nmMin": 3915,
-   "nmMax": 3915,
+   "nmMin": 3923,
+   "nmMax": 3923,
    "variantCount": 1,
    "bestMonths": [
     9,
@@ -8063,8 +8065,8 @@
    "region": "Mediterráneo Este",
    "from": "Gibraltar",
    "to": "Port Said",
-   "nmMin": 2315,
-   "nmMax": 2315,
+   "nmMin": 2293,
+   "nmMax": 2293,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -8108,8 +8110,8 @@
    "region": "Mediterráneo Este",
    "from": "Gibraltar",
    "to": "Port Said N",
-   "nmMin": 2403,
-   "nmMax": 2403,
+   "nmMin": 2411,
+   "nmMax": 2411,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -8161,8 +8163,8 @@
    "region": "Mediterráneo Oeste",
    "from": "Port Said",
    "to": "Gibraltar",
-   "nmMin": 2170,
-   "nmMax": 2170,
+   "nmMin": 2179,
+   "nmMax": 2179,
    "variantCount": 1,
    "bestMonths": [
     4,
@@ -8199,8 +8201,8 @@
    "region": "Mediterráneo Oeste",
    "from": "Port Said",
    "to": "Gibraltar",
-   "nmMin": 2675,
-   "nmMax": 2675,
+   "nmMin": 2671,
+   "nmMax": 2671,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -8256,8 +8258,8 @@
    "region": "Pacífico Norte",
    "from": "San Francisco",
    "to": "Hilo",
-   "nmMin": 2590,
-   "nmMax": 2745,
+   "nmMin": 2606,
+   "nmMax": 2749,
    "variantCount": 2,
    "bestMonths": [
     4,
@@ -8288,8 +8290,8 @@
    "region": "Pacífico Norte",
    "from": "San Francisco",
    "to": "Cabo San Lucas",
-   "nmMin": 1205,
-   "nmMax": 2974,
+   "nmMin": 1220,
+   "nmMax": 3006,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -8309,7 +8311,7 @@
    ],
    "bbox": [
     -122.733333,
-    7.083333,
+    7.0,
     -79.5,
     37.816667
    ],
@@ -8323,8 +8325,8 @@
    "region": "Pacífico Norte",
    "from": "San Francisco",
    "to": "Victoria",
-   "nmMin": 750,
-   "nmMax": 750,
+   "nmMin": 756,
+   "nmMax": 756,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -8349,7 +8351,7 @@
    "from": "Kodiak",
    "to": "Victoria",
    "nmMin": 202,
-   "nmMax": 2380,
+   "nmMax": 2379,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -8385,8 +8387,8 @@
    "region": "Pacífico Norte",
    "from": "Victoria",
    "to": "San Diego",
-   "nmMin": 1355,
-   "nmMax": 1355,
+   "nmMin": 1356,
+   "nmMax": 1356,
    "variantCount": 1,
    "bestMonths": [
     7,
@@ -8410,8 +8412,8 @@
    "region": "Pacífico Norte",
    "from": "Victoria",
    "to": "Honolulu",
-   "nmMin": 2862,
-   "nmMax": 2862,
+   "nmMin": 2855,
+   "nmMax": 2855,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -8442,8 +8444,8 @@
    "region": "Pacífico Norte",
    "from": "San Diego",
    "to": "Dutch Harbor",
-   "nmMin": 2093,
-   "nmMax": 2830,
+   "nmMin": 2095,
+   "nmMax": 2937,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -8453,7 +8455,7 @@
    "stormMonths": [],
    "bbox": [
     -166.508333,
-    32.616667,
+    32.6,
     -117.23,
     57.841667
    ],
@@ -8471,8 +8473,8 @@
    "region": "Pacífico Norte",
    "from": "Victoria",
    "to": "Dutch Harbor",
-   "nmMin": 1311,
-   "nmMax": 1778,
+   "nmMin": 1360,
+   "nmMax": 1797,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -8482,7 +8484,7 @@
    "stormMonths": [],
    "bbox": [
     -166.508333,
-    48.35775738340296,
+    48.416667,
     -123.136667,
     57.834167
    ],
@@ -8500,8 +8502,8 @@
    "region": "Pacífico Norte",
    "from": "Dutch Harbor",
    "to": "Barrow",
-   "nmMin": 1199,
-   "nmMax": 1199,
+   "nmMin": 1202,
+   "nmMax": 1202,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -8525,8 +8527,8 @@
    "region": "Pacífico Norte",
    "from": "Balboa",
    "to": "Cabo San Lucas",
-   "nmMin": 2280,
-   "nmMax": 2280,
+   "nmMin": 2283,
+   "nmMax": 2283,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -8546,7 +8548,7 @@
    ],
    "bbox": [
     -109.905,
-    7.083333,
+    7.0,
     -79.5,
     22.881667
    ],
@@ -8561,7 +8563,7 @@
    "from": "Cabo San Lucas",
    "to": "Balboa",
    "nmMin": 15,
-   "nmMax": 2224,
+   "nmMax": 2229,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -8581,7 +8583,7 @@
    ],
    "bbox": [
     -109.905,
-    7.083333,
+    7.0,
     -79.5,
     22.881667
    ],
@@ -8595,8 +8597,8 @@
    "region": "Pacífico Norte",
    "from": "Balboa",
    "to": "Oahu S",
-   "nmMin": 2962,
-   "nmMax": 5006,
+   "nmMin": 2990,
+   "nmMax": 4993,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -8659,7 +8661,7 @@
    "from": "Balboa",
    "to": "London",
    "nmMin": 2985,
-   "nmMax": 4794,
+   "nmMax": 4797,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -8699,8 +8701,8 @@
    "region": "Pacífico Norte",
    "from": "Honolulu",
    "to": "Kodiak",
-   "nmMin": 2865,
-   "nmMax": 3147,
+   "nmMin": 2844,
+   "nmMax": 3181,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -8732,8 +8734,8 @@
    "region": "Pacífico Norte",
    "from": "Hanalei",
    "to": "Victoria",
-   "nmMin": 3067,
-   "nmMax": 3067,
+   "nmMin": 3066,
+   "nmMax": 3066,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -8770,8 +8772,8 @@
    "region": "Pacífico Norte",
    "from": "Hanalei",
    "to": "San Diego",
-   "nmMin": 3375,
-   "nmMax": 3375,
+   "nmMin": 3351,
+   "nmMax": 3351,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -8839,8 +8841,8 @@
    "region": "Pacífico Norte",
    "from": "Honolulu",
    "to": "London",
-   "nmMin": 1424,
-   "nmMax": 1424,
+   "nmMin": 1439,
+   "nmMax": 1439,
    "variantCount": 1,
    "bestMonths": [
     4,
@@ -8872,8 +8874,8 @@
    "region": "Pacífico Norte",
    "from": "Honolulu",
    "to": "Tarawa",
-   "nmMin": 2370,
-   "nmMax": 2370,
+   "nmMin": 2381,
+   "nmMax": 2381,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -8911,7 +8913,7 @@
    "region": "Pacífico Norte",
    "from": "Honolulu",
    "to": "Kansai SW",
-   "nmMin": 4031,
+   "nmMin": 4032,
    "nmMax": 4218,
    "variantCount": 2,
    "bestMonths": [
@@ -8987,8 +8989,8 @@
    "region": "Pacífico Norte",
    "from": "Guam N",
    "to": "Xiamen",
-   "nmMin": 1386,
-   "nmMax": 5213,
+   "nmMin": 1422,
+   "nmMax": 5224,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -9032,8 +9034,8 @@
    "region": "Pacífico Norte",
    "from": "Singapore",
    "to": "Bangkok",
-   "nmMin": 857,
-   "nmMax": 857,
+   "nmMin": 862,
+   "nmMax": 862,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9051,8 +9053,8 @@
     12
    ],
    "bbox": [
-    100.55,
-    1.2438063501644958,
+    100.5,
+    1.266667,
     104.633333,
     13.433333
    ],
@@ -9070,8 +9072,8 @@
    "region": "Pacífico Norte",
    "from": "Singapore",
    "to": "Nha Trang",
-   "nmMin": 1101,
-   "nmMax": 1101,
+   "nmMin": 1093,
+   "nmMax": 1093,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9094,7 +9096,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     109.333333,
     12.258333
    ],
@@ -9114,8 +9116,8 @@
    "region": "Pacífico Norte",
    "from": "Singapore",
    "to": "Hong Kong",
-   "nmMin": 1581,
-   "nmMax": 2569,
+   "nmMin": 1584,
+   "nmMax": 2570,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -9138,7 +9140,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     123.05,
     31.396667
    ],
@@ -9160,8 +9162,8 @@
    "region": "Pacífico Norte",
    "from": "Singapore",
    "to": "Subic Bay",
-   "nmMin": 1598,
-   "nmMax": 1598,
+   "nmMin": 1594,
+   "nmMax": 1594,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9184,7 +9186,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     120.966667,
     14.85
    ],
@@ -9202,8 +9204,8 @@
    "region": "Pacífico Norte",
    "from": "Singapore",
    "to": "Kota Kinabalu",
-   "nmMin": 1302,
-   "nmMax": 1302,
+   "nmMin": 1310,
+   "nmMax": 1310,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9226,7 +9228,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     116.058333,
     5.98
    ],
@@ -9244,8 +9246,8 @@
    "region": "Pacífico Norte",
    "from": "Manila",
    "to": "Singapore",
-   "nmMin": 1666,
-   "nmMax": 1666,
+   "nmMin": 1671,
+   "nmMax": 1671,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9268,7 +9270,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     120.966667,
     14.85
    ],
@@ -9287,7 +9289,7 @@
    "from": "Manila",
    "to": "Hong Kong",
    "nmMin": 647,
-   "nmMax": 2179,
+   "nmMax": 2183,
    "variantCount": 3,
    "bestMonths": [
     1,
@@ -9324,8 +9326,8 @@
    "region": "Pacífico Norte",
    "from": "Manila",
    "to": "Nagasaki",
-   "nmMin": 318,
-   "nmMax": 1451,
+   "nmMin": 316,
+   "nmMax": 1474,
    "variantCount": 3,
    "bestMonths": [
     1,
@@ -9371,7 +9373,7 @@
    "from": "Manila",
    "to": "Apra",
    "nmMin": 599,
-   "nmMax": 1774,
+   "nmMax": 1775,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -9414,8 +9416,8 @@
    "region": "Pacífico Norte",
    "from": "Davao",
    "to": "Toagel",
-   "nmMin": 1281,
-   "nmMax": 1281,
+   "nmMin": 1290,
+   "nmMax": 1290,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9460,7 +9462,7 @@
    "from": "Hong Kong",
    "to": "Singapore",
    "nmMin": 4,
-   "nmMax": 2462,
+   "nmMax": 2474,
    "variantCount": 3,
    "bestMonths": [
     1,
@@ -9482,7 +9484,7 @@
    ],
    "bbox": [
     103.75,
-    1.2438063501644958,
+    1.266667,
     120.966667,
     24.433333
    ],
@@ -9546,7 +9548,7 @@
    "from": "Hong Kong",
    "to": "Kansai SW",
    "nmMin": 177,
-   "nmMax": 1680,
+   "nmMax": 1682,
    "variantCount": 4,
    "bestMonths": [
     4
@@ -9586,7 +9588,7 @@
    "from": "Hong Kong",
    "to": "Toagel",
    "nmMin": 457,
-   "nmMax": 2884,
+   "nmMax": 2873,
    "variantCount": 3,
    "bestMonths": [
     12,
@@ -9628,8 +9630,8 @@
    "region": "Pacífico Norte",
    "from": "Kitakyushu",
    "to": "Pilot",
-   "nmMin": 77,
-   "nmMax": 1133,
+   "nmMin": 81,
+   "nmMax": 1134,
    "variantCount": 4,
    "bestMonths": [
     3,
@@ -9667,8 +9669,8 @@
    "region": "Pacífico Norte",
    "from": "Osaka",
    "to": "Manila",
-   "nmMin": 1554,
-   "nmMax": 1842,
+   "nmMin": 1552,
+   "nmMax": 1850,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -9710,8 +9712,8 @@
    "region": "Pacífico Norte",
    "from": "Osaka",
    "to": "Kodiak NE",
-   "nmMin": 3518,
-   "nmMax": 3518,
+   "nmMin": 3519,
+   "nmMax": 3519,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -9729,7 +9731,7 @@
    ],
    "bbox": [
     134.983333,
-    33.46195192745173,
+    33.85,
     208.233333,
     57.841667
    ],
@@ -9747,8 +9749,8 @@
    "region": "Pacífico Norte",
    "from": "Osaka",
    "to": "Barbara NW",
-   "nmMin": 5553,
-   "nmMax": 5553,
+   "nmMin": 5563,
+   "nmMax": 5563,
    "variantCount": 1,
    "bestMonths": [
     7,
@@ -9766,7 +9768,7 @@
    ],
    "bbox": [
     134.983333,
-    33.46195192745173,
+    33.6,
     241.878333,
     48.6
    ],
@@ -9784,8 +9786,8 @@
    "region": "Pacífico Norte",
    "from": "Osaka",
    "to": "Kauai SE",
-   "nmMin": 3663,
-   "nmMax": 3663,
+   "nmMin": 3681,
+   "nmMax": 3681,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -9821,8 +9823,8 @@
    "region": "Pacífico Norte",
    "from": "Osaka",
    "to": "Tarawa W",
-   "nmMin": 3199,
-   "nmMax": 3199,
+   "nmMin": 3211,
+   "nmMax": 3211,
    "variantCount": 1,
    "bestMonths": [
     3,
@@ -9863,7 +9865,7 @@
    "from": "Osaka",
    "to": "Guam W",
    "nmMin": 35,
-   "nmMax": 1650,
+   "nmMax": 1648,
    "variantCount": 3,
    "bestMonths": [
     3,
@@ -9905,8 +9907,8 @@
    "region": "Pacífico Norte",
    "from": "Apra",
    "to": "London",
-   "nmMin": 3901,
-   "nmMax": 3901,
+   "nmMin": 3995,
+   "nmMax": 3995,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -9930,7 +9932,7 @@
    ],
    "bbox": [
     144.591667,
-    1.308333,
+    0.6000000000000001,
     202.516667,
     13.45
    ],
@@ -9944,8 +9946,8 @@
    "region": "Pacífico Norte",
    "from": "Majuro",
    "to": "Malakal",
-   "nmMin": 2510,
-   "nmMax": 2510,
+   "nmMin": 2511,
+   "nmMax": 2511,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -10071,9 +10073,9 @@
    "chapter": "PN",
    "region": "Pacífico Norte",
    "from": "Apra",
-   "to": "Kansai SW",
-   "nmMin": 1463,
-   "nmMax": 1940,
+   "to": "Osaka",
+   "nmMin": 1471,
+   "nmMax": 1941,
    "variantCount": 2,
    "bestMonths": [
     3,
@@ -10152,8 +10154,8 @@
    "region": "Pacífico Norte",
    "from": "Malakal",
    "to": "Osaka",
-   "nmMin": 2019,
-   "nmMax": 2991,
+   "nmMin": 2026,
+   "nmMax": 3012,
    "variantCount": 2,
    "bestMonths": [
     2,
@@ -10194,8 +10196,8 @@
    "region": "Pacífico Norte",
    "from": "Malakal",
    "to": "Davao S",
-   "nmMin": 1281,
-   "nmMax": 1281,
+   "nmMin": 1290,
+   "nmMax": 1290,
    "variantCount": 1,
    "bestMonths": [
     1,
@@ -10240,8 +10242,8 @@
    "region": "Pacífico Norte",
    "from": "London",
    "to": "Honolulu",
-   "nmMin": 1337,
-   "nmMax": 1337,
+   "nmMin": 1342,
+   "nmMax": 1342,
    "variantCount": 1,
    "bestMonths": [
     4
@@ -10331,8 +10333,8 @@
    "region": "Pacífico Sur",
    "from": "Puerto Ayora",
    "to": "Hanga Roa",
-   "nmMin": 1933,
-   "nmMax": 8725,
+   "nmMin": 1939,
+   "nmMax": 8727,
    "variantCount": 2,
    "bestMonths": [
     3,
@@ -10363,8 +10365,8 @@
    "region": "Pacífico Sur",
    "from": "Puerto Lucia",
    "to": "Callao",
-   "nmMin": 847,
-   "nmMax": 3795,
+   "nmMin": 842,
+   "nmMax": 3768,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -10398,7 +10400,7 @@
    "from": "Puerto Montt",
    "to": "Hanga Roa",
    "nmMin": 2018,
-   "nmMax": 2310,
+   "nmMax": 2282,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -10493,7 +10495,7 @@
    "from": "Puerto Montt",
    "to": "Balboa",
    "nmMin": 2004,
-   "nmMax": 4579,
+   "nmMax": 4534,
    "variantCount": 2,
    "bestMonths": [
     11,
@@ -10525,8 +10527,8 @@
    "region": "Pacífico Sur",
    "from": "Rikitea",
    "to": "Atuona",
-   "nmMin": 850,
-   "nmMax": 850,
+   "nmMin": 852,
+   "nmMax": 852,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -10559,8 +10561,8 @@
    "region": "Pacífico Sur",
    "from": "Taiohae",
    "to": "Papeete",
-   "nmMin": 784,
-   "nmMax": 793,
+   "nmMin": 794,
+   "nmMax": 818,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -10593,8 +10595,8 @@
    "region": "Pacífico Sur",
    "from": "Papeete",
    "to": "Taiohae",
-   "nmMin": 772,
-   "nmMax": 831,
+   "nmMin": 808,
+   "nmMax": 847,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -10688,8 +10690,8 @@
    "region": "Pacífico Sur",
    "from": "Papeete",
    "to": "Ushuaia",
-   "nmMin": 4432,
-   "nmMax": 12941,
+   "nmMin": 4449,
+   "nmMax": 13046,
    "variantCount": 2,
    "bestMonths": [
     10
@@ -10758,7 +10760,7 @@
    "region": "Pacífico Sur",
    "from": "Rikitea",
    "to": "Papeete",
-   "nmMin": 798,
+   "nmMin": 810,
    "nmMax": 899,
    "variantCount": 2,
    "bestMonths": [
@@ -10793,7 +10795,7 @@
    "from": "Vaitape",
    "to": "Avatiu",
    "nmMin": 597,
-   "nmMax": 801,
+   "nmMax": 830,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -10826,8 +10828,8 @@
    "region": "Pacífico Sur",
    "from": "Vaitape",
    "to": "Nuku’alofa",
-   "nmMin": 1349,
-   "nmMax": 1405,
+   "nmMin": 1358,
+   "nmMax": 1408,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -10866,8 +10868,8 @@
    "region": "Pacífico Sur",
    "from": "Vaitape",
    "to": "Apia",
-   "nmMin": 1196,
-   "nmMax": 1196,
+   "nmMin": 1211,
+   "nmMax": 1211,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -10900,8 +10902,8 @@
    "region": "Pacífico Sur",
    "from": "Vaitape",
    "to": "Auckland",
-   "nmMin": 2516,
-   "nmMax": 2516,
+   "nmMin": 2501,
+   "nmMax": 2501,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -11013,8 +11015,8 @@
    "region": "Pacífico Sur",
    "from": "Aitutaki",
    "to": "Auckland",
-   "nmMin": 2174,
-   "nmMax": 2174,
+   "nmMin": 2132,
+   "nmMax": 2132,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -11053,7 +11055,7 @@
    "from": "Neiafu",
    "to": "Levuka",
    "nmMin": 312,
-   "nmMax": 573,
+   "nmMax": 580,
    "variantCount": 3,
    "bestMonths": [
     6,
@@ -11132,8 +11134,8 @@
    "region": "Pacífico Sur",
    "from": "Nuku’alofa",
    "to": "Auckland",
-   "nmMin": 1499,
-   "nmMax": 1499,
+   "nmMin": 1454,
+   "nmMax": 1454,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -11212,7 +11214,7 @@
    "from": "Pago Pago",
    "to": "Levuka",
    "nmMin": 622,
-   "nmMax": 936,
+   "nmMax": 962,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -11249,8 +11251,8 @@
    "region": "Pacífico Sur",
    "from": "Pago Pago",
    "to": "Fongafale",
-   "nmMin": 726,
-   "nmMax": 1627,
+   "nmMin": 740,
+   "nmMax": 1632,
    "variantCount": 3,
    "bestMonths": [
     5,
@@ -11286,7 +11288,7 @@
    "region": "Pacífico Sur",
    "from": "Neiafu",
    "to": "Vaitape",
-   "nmMin": 1483,
+   "nmMin": 1492,
    "nmMax": 2357,
    "variantCount": 2,
    "bestMonths": [
@@ -11324,8 +11326,8 @@
    "region": "Pacífico Sur",
    "from": "Savusavu",
    "to": "Pago Pago",
-   "nmMin": 875,
-   "nmMax": 875,
+   "nmMin": 881,
+   "nmMax": 881,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -11360,7 +11362,7 @@
    "from": "Suva",
    "to": "Nuku’alofa",
    "nmMin": 418,
-   "nmMax": 733,
+   "nmMax": 749,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -11396,8 +11398,8 @@
    "region": "Pacífico Sur",
    "from": "Suva",
    "to": "Port Vila",
-   "nmMin": 711,
-   "nmMax": 711,
+   "nmMin": 722,
+   "nmMax": 722,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -11436,8 +11438,8 @@
    "region": "Pacífico Sur",
    "from": "Suva",
    "to": "Boulari Pass",
-   "nmMin": 1158,
-   "nmMax": 1158,
+   "nmMin": 1045,
+   "nmMax": 1045,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -11478,8 +11480,8 @@
    "region": "Pacífico Sur",
    "from": "Suva",
    "to": "Auckland",
-   "nmMin": 1654,
-   "nmMax": 1654,
+   "nmMin": 1616,
+   "nmMax": 1616,
    "variantCount": 1,
    "bestMonths": [
     10,
@@ -11558,8 +11560,8 @@
    "region": "Pacífico Sur",
    "from": "Mata Utu",
    "to": "Levuka",
-   "nmMin": 861,
-   "nmMax": 861,
+   "nmMin": 879,
+   "nmMax": 879,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -11634,7 +11636,7 @@
    "from": "Fongafale",
    "to": "Lautoka",
    "nmMin": 691,
-   "nmMax": 960,
+   "nmMax": 989,
    "variantCount": 2,
    "bestMonths": [
     10,
@@ -11671,7 +11673,7 @@
    "from": "Opua",
    "to": "Sydney",
    "nmMin": 68,
-   "nmMax": 1175,
+   "nmMax": 1179,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -11707,7 +11709,7 @@
    "region": "Pacífico Sur",
    "from": "Opua",
    "to": "Bundaberg",
-   "nmMin": 1721,
+   "nmMin": 1736,
    "nmMax": 1919,
    "variantCount": 2,
    "bestMonths": [
@@ -11748,8 +11750,8 @@
    "region": "Pacífico Sur",
    "from": "Opua",
    "to": "Havannah E",
-   "nmMin": 1676,
-   "nmMax": 1676,
+   "nmMin": 1678,
+   "nmMax": 1678,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -11785,8 +11787,8 @@
    "region": "Pacífico Sur",
    "from": "Opua",
    "to": "Suva",
-   "nmMin": 1090,
-   "nmMax": 1446,
+   "nmMin": 1088,
+   "nmMax": 1402,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -11971,8 +11973,8 @@
    "region": "Pacífico Sur",
    "from": "Noumea",
    "to": "Kandavu N",
-   "nmMin": 1052,
-   "nmMax": 1052,
+   "nmMin": 868,
+   "nmMax": 868,
    "variantCount": 1,
    "bestMonths": [
     5
@@ -11987,9 +11989,9 @@
    ],
    "bbox": [
     166.436667,
-    -22.4113848312554,
-    179.0869001684996,
-    -16.664564739502648
+    -22.3,
+    178.4,
+    -17.608333
    ],
    "searchNames": [
     "Noumea",
@@ -12007,8 +12009,8 @@
    "region": "Pacífico Sur",
    "from": "Noumea",
    "to": "Opua",
-   "nmMin": 927,
-   "nmMax": 927,
+   "nmMin": 930,
+   "nmMax": 930,
    "variantCount": 1,
    "bestMonths": [
     10
@@ -12079,8 +12081,8 @@
    "region": "Pacífico Sur",
    "from": "Noumea",
    "to": "Mackay",
-   "nmMin": 1857,
-   "nmMax": 2302,
+   "nmMin": 1859,
+   "nmMax": 2313,
    "variantCount": 2,
    "bestMonths": [
     5,
@@ -12126,8 +12128,8 @@
    "region": "Pacífico Sur",
    "from": "Noumea",
    "to": "Port Resolution",
-   "nmMin": 289,
-   "nmMax": 323,
+   "nmMin": 287,
+   "nmMax": 321,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12146,7 +12148,7 @@
    ],
    "bbox": [
     166.436667,
-    -22.4113848312554,
+    -22.3,
     169.505,
     -17.738333
    ],
@@ -12165,7 +12167,7 @@
    "from": "Port Vila",
    "to": "Noumea",
    "nmMin": 12,
-   "nmMax": 358,
+   "nmMax": 355,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12184,7 +12186,7 @@
    ],
    "bbox": [
     166.436667,
-    -22.4113848312554,
+    -22.3,
     169.505,
     -17.738333
    ],
@@ -12242,8 +12244,8 @@
    "region": "Pacífico Sur",
    "from": "Luganville",
    "to": "Honiara",
-   "nmMin": 317,
-   "nmMax": 614,
+   "nmMin": 327,
+   "nmMax": 619,
    "variantCount": 2,
    "bestMonths": [
     7,
@@ -12263,7 +12265,7 @@
     159.963333,
     -15.533333,
     167.3,
-    -9.314999999999998
+    -9.366667
    ],
    "searchNames": [],
    "ports": []
@@ -12275,8 +12277,8 @@
    "region": "Pacífico Sur",
    "from": "Gizo",
    "to": "Rabaul",
-   "nmMin": 400,
-   "nmMax": 640,
+   "nmMin": 401,
+   "nmMax": 654,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12316,8 +12318,8 @@
    "region": "Pacífico Sur",
    "from": "Gizo",
    "to": "Thursday Island",
-   "nmMin": 1582,
-   "nmMax": 1582,
+   "nmMin": 1610,
+   "nmMax": 1610,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -12336,7 +12338,7 @@
    "bbox": [
     142.22,
     -11.85,
-    159.98102553846152,
+    159.963333,
     -8.088333
    ],
    "searchNames": [
@@ -12355,8 +12357,8 @@
    "region": "Pacífico Sur",
    "from": "Honiara",
    "to": "Cairns",
-   "nmMin": 975,
-   "nmMax": 975,
+   "nmMin": 967,
+   "nmMax": 967,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -12375,7 +12377,7 @@
    "bbox": [
     145.788333,
     -16.905,
-    159.98102553846152,
+    159.963333,
     -9.191667
    ],
    "searchNames": [],
@@ -12425,8 +12427,8 @@
    "region": "Pacífico Sur",
    "from": "Port Moresby",
    "to": "Thursday Island",
-   "nmMin": 323,
-   "nmMax": 323,
+   "nmMin": 330,
+   "nmMax": 330,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -12462,8 +12464,8 @@
    "region": "Pacífico Sur",
    "from": "Madang",
    "to": "Jayapura",
-   "nmMin": 424,
-   "nmMax": 424,
+   "nmMin": 429,
+   "nmMax": 429,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -12563,8 +12565,8 @@
    "region": "Pacífico Sur",
    "from": "Coffs Harbour",
    "to": "Suva",
-   "nmMin": 3832,
-   "nmMax": 3832,
+   "nmMin": 3843,
+   "nmMax": 3843,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -12598,7 +12600,7 @@
    "region": "Pacífico Sur",
    "from": "Sydney",
    "to": "Port Resolution",
-   "nmMin": 1354,
+   "nmMin": 1362,
    "nmMax": 1427,
    "variantCount": 2,
    "bestMonths": [
@@ -12661,8 +12663,8 @@
    "region": "Pacífico Sur",
    "from": "Mackay",
    "to": "Opua",
-   "nmMin": 2478,
-   "nmMax": 2478,
+   "nmMin": 2481,
+   "nmMax": 2481,
    "variantCount": 1,
    "bestMonths": [
     5,
@@ -12704,7 +12706,7 @@
    "from": "Bundaberg",
    "to": "Noumea",
    "nmMin": 588,
-   "nmMax": 1037,
+   "nmMax": 1036,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12746,7 +12748,7 @@
    "from": "Mackay",
    "to": "Port Vila",
    "nmMin": 1371,
-   "nmMax": 1529,
+   "nmMax": 1524,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12788,7 +12790,7 @@
    "from": "Mackay",
    "to": "Kandavu N",
    "nmMin": 792,
-   "nmMax": 2591,
+   "nmMax": 2413,
    "variantCount": 2,
    "bestMonths": [
     6
@@ -12804,8 +12806,8 @@
    "bbox": [
     149.225,
     -27.441667,
-    179.0866601545746,
-    -16.66335190867526
+    178.4,
+    -17.608333
    ],
    "searchNames": [
     "Mackay",
@@ -12830,7 +12832,7 @@
    "from": "Brisbane",
    "to": "Honiara",
    "nmMin": 242,
-   "nmMax": 1620,
+   "nmMax": 1621,
    "variantCount": 2,
    "bestMonths": [
     6,
@@ -12849,7 +12851,7 @@
     145.788333,
     -27.441667,
     161.016667,
-    -9.314999999999998
+    -9.366667
    ],
    "searchNames": [
     "Brisbane",
@@ -12903,8 +12905,8 @@
    "region": "Pacífico Sur",
    "from": "Cairns",
    "to": "Thursday Island",
-   "nmMin": 649,
-   "nmMax": 649,
+   "nmMin": 657,
+   "nmMax": 657,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -12942,7 +12944,7 @@
    "from": "Balboa",
    "to": "Puerto Ayora",
    "nmMin": 1036,
-   "nmMax": 1509,
+   "nmMax": 1492,
    "variantCount": 2,
    "bestMonths": [
     1,
@@ -12971,8 +12973,8 @@
    "region": "Pacífico Tropical",
    "from": "Los Angeles",
    "to": "Puerto Ayora",
-   "nmMin": 1036,
-   "nmMax": 2763,
+   "nmMin": 1025,
+   "nmMax": 2777,
    "variantCount": 2,
    "bestMonths": [
     3,
@@ -13004,7 +13006,7 @@
    "from": "Balboa",
    "to": "Taiohae",
    "nmMin": 1029,
-   "nmMax": 3979,
+   "nmMax": 3985,
    "variantCount": 2,
    "bestMonths": [
     2,
@@ -13037,8 +13039,8 @@
    "region": "Pacífico Tropical",
    "from": "San Francisco",
    "to": "Taiohae",
-   "nmMin": 482,
-   "nmMax": 3379,
+   "nmMin": 468,
+   "nmMax": 3386,
    "variantCount": 2,
    "bestMonths": [
     2,
@@ -13076,8 +13078,8 @@
    "region": "Pacífico Tropical",
    "from": "Victoria",
    "to": "Taiohae",
-   "nmMin": 3759,
-   "nmMax": 3759,
+   "nmMin": 3764,
+   "nmMax": 3764,
    "variantCount": 1,
    "bestMonths": [
     4,
@@ -13149,7 +13151,7 @@
    "from": "Puerto Ayora",
    "to": "Honolulu",
    "nmMin": 122,
-   "nmMax": 4359,
+   "nmMax": 4344,
    "variantCount": 2,
    "bestMonths": [
     12,
@@ -13183,8 +13185,8 @@
    "region": "Pacífico Tropical",
    "from": "Puerto Ayora",
    "to": "Palmyra",
-   "nmMin": 4527,
-   "nmMax": 4527,
+   "nmMin": 4532,
+   "nmMax": 4532,
    "variantCount": 1,
    "bestMonths": [
     12,
@@ -13223,7 +13225,7 @@
    "region": "Pacífico Tropical",
    "from": "Papeete",
    "to": "Balboa",
-   "nmMin": 4679,
+   "nmMin": 4756,
    "nmMax": 12966,
    "variantCount": 2,
    "bestMonths": [
@@ -13255,8 +13257,8 @@
    "region": "Pacífico Tropical",
    "from": "Taiohae",
    "to": "Honolulu",
-   "nmMin": 2172,
-   "nmMax": 2172,
+   "nmMin": 2164,
+   "nmMax": 2164,
    "variantCount": 1,
    "bestMonths": [
     4,
@@ -13292,8 +13294,8 @@
    "region": "Pacífico Tropical",
    "from": "Papeete",
    "to": "Honolulu",
-   "nmMin": 1674,
-   "nmMax": 7264,
+   "nmMin": 1679,
+   "nmMax": 7278,
    "variantCount": 3,
    "bestMonths": [
     4,
@@ -13329,8 +13331,8 @@
    "region": "Pacífico Tropical",
    "from": "Anchorage",
    "to": "Honolulu",
-   "nmMin": 2277,
-   "nmMax": 2277,
+   "nmMin": 2285,
+   "nmMax": 2285,
    "variantCount": 1,
    "bestMonths": [
     4,
@@ -13366,8 +13368,8 @@
    "region": "Pacífico Tropical",
    "from": "Honolulu",
    "to": "Papeete",
-   "nmMin": 2399,
-   "nmMax": 2456,
+   "nmMin": 2401,
+   "nmMax": 2460,
    "variantCount": 2,
    "bestMonths": [
     4
@@ -13403,7 +13405,7 @@
    "from": "Honolulu",
    "to": "Apia",
    "nmMin": 2387,
-   "nmMax": 2683,
+   "nmMax": 2684,
    "variantCount": 2,
    "bestMonths": [
     4
@@ -13438,8 +13440,8 @@
    "region": "Pacífico Tropical",
    "from": "Fongafale",
    "to": "Tarawa",
-   "nmMin": 728,
-   "nmMax": 728,
+   "nmMin": 738,
+   "nmMax": 738,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -13472,8 +13474,8 @@
    "region": "Pacífico Tropical",
    "from": "Tarawa",
    "to": "Fongafale",
-   "nmMin": 726,
-   "nmMax": 726,
+   "nmMin": 757,
+   "nmMax": 757,
    "variantCount": 1,
    "bestMonths": [
     6,
@@ -13507,7 +13509,7 @@
    "from": "Madang",
    "to": "Cebu City",
    "nmMin": 5,
-   "nmMax": 1693,
+   "nmMax": 1665,
    "variantCount": 6,
    "bestMonths": [
     12,
@@ -13552,7 +13554,7 @@
    "from": "Cebu City",
    "to": "Madang",
    "nmMin": 5,
-   "nmMax": 1653,
+   "nmMax": 1652,
    "variantCount": 7,
    "bestMonths": [
     1,
@@ -13595,8 +13597,8 @@
    "region": "Mar Rojo (norte)",
    "from": "Aden",
    "to": "Port Sudan",
-   "nmMin": 1165,
-   "nmMax": 1165,
+   "nmMin": 1163,
+   "nmMax": 1163,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13626,8 +13628,8 @@
    "region": "Mar Rojo (norte)",
    "from": "Aden",
    "to": "Massawa",
-   "nmMin": 574,
-   "nmMax": 574,
+   "nmMin": 578,
+   "nmMax": 578,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13686,8 +13688,8 @@
    "region": "Mar Rojo (norte)",
    "from": "Aden",
    "to": "Hodaida",
-   "nmMin": 391,
-   "nmMax": 391,
+   "nmMin": 395,
+   "nmMax": 395,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13696,7 +13698,7 @@
    ],
    "stormMonths": [],
    "bbox": [
-    42.741667,
+    42.7,
     11.603333,
     44.966667,
     14.966667
@@ -13715,8 +13717,8 @@
    "region": "Mar Rojo (norte)",
    "from": "Port Sudan",
    "to": "Hurghada",
-   "nmMin": 810,
-   "nmMax": 810,
+   "nmMin": 820,
+   "nmMax": 820,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13783,8 +13785,8 @@
    "region": "Mar Rojo (norte)",
    "from": "Hurghada",
    "to": "Aqaba",
-   "nmMin": 201,
-   "nmMax": 201,
+   "nmMin": 200,
+   "nmMax": 200,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13820,8 +13822,8 @@
    "region": "Mar Rojo (sur)",
    "from": "Suez",
    "to": "Port Sudan",
-   "nmMin": 767,
-   "nmMax": 767,
+   "nmMin": 768,
+   "nmMax": 768,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13855,8 +13857,8 @@
    "region": "Mar Rojo (sur)",
    "from": "Port Sudan",
    "to": "Tarshayn W",
-   "nmMin": 824,
-   "nmMax": 824,
+   "nmMin": 821,
+   "nmMax": 821,
    "variantCount": 1,
    "bestMonths": [
     2,
@@ -13914,8 +13916,8 @@
    "region": "Mar Rojo (sur)",
    "from": "Massawa",
    "to": "Tarshayn W",
-   "nmMin": 521,
-   "nmMax": 521,
+   "nmMin": 525,
+   "nmMax": 525,
    "variantCount": 1,
    "bestMonths": [
     2,

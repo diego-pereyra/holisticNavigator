@@ -16,8 +16,8 @@ import time
 from collections import Counter
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from landcheck import Land
-from optimize_coast import Coast
+from landmask import LandMask
+from optimize_coast import optimize_passes
 from windows import parse_window
 
 ROOT = os.path.join(os.path.dirname(__file__), "..")
@@ -27,7 +27,7 @@ DST3 = os.path.join(ROOT, "data", "catalog", "v3")
 ATTRIBUTION = "World Cruising Routes, 8.ª ed. — Jimmy & Doina Cornell"
 # Sube en 1 en cada cambio de datos del catálogo. Nombra el caché de datos del
 # service worker (hn-data-v<CATALOG_VERSION>), que NO se borra al cambiar el SHA.
-CATALOG_VERSION = 11
+CATALOG_VERSION = 12
 QUOTES = os.path.join(DST, "quotes.json")
 TIPS_DIR = os.path.join(ROOT, "tools")
 TIPS_CHAPTERS = os.path.join(TIPS_DIR, "tips_chapters_es.json")
@@ -46,10 +46,8 @@ def load_route_tips():
                         tips[code] = text
     return tips
 
-# A variant whose track runs over land for more than this (nm, interior run) is
-# flagged needsReview: the straight chord reveals a missing waypoint or a bad
-# coordinate. Coarse 110m mask -> keep a floor to ignore shoreline noise.
-LAND_FLAG_NM = 3.0
+# E12.2: el flag cada variante lo decide `optimize_passes` (A* sobre la máscara
+# 10m): `ok=False` = sigue cruzando tierra. La lista llega en `variants`.
 
 MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"]
 EN_MONTHS = {
@@ -127,36 +125,40 @@ def save_coast_cache(cache):
         pass
 
 
-def optimize_variant(coast, coords, wps, cache=None):
-    """Insert synthetic coastal waypoints so the track follows water.
+def optimize_variant(mask, coords, wps, cache):
+    """Re-rutea los tramos que cruzan tierra (E12.2, tres pasadas).
 
-    Returns (coords, wps) with the inserted points woven into the waypoint
-    list (empty name, approx=True) so their indices stay aligned with `coords`.
+    Devuelve (coords, wps, ok): `ok` es False si la variante sigue cruzando
+    tierra (queda needsReview). Los puntos sintéticos entran como waypoints
+    "Costa 1..n" (corrected: true), alineados con `coords`. El trazado del libro
+    nunca se toca.
     """
-    key = None
-    hit = None
-    if cache is not None:
-        key = ";".join("%.6f,%.6f" % (c[0], c[1]) for c in coords)
-        hit = cache.get(key)
+    if not mask.ok:
+        return coords, wps, True
+    key = ";".join("%.6f,%.6f" % (c[0], c[1]) for c in coords)
+    hit = cache.get(key)
     if hit is not None:
         opt = [tuple(p) for p in hit["opt"]]
         inserted = hit["inserted"]
+        ok = hit.get("ok", True)
     else:
-        opt, inserted, _ = coast.optimize(coords)
-        if cache is not None:
-            cache[key] = {"opt": opt, "inserted": inserted}
+        opt, inserted, ok = optimize_passes(mask, coords)
+        cache[key] = {"opt": opt, "inserted": inserted, "ok": ok}
     if not inserted:
-        return coords, wps
+        return coords, wps, ok
     ins = set(inserted)
     out = []
     j = 0
+    n = 0
     for k, pt in enumerate(opt):
         if k in ins:
-            out.append({"name": "", "lat": pt[1], "lon": pt[0], "dest": False, "approx": True, "corrected": True})
+            n += 1
+            out.append({"name": "Costa %d" % n, "lat": pt[1], "lon": pt[0],
+                        "dest": False, "approx": True, "corrected": True})
         else:
             out.append(wps[j])
             j += 1
-    return opt, out
+    return opt, out, ok
 
 
 # Erratas de imprenta de la 8.ª edición: coordenada mal impresa en el libro.
@@ -338,8 +340,7 @@ def main():
     facts3 = {}
     route_ports = {}
     route_index = {}
-    land = Land()
-    coast = Coast(land)
+    land = LandMask()
     cache = load_coast_cache()
     land_hits = 0
     land_variants = 0
@@ -375,21 +376,20 @@ def main():
                     wps.pop()
             coords = [(w["lon"], w["lat"]) for w in wps]
             if len(coords) >= 2:
-                coords, wps = optimize_variant(coast, coords, wps, cache)
+                coords, wps, ocean_ok = optimize_variant(land, coords, wps, cache)
                 coords = unwrap_lons(coords)
-                variants.append((t["id"], wps, coords))
+                variants.append((t["id"], wps, coords, ocean_ok))
 
         title = r.get("title") or ""
         route_flagged = False
         v3_variants = []
 
-        for vid, wps, coords in variants:
+        for vid, wps, coords, ocean_ok in variants:
             first, last = wps[0], wps[-1]
-            coastal = any((not w.get("name")) and w.get("approx") for w in wps)
+            coastal = any(w.get("approx") for w in wps)
             if coastal:
                 coastal_variants += 1
-            cross = land.crossing_nm(coords) if land.ok else 0.0
-            flagged = cross >= LAND_FLAG_NM
+            flagged = not ocean_ok
             if flagged:
                 land_variants += 1
                 route_flagged = True
@@ -427,7 +427,7 @@ def main():
 
         months = extract_months(" ".join(r.get("fields", {}).get("bestTime", [])))
         names, miles = [], []
-        for tid, wps, coords in variants:
+        for tid, wps, coords, _ok in variants:
             names.append(wps[0]["name"] or "start")
             if len(coords) >= 2:
                 dist = sum(
@@ -437,14 +437,14 @@ def main():
                 miles.append(int(round(dist)))
         waypoint_codes = []
         ports = []
-        for tid, wps, coords in variants:
+        for tid, wps, coords, _ok in variants:
             for w in wps:
                 n = slug(w["name"])
                 if n and n not in waypoint_codes:
                     waypoint_codes.append(n)
                     if len(waypoint_codes) >= 8:
                         break
-        for tid, wps, coords in variants:
+        for tid, wps, coords, _ok in variants:
             for w in wps:
                 nm = (w["name"] or "").strip()
                 if nm and nm not in ports:
@@ -596,7 +596,7 @@ def main():
     print(f"geojson: {geo_bytes//1024} KB ({geo_gz//1024} KB gzip) | sin geometría: {missing[:5] or 'ninguna'}")
     if land.ok:
         print(f"optimizador costero: {coastal_variants} variantes con waypoints insertados")
-        print(f"needsReview (toques de tierra >= {LAND_FLAG_NM:g}nm): {land_variants} variantes")
+        print(f"needsReview (variantes que no se pudieron sacar de tierra): {land_variants} variantes")
     else:
         print("needsReview (tierra): máscara ausente en data/land/ -> sin marcar")
     save_coast_cache(cache)
