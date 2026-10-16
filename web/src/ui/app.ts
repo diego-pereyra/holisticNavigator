@@ -54,7 +54,21 @@ import {
 } from "../core/forecast.ts";
 import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
+import {
+  copyToOwn,
+  endOwn,
+  endOwnEdit,
+  loadOwnRoutes,
+  ownArmActive,
+  ownEdit,
+  ownRouteById,
+  ownRoutes,
+  renderMisRutas,
+  renderOwnFicha,
+  type OwnCtx,
+} from "./routes-own.ts";
 import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix } from "../core/navigation.ts";
+import type { OwnRoute } from "../core/routes-own.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
   evalAlarms,
@@ -547,10 +561,13 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
       const { geometry, variants } = buildGeometry(routesGeoJson);
       ui.geometry = geometry;
       ui.variants = variants;
+      syncOwnGeometry(ui);
       addCatalogLayers(ui, routesGeoJson);
       ui.routes.set("ready");
       const sel = ui.selected();
-      if (sel) drawSelected(ui, sel.code, ui.variant().startsWith(sel.code) ? ui.variant() : null);
+      if (sel && !ownRouteById(sel.code)) {
+        drawSelected(ui, sel.code, ui.variant().startsWith(sel.code) ? ui.variant() : null);
+      }
       drawActive(ui);
       applyCatalogFilter(ui);
     },
@@ -606,6 +623,9 @@ async function restore(ui: UiState): Promise<void> {
   // arranca en peek, para mostrar la tira Navegando (E9.1).
   if (ui.active() && ui.position()) ui.sheet.set("peek");
   drawImported(ui);
+  await loadOwnRoutes(ui.store);
+  syncOwnGeometry(ui);
+  if (ui.active() && ownRouteById(ui.active()!.code)) drawActive(ui);
 }
 
 function readJson<T>(text: string | null, fallback: T): T {
@@ -874,7 +894,7 @@ function addBasinLayers(ui: UiState, basins: Record<string, Basin>): void {
     "imported-lines",
   );
   map.on("click", "basin-label", (e) => {
-    if (fixOnMapArmed) return;
+    if (fixOnMapArmed || ownArmActive()) return;
     const name = e.features?.[0]?.properties?.["name"];
     if (typeof name === "string") {
       ui.region.set(name);
@@ -899,7 +919,7 @@ function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
     before,
   );
   map.on("click", "catalog-lines", (e) => {
-    if (wpHitHandled || fixOnMapArmed) return;
+    if (wpHitHandled || fixOnMapArmed || ownArmActive()) return;
     const code = e.features?.[0]?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
@@ -1033,6 +1053,64 @@ function drawActive(ui: UiState): void {
 function drawImported(ui: UiState): void {
   const features = ui.imported().map((r) => JSON.parse(importedRouteToGeoJson(r)) as object);
   setSource(ui.map, "imported", featureCollection(features));
+}
+
+// E11.4: las rutas propias se inyectan en `ui.geometry` con código y variante
+// propios, así `drawActive` y `activeNav` las navegan como una ruta del libro.
+function syncOwnGeometry(ui: UiState): void {
+  const ids = new Set<string>();
+  for (const r of ownRoutes()) {
+    const coords = r.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+    const names = r.waypoints.map((w) => w.name);
+    ui.geometry.set(`${r.id}|${r.id}`, { coords, names });
+    ids.add(r.id);
+  }
+  for (const key of [...ui.geometry.keys()]) {
+    const code = key.slice(0, key.indexOf("|"));
+    if (code.startsWith("MIA-") && !ids.has(code)) ui.geometry.delete(key);
+  }
+}
+
+function drawOwnSelected(ui: UiState, route: OwnRoute): void {
+  const coords = route.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+  const features: object[] = [];
+  if (coords.length >= 2) features.push(lineFeature(coords));
+  route.waypoints.forEach((w, i) => features.push(pointFeature(w.lon, w.lat, { name: w.name, wpIndex: i })));
+  setSource(ui.map, "selected", featureCollection(features));
+}
+
+function openOwn(ui: UiState, route: OwnRoute): void {
+  ui.selected.set({ code: route.id, chapter: "own" });
+  drawOwnSelected(ui, route);
+  const coords = route.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+  if (coords.length >= 2) fitTo(ui, coords);
+  if (ui.sheet() === "peek") ui.sheet.set("half");
+}
+
+function followOwn(ui: UiState, route: OwnRoute): void {
+  syncOwnGeometry(ui);
+  ui.active.set({ code: route.id, chapter: "own", variant: route.id });
+  drawActive(ui);
+  wireGpsStart();
+  ui.selected.set(null);
+  ui.tab.set("aqui");
+  ui.sheet.set("half");
+}
+
+function ownCtx(ui: UiState): OwnCtx {
+  return {
+    store: ui.store,
+    map: ui.map,
+    open: (route) => openOwn(ui, route),
+    follow: (route) => followOwn(ui, route),
+    redraw: () => {
+      syncOwnGeometry(ui);
+      const e = ownEdit();
+      if (e) drawOwnSelected(ui, e);
+      drawActive(ui);
+    },
+    close: () => closeFicha(ui),
+  };
 }
 
 function drawVoyage(ui: UiState, log: VoyageLog | null): void {
@@ -1584,6 +1662,8 @@ function renderWeatherLegend(
 }
 
 function goTo(ui: UiState, tab: TabName): void {
+  endOwn();
+  endOwnEdit();
   ui.selected.set(null);
   ui.tab.set(tab);
   if (ui.sheet() === "peek") ui.sheet.set("half");
@@ -1679,6 +1759,8 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
   effect(() => {
     const sel = ui.selected();
     ui.variant();
+    ownRoutes();
+    ownEdit();
     untracked(() => {
       const sameCode = sel?.code === lastFichaCode;
       const top = fichaCol.scrollTop;
@@ -2289,10 +2371,12 @@ function zoneRow(ui: UiState, state: ZoneState): HTMLElement {
 
 function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void {
   const e = entryOf(ui, active.code);
+  const own = ownRouteById(active.code);
   const nav = activeNav(ui);
   body.append(el("h3", { class: "hn-h3" }, "Ruta en curso"));
   const card = el("div", { class: "hn-card" });
-  card.append(el("div", { class: "hn-card-title" }, e ? `${e.code} ${e.from} → ${e.to}` : active.code));
+  const title = own ? own.name : e ? `${e.code} ${e.from} → ${e.to}` : active.code;
+  card.append(el("div", { class: "hn-card-title" }, title));
   if (nav) {
     const grid = el("div", { class: "hn-nav-grid" });
     grid.append(
@@ -2312,7 +2396,7 @@ function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void
   }
   const actions = el("div", { class: "hn-actions" });
   const ver = el("button", { class: "hn-btn" }, "Ver ficha");
-  ver.addEventListener("click", () => openRoute(ui, active.code));
+  ver.addEventListener("click", () => (own ? openOwn(ui, own) : openRoute(ui, active.code)));
   const stop = el("button", { class: "hn-btn" }, "Dejar de seguir");
   stop.addEventListener("click", () => ui.active.set(null));
   actions.append(ver, stop);
@@ -2728,6 +2812,7 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
       }
     }
     const imported = ui.imported();
+    renderMisRutas(list, ownCtx(ui));
     if (imported.length > 0) {
       list.append(el("h3", { class: "hn-h3" }, "Importadas"));
       for (const r of imported) {
@@ -2756,6 +2841,7 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
   cleanup.push(
     effect(() => {
       ui.imported();
+      ownRoutes();
       ui.region();
       ui.month();
       ui.departSort();
@@ -2887,6 +2973,8 @@ async function importFile(ui: UiState): Promise<void> {
 function openRoute(ui: UiState, code: string): void {
   const e = entryOf(ui, code);
   if (!e) return;
+  endOwn();
+  endOwnEdit();
   const keep = ui.variant().startsWith(code) ? ui.variant() : "";
   if (keep !== ui.variant()) ui.variant.set(keep);
   ui.selected.set({ code, chapter: e.chapter });
@@ -2900,6 +2988,8 @@ function openRoute(ui: UiState, code: string): void {
 
 // Cierra la ficha y limpia la selección (botón ‹ Rutas y tecla Esc).
 function closeFicha(ui: UiState): void {
+  endOwn();
+  endOwnEdit();
   ui.selected.set(null);
   ui.sheet.set("half");
   clearWpMarker(ui);
@@ -2922,7 +3012,7 @@ function selectWpByIndex(index: number): void {
 
 function wireSelectedWp(ui: UiState): void {
   ui.map.on("click", "route-wps-selected", (e) => {
-    if (fixOnMapArmed) return;
+    if (fixOnMapArmed || ownArmActive()) return;
     wpHitHandled = true;
     window.setTimeout(() => {
       wpHitHandled = false;
@@ -3024,6 +3114,18 @@ function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: stri
   back.addEventListener("click", () => closeFicha(ui));
   head.append(back);
 
+  // E11.4: las rutas propias tienen su propio editor en lugar de la ficha del libro.
+  const own = ownRouteById(code);
+  if (own) {
+    head.append(el("h2", { class: "hn-h2" }, own.name));
+    head.append(el("p", { class: "hn-title-en" }, "Ruta propia"));
+    body.append(head);
+    const host = el("div", { class: "hn-ficha-host" });
+    body.append(host);
+    renderOwnFicha(host, ownCtx(ui), own);
+    return;
+  }
+
   const e = entryOf(ui, code);
   if (!e) {
     body.append(head, el("p", { class: "hn-muted" }, "Ruta no encontrada."));
@@ -3084,6 +3186,12 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   const recorrer = el("button", { class: "hn-btn" }, "Recorrer");
   recorrer.addEventListener("click", () => simOpen(ui, d, head));
 
+  const copiar = el("button", { class: "hn-btn" }, "Copiar a mis rutas");
+  copiar.addEventListener("click", () => {
+    const g = selectedGeometry(ui, d.code);
+    if (g) copyToOwn(ownCtx(ui), `${d.code} (copia)`, g.coords, g.names);
+  });
+
   const enlace = el("button", { class: "hn-btn" }, "Enlace");
   enlace.addEventListener("click", () => {
     const url = new URL(document.baseURI);
@@ -3092,7 +3200,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     enlace.textContent = "Copiado";
   });
 
-  actions.append(seguir, exportar, recorrer, enlace);
+  actions.append(seguir, exportar, copiar, recorrer, enlace);
   head.append(actions);
 
   // SIM: si el simulador sigue en camino de esta misma ruta, la fila de control

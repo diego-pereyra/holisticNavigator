@@ -1,0 +1,139 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+import {
+  addWaypoint,
+  defaultName,
+  insertWaypoint,
+  isOwnCode,
+  legBearingsDeg,
+  legNm,
+  moveWaypoint,
+  newOwnRoute,
+  ownRouteToGpx,
+  parseOwnRoute,
+  removeWaypoint,
+  renameRoute,
+  renameWaypoint,
+  reverseRoute,
+  totalNm,
+  type OwnRoute,
+} from "./routes-own.ts";
+import { deleteOwnRoute, loadOwnRoutes, ownRouteKey, saveOwnRoute } from "../platform/routes-own.ts";
+import { KEYS, type KeyValueStore } from "../platform/store.ts";
+
+function memStore(): KeyValueStore {
+  const map = new Map<string, string>();
+  return {
+    get: (k) => Promise.resolve(map.get(k) ?? null),
+    put: (k, v) => {
+      map.set(k, v);
+      return Promise.resolve();
+    },
+    remove: (k) => {
+      map.delete(k);
+      return Promise.resolve();
+    },
+    putBlob: () => Promise.resolve(),
+    getBlob: () => Promise.resolve(null),
+    removeBlob: () => Promise.resolve(),
+  };
+}
+
+function baseRoute(): OwnRoute {
+  return newOwnRoute("MIA-aaaaaa", "Prueba", 1_700_000_000_000);
+}
+
+test("E11.4 crea ruta vacía con id propio y nombre saneado", () => {
+  const r = baseRoute();
+  assert.equal(r.id, "MIA-aaaaaa");
+  assert.ok(isOwnCode(r.id));
+  assert.equal(r.name, "Prueba");
+  assert.equal(r.waypoints.length, 0);
+  assert.equal(r.distanceNm, 0);
+  assert.equal(newOwnRoute("MIA-b", "   ").name, "Ruta sin nombre");
+});
+
+test("E11.4 agrega waypoints con nombre automático y calcula la distancia", () => {
+  let r = baseRoute();
+  assert.equal(defaultName(r), "WP1");
+  r = addWaypoint(r, 0, 0);
+  r = addWaypoint(r, 1, 0);
+  assert.deepEqual(r.waypoints.map((w) => w.name), ["WP1", "WP2"]);
+
+  // Un grado de latitud ≈ 60,04 nm (haversine, R = 3440,065).
+  const d = totalNm(r);
+  assert.ok(Math.abs(d - 60.04) < 0.2, `distancia ${d}`);
+  assert.equal(r.distanceNm, d);
+  assert.equal(legNm(r).length, 1);
+  assert.ok(Math.abs(legBearingsDeg(r)[0]! - 0) < 0.01, "rumbo al norte");
+});
+
+test("E11.4 edita: insertar, mover, renombrar, borrar e invertir", () => {
+  let r = baseRoute();
+  r = addWaypoint(r, 0, 0);
+  r = addWaypoint(r, 0, 2);
+  r = insertWaypoint(r, 1, 0, 1);
+  assert.equal(r.waypoints.length, 3);
+  assert.equal(r.waypoints[1]!.lon, 1);
+
+  r = moveWaypoint(r, 1, 0, 1.5);
+  assert.equal(r.waypoints[1]!.lon, 1.5);
+
+  r = renameWaypoint(r, 0, "Salida");
+  assert.equal(r.waypoints[0]!.name, "Salida");
+
+  const before = totalNm(r);
+  r = reverseRoute(r);
+  assert.equal(r.waypoints[0]!.lon, 2, "invertida: arranca por el otro extremo");
+  assert.ok(Math.abs(totalNm(r) - before) < 1e-9, "la distancia no cambia al invertir");
+
+  r = removeWaypoint(r, 0);
+  assert.equal(r.waypoints.length, 2);
+  assert.equal(renameRoute(r, "Ida").name, "Ida");
+  assert.equal(removeWaypoint(r, 9), r, "índice fuera de rango no cambia nada");
+});
+
+test("E11.4 exporta GPX con un rtept por waypoint y escapa el nombre", () => {
+  let r = baseRoute();
+  r = addWaypoint(r, -34.6, -58.4, "Buenos Aires");
+  r = addWaypoint(r, -22.9, -43.2, "Río & mar");
+  const gpx = ownRouteToGpx(r);
+  assert.equal((gpx.match(/<rtept /g) ?? []).length, 2);
+  assert.ok(gpx.includes('lat="-34.6" lon="-58.4"'), "coordenadas del waypoint");
+  assert.ok(gpx.includes("<name>Río &amp; mar</name>"), "escapa XML");
+  assert.ok(gpx.trimEnd().endsWith("</gpx>"));
+});
+
+test("E11.4 round-trip de serialización", () => {
+  let r = baseRoute();
+  r = addWaypoint(r, -34.6, -58.4, "Buenos Aires");
+  r = addWaypoint(r, -22.9, -43.2);
+  const back = parseOwnRoute(JSON.stringify(r));
+  assert.ok(back !== null);
+  assert.equal(back.name, r.name);
+  assert.deepEqual(back.waypoints, r.waypoints);
+  assert.ok(Math.abs(back.distanceNm - r.distanceNm) < 1e-9);
+  assert.equal(parseOwnRoute("no es json"), null);
+});
+
+test("E11.4 guarda, lee y borra rutas propias del índice", async () => {
+  const store = memStore();
+  const a = addWaypoint(baseRoute(), 0, 0);
+  const b = addWaypoint(newOwnRoute("MIA-bbbbbb", "Otra"), 10, 10);
+  await saveOwnRoute(store, a);
+  await saveOwnRoute(store, b);
+
+  assert.equal(await store.get(ownRouteKey("MIA-aaaaaa")), JSON.stringify(a));
+  assert.deepEqual(JSON.parse((await store.get(KEYS.myRoutes))!), ["MIA-aaaaaa", "MIA-bbbbbb"]);
+
+  const loaded = await loadOwnRoutes(store);
+  assert.equal(loaded.length, 2);
+  assert.equal(loaded[0]!.name, "Prueba");
+  assert.equal(loaded[1]!.waypoints.length, 1);
+
+  await deleteOwnRoute(store, "MIA-aaaaaa");
+  const after = await loadOwnRoutes(store);
+  assert.deepEqual(after.map((r) => r.id), ["MIA-bbbbbb"]);
+  assert.equal(await store.get(ownRouteKey("MIA-aaaaaa")), null);
+});

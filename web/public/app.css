@@ -1814,3 +1814,102 @@ html[data-theme="red"] {
   display: flex;
   flex-direction: column;
 }
+
+/* Rutas propias (E11.4): lista "Mis rutas" y editor de waypoints. */
+.hn-own-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hn-own-head .hn-h3 {
+  margin: 0;
+}
+.hn-btn-mini {
+  min-height: 32px;
+  padding: 4px 10px;
+  font-size: 12px;
+}
+.hn-own-sig {
+  flex: 0 0 auto;
+  margin-left: auto;
+  color: var(--hn-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-own-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin: 10px 0;
+}
+.hn-own-wps {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.hn-own-wp {
+  display: grid;
+  grid-template-columns: 24px 1fr;
+  align-items: start;
+  gap: 8px;
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line);
+  border-radius: 10px;
+  padding: 8px 10px;
+}
+.hn-own-dot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--hn-accent);
+  color: var(--hn-ink);
+  font-size: 12px;
+  font-weight: 700;
+}
+.hn-own-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+.hn-own-input {
+  width: 100%;
+}
+.hn-own-coords {
+  display: flex;
+  gap: 8px;
+}
+.hn-own-coord {
+  flex: 1 1 0;
+  min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.hn-own-fmt {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-own-wp-acts {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.hn-own-leg {
+  padding-left: 14px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-own-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 4px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
