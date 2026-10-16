@@ -645,3 +645,55 @@ marea a la ETA. Tareas: E16.1 datos por zona · E16.2 motor y tests · E16.3 UI.
 
 E15.2 SignalK → E15.3 AIS → E14.1–E14.4 cartas propias y NOAA ENC → E16 mareas → E11 herramientas
 de carta → ADR-010 Capacitor (segundo plano, NMEA TCP).
+
+---
+## UX pendiente — arquitectura de menús y usabilidad (sin prioridad)
+
+Sugerencias de usabilidad para revisar cuando se tenga prioridad. Basadas en estándares IMO/ECDIS,
+Google Maps, savvy navvy y Navionics, y en las 12 reglas de usabilidad a bordo (§6 ter de
+03-ux-architecture.md).
+
+**1. Jerarquía de navegación — pestañas principales**
+- Aquí: posición actual, GPS, estado del barco, rutas cercanas. Pantalla de inicio por defecto.
+- Rutas: catálogo, búsqueda, importar, planificar.
+- Travesía: ruta activa, bitácora, alarmas, MOB.
+Escritorio: tres columnas (lista | ficha | mapa). Móvil: hoja inferior con pestañas.
+
+**2. Barra de contexto — acciones globales**
+Solo acciones de toda la app: tema (☀️/☾/● Auto), tiempo (apagado / pilot chart / pronóstico),
+capas (balizas, zonas), menú (⋮: ayuda, ajustes, acerca de). Nada que dependa de una pestaña
+específica.
+
+**3. FAB ◉ — acción primaria única**
+Sin posición: "Encender GPS". Con posición: "Centrar en mí". En navegación: "Próximo WP". Un solo
+botón; menú adicional solo al mantener presionado.
+
+**4. Hoja inferior — tres estados**
+Peek (96 dp) / Media (50 %) / Completa (92 %). El mapa nunca desaparece completamente.
+
+**5. Ficha de ruta — jerarquía de información**
+- Cabecera fija: código, título, origen → destino, botones (Seguir / Exportar / Recorrer / Enlace).
+- Datos clave (rejilla): cuenca, millas, variantes, mejor época, ciclones, veredicto del mes.
+- Tira de meses con score. Acordeones: Consejo · Variantes · Waypoints · Referencias · Del libro.
+
+**6. Colores y contraste (WCAG 2.1 AA)**
+Texto principal ≥ 4.5:1 sobre fondo. Rojo solo para noche (destruye la visión nocturna de día).
+Colores de posición consistentes: GPS #2979FF · manual #B388FF · simulada #FF8F00.
+
+**7. Feedback del sistema**
+Pantalla de carga con progreso por pasos. Tiempo máximo 8 s, luego "Cargando…" con "Reintentar".
+Errores en pantalla (banda inferior), no solo consola. Edad visible de los datos.
+
+**8. Teclado y accesibilidad**
+Esc cierra ficha. / enfoca búsqueda. ↑/↓ navega lista, Enter abre. Foco visible (anillo 2 px color
+acento). Todo funcional sin ratón.
+
+**9. Tacto móvil**
+Targets ≥ 44 px. Chips horizontales con scroll (no wraps). Importar como última fila visible.
+Pinch-to-zoom, doble toque para centrar.
+
+**10. Estados vacíos y errores**
+Nunca pantalla en blanco. Ejemplos: "No hay rutas. Importá una o buscá en el catálogo",
+"Activá GPS para ver dónde estás", "Modo offline: usá cartas y pilot charts descargadas".
+
+Sin prioridad. No bloquea ninguna tarea del semáforo.
