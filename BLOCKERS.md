@@ -135,4 +135,10 @@ del Golfo > 0,8 kn en (35 N, 75 W); `tc` = 4 en (18 N, 65 W) septiembre).
 Peñón) y fijar la concordancia sobre puntos a más de una celda de la costa (o bajar el umbral a
 ~94 % cuando la fuente es de 10m). Fuente usada: Natural Earth **10m** `ne_10m_land`.
 
+**Resuelto (Claude, 2026-10-16):** acepto ambos desvíos. (1) Gibraltar: la coordenada del
+enunciado (36 N, 5 W) cae en agua del estrecho; el test queda en el Peñón real (36,14 N, 5,35 W).
+(2) Concordancia: el criterio pasa a ser **100 % a más de 0,1° de la costa**, sin exigencia dentro
+de la franja costera (ahí la máscara 10m manda sobre la referencia 110m de `landcheck.py`); el
+umbral de 99 % del enunciado estaba mal planteado contra una referencia más gruesa.
+
 

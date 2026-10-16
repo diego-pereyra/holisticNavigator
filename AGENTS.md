@@ -10,7 +10,9 @@ Trabajás en la misma carpeta que Claude (arquitecto). Vos implementás; Claude 
 4. Corré `npm test` (en `web/`) y `bash scripts/build-web.sh`.
 5. Un commit con el nombre que dice la tarea. `git push origin main`.
 6. **PARÁ.** No vuelvas al paso 1, no busques más tareas, no edites `SEMAFORO.md`. Reportá en
-   3 líneas qué hiciste. Claude escribe la siguiente tarea en `SEMAFORO.md`.
+   3 líneas qué hiciste. Claude escribe la siguiente tarea en `SEMAFORO.md` **solo después de
+   ese reporte**: nunca cambia la tarea mientras está en ejecución (lo urgente entra como
+   tarea siguiente, no pisando la actual).
 
 Si algo no se puede hacer como está escrito: anotalo en `BLOCKERS.md` (tarea, qué falla, qué
 proponés), saltá a la siguiente tarea de la cola. No inventes alternativas.
