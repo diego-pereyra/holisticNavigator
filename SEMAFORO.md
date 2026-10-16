@@ -1,17 +1,16 @@
 ADELANTE
 
-TAREA ÚNICA: E13.2 — Pronóstico visible en el mapa (toggle Tiempo, deslizador de hora, wx-isobars, wx-waves).
+TAREA ÚNICA: E11.4 — Rutas propias (crear, editar, guardar, navegar).
 
-Especificación: docs/adr/009-pilot-charts-y-clima-descargable.md §5, §6 y §8 (tabla E13.2).
+Especificación: docs/adr/*.md (E11 rutas propias) + docs/04-backlog-ux.md.
 
-Archivos: web/src/ui/weather.ts, web/src/ui/app.ts, web/public/app.css.
+Archivos: web/src/core/routes-own.ts (nuevo), web/src/core/routes-own.test.ts, web/src/ui/app.ts, web/src/ui/routes-own.ts (nuevo), web/public/app.css.
 
-1. Toggle "Tiempo" en barra de contexto: 3 estados — Apagado / Pilot chart / Pronóstico. Al elegir Pronóstico, activa los datos de hn.forecast.<id> (E13.1) y pinta wx-isobars + wx-waves sobre el mapa.
-2. Deslizador de hora bajo la barra cuando está en Pronóstico: mié 14 · 15:00 UTC, paso 3 h, botón "ahora". Moverlo repinta < 50 ms.
-3. Capas wx en Pronóstico: wx-isobars (isobaras cada 4 hPa), wx-waves (altura y dirección de ola). Se repintan con setData al cambiar la hora.
-4. Empalme con climatología: más allá del horizonte del paquete (7 días), las capas usan la climatología del mes y muestran leyenda "clima medio".
-5. Leyenda: rampa de isobaras + escala de altura de ola + fuente (Open-Meteo CC BY 4.0).
-6. Prueba: AN12 seleccionada, Pronóstico activado, mover el deslizador → el mapa se repinta con isobaras y olas; pasado el horizonte dice "clima medio".
-7. npm test, build-web.sh, commit "E13.2: pronóstico visible en mapa", push, PARÁ.
-
-Nota: el push de SEMAFORO.md falló por credenciales de GitHub. El commit local existe pero no está en origin. Cuando se resuelva el auth, pushear.
+1. Crear ruta propia: tocar en el mapa para agregar waypoints; cada punto se nombra automáticamente (WP1, WP2…); se puede editar nombre y coordenadas.
+2. Calcular distancia total y rumbo entre waypoints consecutivos (haversine).
+3. Guardar ruta propia en IndexedDB (`hn.routes-own.<id>`) con nombre, fecha, waypoints, distancia.
+4. Listar rutas propias en pestaña Rutas (sección "Mis rutas"); seleccionar para ver en ficha; navegar (Seguir) como una ruta del catálogo.
+5. Exportar/importar GPX para rutas propias (reutilizar core/gpx.ts).
+6. Editar ruta propia: agregar/quitar/mover waypoints; recalcular distancia.
+7. Tests: crear ruta, agregar waypoint, calcular distancia, guardar/leer IndexedDB, exportar GPX.
+8. npm test, build-web.sh, commit "E11.4: rutas propias", push, PARÁ.
