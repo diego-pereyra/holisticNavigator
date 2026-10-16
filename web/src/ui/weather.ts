@@ -93,6 +93,12 @@ export const WX_CURRENT_WIDTH: ExpressionSpecification = [
 // E13.5: raya larga y hueco corto, para que las corrientes se lean sin lupa.
 export const WX_CURRENT_DASH: [number, number] = [2.5, 1.5];
 
+// E13.6 — Punta de flecha: triángulo con el ápice en el extremo del vector y las
+// dos alas atrás, perpendiculares a la dirección. Medidas como fracción del largo
+// del vector, para que la punta escale con la flecha.
+export const WX_HEAD_BACK = 0.36;
+export const WX_HEAD_HALF = 0.22;
+
 export const WX_CYCLONE_COLOR = "#C62828";
 export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
   "step",
@@ -141,13 +147,14 @@ export const WX_WAVE_WIDTH: ExpressionSpecification = [
 
 const HATCH_ID = "wx-hatch";
 
-// Fuentes/líneas del pilot chart y del pronóstico, más las dos capas auxiliares
-// (círculo de las flechas y etiqueta de las isobaras) que comparten sus claves.
+// Fuentes/líneas del pilot chart y del pronóstico, más las capas auxiliares
+// (punta de flecha y etiqueta de las isobaras) que comparten sus claves.
 export const WX_LAYER_IDS = [
   "wx-field",
   "wx-current",
+  "wx-current-head",
   "wx-arrows",
-  "wx-arrows-dot",
+  "wx-arrows-head",
   "wx-cyclone",
   "wx-ice",
   "wx-isobars",
@@ -175,11 +182,11 @@ export function defaultWxLayers(): WxLayers {
   return { wind: true, current: true, waves: false, isobars: false, cyclone: false, ice: false };
 }
 
-// Capas del mapa que enciende cada interruptor (los símbolos de isobara y el
-// círculo de las flechas comparten fuente con su capa de línea).
+// Capas del mapa que enciende cada interruptor (los símbolos de isobara y la
+// punta de las flechas comparten fuente con su capa de línea).
 const WX_LAYER_TO_IDS: Record<WxLayerKey, string[]> = {
-  wind: ["wx-field", "wx-arrows", "wx-arrows-dot"],
-  current: ["wx-current"],
+  wind: ["wx-field", "wx-arrows", "wx-arrows-head"],
+  current: ["wx-current", "wx-current-head"],
   waves: ["wx-waves"],
   isobars: ["wx-isobars", "wx-isobar-labels"],
   cyclone: ["wx-cyclone"],
@@ -233,16 +240,23 @@ export function initWeatherLayers(map: MlMap): void {
     },
   });
   map.addLayer({
+    id: "wx-current-head",
+    type: "fill",
+    source: "wx-current-head",
+    minzoom: 3,
+    paint: { "fill-color": WX_CURRENT_COLOR, "fill-opacity": 0.95 },
+  });
+  map.addLayer({
     id: "wx-arrows",
     type: "line",
     source: "wx-arrows",
     paint: { "line-color": WX_FIELD_COLOR, "line-width": WX_ARROW_WIDTH, "line-opacity": WX_ARROW_OPACITY },
   });
   map.addLayer({
-    id: "wx-arrows-dot",
-    type: "circle",
-    source: "wx-arrows-dot",
-    paint: { "circle-color": WX_FIELD_COLOR, "circle-radius": 2.4, "circle-opacity": WX_ARROW_OPACITY },
+    id: "wx-arrows-head",
+    type: "fill",
+    source: "wx-arrows-head",
+    paint: { "fill-color": WX_FIELD_COLOR, "fill-opacity": WX_ARROW_OPACITY },
   });
   map.addLayer({
     id: "wx-cyclone",
@@ -631,20 +645,32 @@ interface WxSample {
 interface WindFeatures {
   field: object[];
   arrows: object[];
-  dots: object[];
+  windHeads: object[];
   current: object[];
+  currentHeads: object[];
   cyclone: object[];
   ice: object[];
 }
 
-const EMPTY_WIND: WindFeatures = { field: [], arrows: [], dots: [], current: [], cyclone: [], ice: [] };
+const EMPTY_WIND: WindFeatures = {
+  field: [],
+  arrows: [],
+  windHeads: [],
+  current: [],
+  currentHeads: [],
+  cyclone: [],
+  ice: [],
+};
 
-// Convierte las muestras en las cinco capas de viento/corriente/ciclón/hielo.
+// Convierte las muestras en las capas de viento/corriente/ciclón/hielo. Cada
+// flecha de viento y cada raya de corriente llevan su punta (triángulo) en el
+// extremo, que marca el sentido además de la dirección (E13.6).
 function buildWeatherFeatures(samples: WxSample[], stride: number): WindFeatures {
   const field: object[] = [];
   const arrows: object[] = [];
-  const dots: object[] = [];
+  const windHeads: object[] = [];
   const current: object[] = [];
+  const currentHeads: object[] = [];
   const cyclone: object[] = [];
   const ice: object[] = [];
   const half = stride / 2;
@@ -656,24 +682,27 @@ function buildWeatherFeatures(samples: WxSample[], stride: number): WindFeatures
       const tip: Pt = [s.lon + s.dirX * len, s.lat + s.dirY * len];
       const props = { ws: round1(s.ws), st: Math.round(s.st) };
       arrows.push(segmentFeature([s.lon, s.lat], tip, props));
-      dots.push(pointFeature(tip, props));
+      windHeads.push(headFeature(tip, s.dirX, s.dirY, len, props));
     }
     if (s.cmag >= 0.15) {
       const len = stride * clamp(0.2 + s.cmag * 0.7, 0.25, 1.3);
       const tip: Pt = [s.lon + s.cdirX * len, s.lat + s.cdirY * len];
-      current.push(segmentFeature([s.lon, s.lat], tip, { mag: round2(s.cmag) }));
+      const props = { mag: round2(s.cmag) };
+      current.push(segmentFeature([s.lon, s.lat], tip, props));
+      currentHeads.push(headFeature(tip, s.cdirX, s.cdirY, len, props));
     }
     if (s.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(s.tc) }));
     if (s.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(s.ice) }));
   }
-  return { field, arrows, dots, current, cyclone, ice };
+  return { field, arrows, windHeads, current, currentHeads, cyclone, ice };
 }
 
 function applyWindLayers(map: MlMap, f: WindFeatures): void {
   setData(map, "wx-field", f.field);
   setData(map, "wx-arrows", f.arrows);
-  setData(map, "wx-arrows-dot", f.dots);
+  setData(map, "wx-arrows-head", f.windHeads);
   setData(map, "wx-current", f.current);
+  setData(map, "wx-current-head", f.currentHeads);
   setData(map, "wx-cyclone", f.cyclone);
   setData(map, "wx-ice", f.ice);
 }
@@ -685,9 +714,11 @@ function paintWindLayers(map: MlMap): void {
   map.setPaintProperty("wx-arrows", "line-color", WX_FIELD_COLOR);
   map.setPaintProperty("wx-arrows", "line-width", WX_ARROW_WIDTH);
   map.setPaintProperty("wx-arrows", "line-opacity", WX_ARROW_OPACITY);
-  map.setPaintProperty("wx-arrows-dot", "circle-color", WX_FIELD_COLOR);
-  map.setPaintProperty("wx-arrows-dot", "circle-opacity", WX_ARROW_OPACITY);
+  map.setPaintProperty("wx-arrows-head", "fill-color", WX_FIELD_COLOR);
+  map.setPaintProperty("wx-arrows-head", "fill-opacity", WX_ARROW_OPACITY);
   map.setPaintProperty("wx-current", "line-color", WX_CURRENT_COLOR);
+  map.setPaintProperty("wx-current-head", "fill-color", WX_CURRENT_COLOR);
+  map.setPaintProperty("wx-current-head", "fill-opacity", 0.95);
   map.setPaintProperty("wx-cyclone", "fill-opacity", WX_CYCLONE_OPACITY);
   map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
 }
@@ -793,6 +824,26 @@ function boxRing(lon: number, lat: number, half: number): [number, number][] {
 
 function polygonFeature(ring: [number, number][], props: Record<string, unknown>): object {
   return { type: "Feature", properties: props, geometry: { type: "Polygon", coordinates: [ring] } };
+}
+
+// Punta de flecha (E13.6): triángulo con el ápice en `tip`, hacia donde apunta
+// (dx,dy), y dos alas atrás perpendiculares a la dirección. `len` es el largo del
+// vector; las alas se separan a cada lado de su punto medio.
+function headFeature(
+  tip: Pt,
+  dx: number,
+  dy: number,
+  len: number,
+  props: Record<string, unknown>,
+): object {
+  const back = len * WX_HEAD_BACK;
+  const side = len * WX_HEAD_HALF;
+  const bx = tip[0] - dx * back;
+  const by = tip[1] - dy * back;
+  return polygonFeature(
+    [tip, [bx - dy * side, by + dx * side], [bx + dy * side, by - dx * side], tip],
+    props,
+  );
 }
 
 function segmentFeature(a: [number, number], b: [number, number], props: Record<string, unknown>): object {

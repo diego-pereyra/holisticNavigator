@@ -23,6 +23,8 @@ import {
   WX_CURRENT_WIDTH,
   WX_CYCLONE_OPACITY,
   WX_FIELD_COLOR,
+  WX_HEAD_BACK,
+  WX_HEAD_HALF,
   WX_ICE_COLOR,
   WX_ISOBAR_COLOR,
   WX_WAVE_COLOR,
@@ -104,9 +106,12 @@ test("E8.3/E13.2 arma las siete capas wx con paint propio", () => {
   const initial = (id: string): Record<string, unknown> => m.layers.get(id)?.paint ?? {};
   assert.equal(initial("wx-field")["fill-color"], WX_FIELD_COLOR);
   assert.equal(initial("wx-arrows")["line-opacity"], WX_ARROW_OPACITY);
+  assert.equal(initial("wx-arrows-head")["fill-opacity"], WX_ARROW_OPACITY);
   assert.equal(initial("wx-current")["line-color"], WX_CURRENT_COLOR);
+  assert.equal(initial("wx-current-head")["fill-color"], WX_CURRENT_COLOR);
   assert.equal(initial("wx-ice")["fill-color"], WX_ICE_COLOR);
   assert.ok(m.layers.has("wx-cyclone"), "falta wx-cyclone");
+  assert.ok(!m.layers.has("wx-arrows-dot"), "el círculo viejo ya no va");
   assert.equal(initial("wx-isobars")["line-color"], WX_ISOBAR_COLOR);
   assert.equal(initial("wx-waves")["line-color"], WX_WAVE_COLOR);
 });
@@ -118,7 +123,9 @@ test("E8.3 repinta diez celdas de prueba y setea el paint de cada capa", () => {
 
   assert.equal(m.data.get("wx-field")?.features.length, 10, "celdas de campo");
   assert.equal(m.data.get("wx-arrows")?.features.length, 10, "flechas de viento");
+  assert.equal(m.data.get("wx-arrows-head")?.features.length, 10, "puntas de viento");
   assert.equal(m.data.get("wx-current")?.features.length, 10, "flechas de corriente");
+  assert.equal(m.data.get("wx-current-head")?.features.length, 10, "puntas de corriente");
   assert.equal(m.data.get("wx-cyclone")?.features.length, 10, "celdas con ciclones");
   assert.equal(m.data.get("wx-ice")?.features.length, 0, "sin hielo");
 
@@ -127,7 +134,9 @@ test("E8.3 repinta diez celdas de prueba y setea el paint de cada capa", () => {
   assert.equal(paint("wx-field", "fill-color")?.value, WX_FIELD_COLOR);
   assert.equal(paint("wx-arrows", "line-width")?.value, WX_ARROW_WIDTH);
   assert.equal(paint("wx-arrows", "line-opacity")?.value, WX_ARROW_OPACITY);
+  assert.equal(paint("wx-arrows-head", "fill-opacity")?.value, WX_ARROW_OPACITY);
   assert.equal(paint("wx-current", "line-color")?.value, WX_CURRENT_COLOR);
+  assert.equal(paint("wx-current-head", "fill-color")?.value, WX_CURRENT_COLOR);
   assert.equal(paint("wx-cyclone", "fill-opacity")?.value, WX_CYCLONE_OPACITY);
   assert.equal(paint("wx-ice", "fill-color")?.value, WX_ICE_COLOR);
 
@@ -251,8 +260,9 @@ test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
 
   assert.equal(m.data.get("wx-field")?.features.length, 9, "campo de viento");
   assert.equal(m.data.get("wx-arrows")?.features.length, 9, "flechas de viento");
-  assert.equal(m.data.get("wx-arrows-dot")?.features.length, 9, "círculos de viento");
+  assert.equal(m.data.get("wx-arrows-head")?.features.length, 9, "puntas de viento");
   assert.equal(m.data.get("wx-current")?.features.length, 9, "corrientes");
+  assert.equal(m.data.get("wx-current-head")?.features.length, 9, "puntas de corriente");
 
   // Viento del E (90°): la flecha apunta hacia el O y lleva st:100 (firme).
   const arrow = m.data.get("wx-arrows")!.features[0] as {
@@ -342,4 +352,63 @@ test("E13.5 corrientes gruesas y legibles", () => {
   // Raya más larga que el hueco.
   assert.deepEqual(WX_CURRENT_DASH, [2.5, 1.5]);
   assert.ok(WX_CURRENT_DASH[0]! > WX_CURRENT_DASH[1]!, "la raya supera al hueco");
+});
+
+// --- E13.6: punta de flecha en viento y corrientes ---------------------
+
+// Verifica que un triángulo de punta salga del vector (a→b): ápice en el extremo
+// `b`, alas atrás (mid a distancia WX_HEAD_BACK del largo) y separadas
+// perpendicularmente (WX_HEAD_HALF a cada lado).
+function checkHead(ring: [number, number][], a: [number, number], b: [number, number]): void {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  const d = Math.hypot(dx, dy);
+  const ux = dx / d;
+  const uy = dy / d;
+  assert.deepEqual(ring[0], b, "ápice en el extremo");
+  assert.deepEqual(ring[3], ring[0], "anillo cerrado");
+  const w1 = ring[1]!;
+  const w2 = ring[2]!;
+  const mid: [number, number] = [(w1[0] + w2[0]) / 2, (w1[1] + w2[1]) / 2];
+  const expe: [number, number] = [b[0] - ux * WX_HEAD_BACK * d, b[1] - uy * WX_HEAD_BACK * d];
+  assert.ok(Math.abs(mid[0] - expe[0]) < 1e-9 && Math.abs(mid[1] - expe[1]) < 1e-9, `alas detrás: ${mid}`);
+  // Alas perpendiculares: (w1−w2)·dir ≈ 0.
+  assert.ok(Math.abs((w1[0] - w2[0]) * ux + (w1[1] - w2[1]) * uy) < 1e-9, "alas perpendiculares");
+  // Separación entre alas = 2·WX_HEAD_HALF·largo.
+  assert.ok(Math.abs(Math.hypot(w1[0] - w2[0], w1[1] - w2[1]) - 2 * WX_HEAD_HALF * d) < 1e-9, "ancho de alas");
+  // Alas detrás del ápice.
+  assert.ok((mid[0] - b[0]) * ux + (mid[1] - b[1]) * uy < 0, "alas hacia atrás");
+}
+
+test("E13.6 la punta sale del vector (viento y corriente)", () => {
+  const pkg = fcPackage(4);
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  updateForecastWeather(m.map, null, pkg, slotTime(pkg, 1));
+
+  const arrow = m.data.get("wx-arrows")!.features[0] as {
+    geometry: { coordinates: [number, number][] };
+  };
+  const windHead = m.data.get("wx-arrows-head")!.features[0] as {
+    properties: { st: number };
+    geometry: { coordinates: [number, number][][] };
+  };
+  assert.equal(windHead.properties.st, 100, "pronóstico: opacidad plena");
+  checkHead(windHead.geometry.coordinates[0]!, arrow.geometry.coordinates[0]!, arrow.geometry.coordinates[1]!);
+
+  const cur = m.data.get("wx-current")!.features[0] as {
+    geometry: { coordinates: [number, number][] };
+  };
+  const curHead = m.data.get("wx-current-head")!.features[0] as {
+    geometry: { coordinates: [number, number][][] };
+  };
+  checkHead(curHead.geometry.coordinates[0]!, cur.geometry.coordinates[0]!, cur.geometry.coordinates[1]!);
+});
+
+test("E13.6 el pilot chart también lleva puntas", () => {
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  updateWeather(m.map, miniClim(), 1);
+  assert.equal(m.data.get("wx-arrows-head")?.features.length, 10, "puntas de viento (clima)");
+  assert.equal(m.data.get("wx-current-head")?.features.length, 10, "puntas de corriente (clima)");
 });
