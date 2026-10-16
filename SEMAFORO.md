@@ -1,15 +1,17 @@
 ADELANTE
 
-TAREA ÚNICA: E13.1 — Paquetes de pronóstico en vivo (Open-Meteo + Marine API, IndexedDB, edad visible).
+TAREA ÚNICA: E13.2 — Pronóstico visible en el mapa (toggle Tiempo, deslizador de hora, wx-isobars, wx-waves).
 
-Especificación: docs/adr/009-pilot-charts-y-clima-descargable.md §4 y §8.
+Especificación: docs/adr/009-pilot-charts-y-clima-descargable.md §5, §6 y §8 (tabla E13.2).
 
-Archivos: web/src/core/forecast.ts (nuevo), web/src/core/forecast.test.ts (nuevo), web/src/platform/forecast.ts, web/src/ui/app.ts.
+Archivos: web/src/ui/weather.ts, web/src/ui/app.ts, web/public/app.css.
 
-1. fetchForecast(bbox, stepHours=3, days=7) — Open-Meteo Forecast + Marine API, caja = ruta activa + 300 nm margen, rejilla 1° (0,5° si < 20°), tope 1500 puntos, llamadas ≤200 coords, barra de progreso.
-2. Variables: wind_speed_10m, wind_direction_10m, wind_gusts_10m, pressure_msl + wave_height, wave_direction, wave_period, ocean_current_velocity, ocean_current_direction. 7 días a 3 h (56 pasos).
-3. storeForecast(pkg) — IndexedDB hn.forecast.<id> con Int16Array escala 0,1. Un paquete actual por travesía.
-4. getForecastAge(pkg) — edad visible siempre.
-5. Empalme con climatología más allá del horizonte ("clima medio").
-6. Tests: descarga simulada Canarias–Caribe, guardado/lectura IndexedDB, edad, empalme.
-7. npm test, build-web.sh, commit "E13.1: paquete de pronóstico Open-Meteo + IndexedDB", push, PARÁ.
+1. Toggle "Tiempo" en barra de contexto: 3 estados — Apagado / Pilot chart / Pronóstico. Al elegir Pronóstico, activa los datos de hn.forecast.<id> (E13.1) y pinta wx-isobars + wx-waves sobre el mapa.
+2. Deslizador de hora bajo la barra cuando está en Pronóstico: mié 14 · 15:00 UTC, paso 3 h, botón "ahora". Moverlo repinta < 50 ms.
+3. Capas wx en Pronóstico: wx-isobars (isobaras cada 4 hPa), wx-waves (altura y dirección de ola). Se repintan con setData al cambiar la hora.
+4. Empalme con climatología: más allá del horizonte del paquete (7 días), las capas usan la climatología del mes y muestran leyenda "clima medio".
+5. Leyenda: rampa de isobaras + escala de altura de ola + fuente (Open-Meteo CC BY 4.0).
+6. Prueba: AN12 seleccionada, Pronóstico activado, mover el deslizador → el mapa se repinta con isobaras y olas; pasado el horizonte dice "clima medio".
+7. npm test, build-web.sh, commit "E13.2: pronóstico visible en mapa", push, PARÁ.
+
+Nota: el push de SEMAFORO.md falló por credenciales de GitHub. El commit local existe pero no está en origin. Cuando se resuelva el auth, pushear.
