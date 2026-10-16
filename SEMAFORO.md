@@ -1,22 +1,25 @@
 ADELANTE
 
-TAREA ÚNICA: E13.7 — Ajuste de puntas: olas con punta y corrientes más chicas (prueba de
-Diego en el celu tras E13.6).
+TAREA ÚNICA: E11.5 — Copiar ruta + catálogo solo lectura.
 
-Archivos: web/src/ui/weather.ts, web/src/ui/weather.test.ts.
+Regla de Diego (2026-10-16): botón "Copiar ruta" separado del optimizador; editable (agregar,
+quitar, mover waypoints y eliminar la ruta) en TODAS menos las del catálogo, que son solo
+lectura.
 
-1. Puntas en las olas del Pronóstico: capa nueva `wx-waves-head` con triángulo en el extremo
-   de cada flecha de ola (`waveArrows`), color por la misma rampa de altura (`WX_WAVE_COLOR`
-   sobre `h`). Las olas de climatología (más allá del horizonte) son cajas sin dirección: no
-   llevan punta — no hay dirección guardada para marcar el sentido.
-2. Puntas de corrientes más chicas: las alas del triángulo de `wx-current-head` pasan de
-   ~35 % del largo del segmento a ~20 % (con tope absoluto en grados si hace falta): tiene
-   que verse como una punta, no como un cometa.
-3. Mismo patrón que E13.6: `headFeature` compartido, parametrizado por proporción; tests de
-   las tres puntas (viento, corriente, olas).
-4. Prueba en browser (smoke de CI + celu de Diego): flechas de ola con punta en Pronóstico;
-   puntas de corriente visibles pero discretas.
-5. npm test (en web/), bash scripts/build-web.sh, commit "E13.7: puntas en olas y puntas de
-   corriente más chicas", push, PARÁ.
+Archivos: web/src/ui/app.ts, web/src/core/routes-own.ts (+test), web/public/app.css.
 
-La siguiente será E12.5 (isócronas con Web Worker + "Optimizar con el viento").
+1. Botón "Copiar ruta" en la ficha de cualquier ruta (catálogo, propia, importada): crea una
+   copia editable en Mis rutas — `<código> (copia)` para el catálogo, `<nombre> (copia)` para
+   propias — y queda seleccionada, lista para Seguir, Exportar o editar.
+2. Solo lectura reforzada: en rutas del catálogo el editor no abre; la ficha muestra
+   "Ruta del libro · solo lectura — Copiala para editarla" con el botón al lado.
+3. Editor (existe de E11.4): verificar que agregar/quitar/mover waypoints y eliminar la ruta
+   funcionan en propias, importadas y copias, con recálculo de nm al editar.
+4. Tests: copiar una del catálogo produce una propia idéntica (mismos waypoints) marcada
+   como propia; copiar una propia produce dos rutas independientes (editar una no toca la
+   otra).
+5. npm test (en web/), bash scripts/build-web.sh, commit "E11.5: copiar ruta + catálogo solo
+   lectura", push, PARÁ.
+
+La siguiente será E12.5 (isócronas + "Optimizar con el viento", revisada: optimizar = vista
+sobre cualquier ruta; aplicar solo en propias — spec completa en docs/05-cola-de-trabajo.md).
