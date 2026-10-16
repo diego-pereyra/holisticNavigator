@@ -8,6 +8,7 @@ import {
   clearWeather,
   hourLabel,
   initWeatherLayers,
+  isobarLabels,
   isobars,
   nearestSlot,
   slotTime,
@@ -175,15 +176,15 @@ function fcPackage(steps = 4): ForecastPackage {
     rows,
     times,
     vars: {
-      wind_speed: new Int16Array(count),
-      wind_direction: new Int16Array(count),
+      wind_speed: mk(() => 15),
+      wind_direction: mk(() => 90),
       wind_gusts: new Int16Array(count),
       pressure: mk((c) => 1000 + c * 3),
       wave_height: mk(() => 1.8),
       wave_direction: mk(() => 90),
       wave_period: new Int16Array(count),
-      current_velocity: new Int16Array(count),
-      current_direction: new Int16Array(count),
+      current_velocity: mk(() => 1.2),
+      current_direction: mk(() => 0),
     },
   };
 }
@@ -231,12 +232,100 @@ test("E13.2 dentro del horizonte pinta isobaras y olas; fuera, clima medio", () 
   assert.equal(beyond, false);
   assert.ok((m.data.get("wx-isobars")?.features.length ?? 0) > 0, "sin isobaras");
   assert.ok((m.data.get("wx-waves")?.features.length ?? 0) > 0, "sin olas");
-  assert.equal(m.data.get("wx-field")?.features.length, 0, "pilot chart apagado");
+  assert.equal(m.data.get("wx-field")?.features.length, 9, "viento del pronóstico (3×3)");
 
   const outside = updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3 * 3600 * 1000);
   assert.equal(outside, true, "más allá del horizonte");
   assert.equal(m.data.get("wx-isobars")?.features.length, 0, "sin isobaras fuera del horizonte");
   assert.equal(m.data.get("wx-waves")?.features.length, 10, "olas de climatología");
+});
+
+test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
+  const pkg = fcPackage(4);
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  const inside = slotTime(pkg, 1);
+  assert.equal(updateForecastWeather(m.map, null, pkg, inside), false);
+
+  assert.equal(m.data.get("wx-field")?.features.length, 9, "campo de viento");
+  assert.equal(m.data.get("wx-arrows")?.features.length, 9, "flechas de viento");
+  assert.equal(m.data.get("wx-arrows-dot")?.features.length, 9, "círculos de viento");
+  assert.equal(m.data.get("wx-current")?.features.length, 9, "corrientes");
+
+  // Viento del E (90°): la flecha apunta hacia el O y lleva st:100 (firme).
+  const arrow = m.data.get("wx-arrows")!.features[0] as {
+    properties: { ws: number; st: number };
+    geometry: { coordinates: [number, number][] };
+  };
+  assert.equal(arrow.properties.st, 100, "st:100 para que la opacidad no apague la flecha");
+  assert.equal(arrow.properties.ws, 15);
+  const [a, b] = arrow.geometry.coordinates as [[number, number], [number, number]];
+  assert.ok(b[0] < a[0], "el viento viene del E, la flecha va hacia el O");
+
+  // Corriente hacia el N (0°): la flecha apunta al norte.
+  const cur = m.data.get("wx-current")!.features[0] as {
+    geometry: { coordinates: [number, number][] };
+  };
+  const [ca, cb] = cur.geometry.coordinates as [[number, number], [number, number]];
+  assert.ok(cb[1] > ca[1], "la corriente va hacia el norte");
+
+  // Fuera del horizonte, el viento y la corriente salen de la climatología.
+  const beyond = updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3600_000);
+  assert.equal(beyond, true);
+  assert.equal(m.data.get("wx-field")?.features.length, 10, "viento de climatología");
+  assert.equal(m.data.get("wx-current")?.features.length, 10, "corriente de climatología");
+});
+
+test("E13.4 isobaras cosidas: polilíneas continuas con una etiqueta por línea", () => {
+  const lines = isobars(fcPackage(4), 0);
+  const labels = isobarLabels(fcPackage(4), 0);
+  assert.ok(lines.length > 0, "hay isobaras");
+  assert.equal(labels.length, lines.length, "una etiqueta hPa por polilínea");
+  for (const line of lines) {
+    const geom = (line as { geometry: { type: string; coordinates: [number, number][] } }).geometry;
+    assert.equal(geom.type, "LineString");
+    assert.ok(geom.coordinates.length >= 3, "cosida en polilínea, no segmentitos de 2 puntos");
+  }
+  for (const label of labels) {
+    assert.equal((label as { properties: { label: string } }).properties.label, "1004");
+  }
+});
+
+test("E13.4 silla: dos diagonales dan dos tramos, sin descartar puntos", () => {
+  const cols = 2;
+  const rows = 2;
+  const count = cols * rows;
+  const pressure = new Int16Array(count).fill(FORECAST_MISSING);
+  // Esquinas opuestas altas (1005) y las otras bajas (1003): isobara de 1004 en silla.
+  pressure[0] = 10050; // (c0,r0)
+  pressure[1] = 10030; // (c1,r0)
+  pressure[2] = 10030; // (c0,r1)
+  pressure[3] = 10050; // (c1,r1)
+  const empty = new Int16Array(count);
+  const pkg: ForecastPackage = {
+    id: "saddle",
+    issuedAt: 0,
+    fetchedAt: 0,
+    bbox: [0, 0, 1, 1],
+    stepHours: 3,
+    cols,
+    rows,
+    times: [0],
+    vars: {
+      wind_speed: empty,
+      wind_direction: empty,
+      wind_gusts: empty,
+      pressure,
+      wave_height: empty,
+      wave_direction: empty,
+      wave_period: empty,
+      current_velocity: empty,
+      current_direction: empty,
+    },
+  };
+  const lines = isobars(pkg, 0);
+  assert.equal(lines.length, 2, "dos tramos (no se descarta el tercer punto)");
+  assert.equal(isobarLabels(pkg, 0).length, 2);
 });
 
 test("E13.2 rampa de olas y constante de isobaras", () => {

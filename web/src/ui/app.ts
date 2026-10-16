@@ -310,6 +310,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   };
 
   installBaseLayers(map);
+  // E13.4: las capas wx-* ya existen; aplicar ya el estado de los interruptores
+  // (el effect de arranque puede correr antes de que las capas estén creadas).
+  applyWxLayers(map, ui.wxLayers());
   wireGps(ui);
 
   // Tema Día / Noche / Rojo (T11.5): `theme` resuelve Auto con la posición y la

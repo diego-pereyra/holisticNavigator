@@ -286,81 +286,14 @@ export function clearWeather(map: MlMap): void {
   for (const id of WX_LAYER_IDS) setData(map, id, []);
 }
 
-// Repinta el mes: reemplaza la data de las cinco capas con las celdas de mar
-// visibles en la vista actual, muestreadas según el zoom.
+// Repinta el mes: reemplaza la data de las capas con las celdas de mar visibles.
 export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
-  const stride = weatherStride(map.getZoom());
-  const b = map.getBounds();
-  const west = b.getWest();
-  const east = b.getEast();
-  const south = b.getSouth();
-  const north = b.getNorth();
-
-  const field: object[] = [];
-  const arrows: object[] = [];
-  const dots: object[] = [];
-  const current: object[] = [];
-  const cyclone: object[] = [];
-  const ice: object[] = [];
-
-  const [nx, ny] = clim.grid;
-  const [ox, oy] = clim.origin;
-  const half = stride / 2;
-
-  for (let i = 0; i < ny; i += stride) {
-    const lat = oy + i;
-    if (lat + half < south || lat - half > north) continue;
-    for (let j = 0; j < nx; j += stride) {
-      const lon = ox + j;
-      if (!lonInBounds(lon, west, east, half)) continue;
-      const cell = getCell(clim, lat, lon);
-      if (cell === null) continue;
-
-      const box = boxRing(lon, lat, half);
-      field.push(polygonFeature(box, { ws: round1(cell.ws) }));
-
-      const mag = Math.hypot(cell.wu, cell.wv);
-      if (mag > 0.05) {
-        const len = stride * clamp(0.2 + cell.ws / 60, 0.25, 1.1);
-        const tip: [number, number] = [lon + (cell.wu / mag) * len, lat + (cell.wv / mag) * len];
-        const props = { ws: round1(cell.ws), st: Math.round(cell.st) };
-        arrows.push(segmentFeature([lon, lat], tip, props));
-        dots.push(pointFeature(tip, props));
-      }
-
-      const cmag = Math.hypot(cell.cu, cell.cv);
-      if (cmag >= 0.15) {
-        const len = stride * clamp(0.2 + cmag * 0.7, 0.25, 1.3);
-        const tip: [number, number] = [lon + (cell.cu / cmag) * len, lat + (cell.cv / cmag) * len];
-        current.push(segmentFeature([lon, lat], tip, { mag: round2(cmag) }));
-      }
-
-      if (cell.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(cell.tc) }));
-      if (cell.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(cell.ice) }));
-    }
-  }
-
-  setData(map, "wx-field", field);
-  setData(map, "wx-arrows", arrows);
-  setData(map, "wx-arrows-dot", dots);
-  setData(map, "wx-current", current);
-  setData(map, "wx-cyclone", cyclone);
-  setData(map, "wx-ice", ice);
+  applyWindLayers(map, buildWeatherFeatures(climateSamples(map, clim), weatherStride(map.getZoom())));
   // Las del pronóstico quedan apagadas en modo pilot chart.
   setData(map, "wx-isobars", []);
   setData(map, "wx-isobar-labels", []);
   setData(map, "wx-waves", []);
-
-  // Refuerza las propiedades que dependen de la data (por si el estilo se recargó).
-  map.setPaintProperty("wx-field", "fill-color", WX_FIELD_COLOR);
-  map.setPaintProperty("wx-field", "fill-opacity", 0.35);
-  map.setPaintProperty("wx-arrows", "line-color", WX_FIELD_COLOR);
-  map.setPaintProperty("wx-arrows", "line-width", WX_ARROW_WIDTH);
-  map.setPaintProperty("wx-arrows", "line-opacity", WX_ARROW_OPACITY);
-  map.setPaintProperty("wx-arrows-dot", "circle-color", WX_FIELD_COLOR);
-  map.setPaintProperty("wx-current", "line-color", WX_CURRENT_COLOR);
-  map.setPaintProperty("wx-cyclone", "fill-opacity", WX_CYCLONE_OPACITY);
-  map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
+  paintWindLayers(map);
 }
 
 // ----------------------------------------------------- pronóstico E13.2
@@ -399,8 +332,8 @@ export function nearestForecastIndex(pkg: ForecastPackage, ms: number): number {
 }
 
 // Isobaras cada 4 hPa (marching squares con interpolación lineal en los bordes
-// de cada celda de la grilla de presión). Devuelve las líneas; `isobarLabels`
-// devuelve los puntos con el número en hPa para la capa de símbolos.
+// de cada celda de la grilla de presión). Los tramos de cada nivel se cosen en
+// polilíneas contiguas; `isobarLabels` devuelve una etiqueta hPa por polilínea.
 export function isobars(pkg: ForecastPackage, index: number): object[] {
   return marchIsobars(pkg, index).lines;
 }
@@ -422,6 +355,8 @@ function marchIsobars(pkg: ForecastPackage, index: number): { lines: object[]; l
   };
   const dx = (bbox[2] - bbox[0]) / (cols - 1);
   const dy = (bbox[3] - bbox[1]) / (rows - 1);
+  // Tramos por nivel; luego se cosen en polilíneas contiguas.
+  const byLevel = new Map<number, [Pt, Pt][]>();
   for (let r = 0; r < rows - 1; r++) {
     for (let c = 0; c < cols - 1; c++) {
       const v00 = at(c, r);
@@ -439,21 +374,33 @@ function marchIsobars(pkg: ForecastPackage, index: number): { lines: object[]; l
         L += WX_ISOBAR_INTERVAL
       ) {
         if (L === 0) continue;
-        const pts: [number, number][] = [];
-        if ((v00 - L) * (v10 - L) < 0) pts.push([x0 + ((L - v00) / (v10 - v00)) * dx, y0]);
-        if ((v10 - L) * (v11 - L) < 0) pts.push([x0 + dx, y0 + ((L - v10) / (v11 - v10)) * dy]);
-        if ((v01 - L) * (v11 - L) < 0) pts.push([x0 + ((L - v01) / (v11 - v01)) * dx, y0 + dy]);
-        if ((v00 - L) * (v01 - L) < 0) pts.push([x0, y0 + ((L - v01) / (v01 - v00)) * dy]);
-        if (pts.length >= 2) lines.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
-        if (pts.length === 4) lines.push(segmentFeature(pts[2]!, pts[3]!, { hpa: L }));
-        // Una etiqueta (el número en hPa) cada tanto; la colisión de MapLibre
-        // descarta las que se solapan, así queda legible a cualquier zoom.
-        if (pts.length >= 2 && (c + r) % 6 === 0) {
-          const a = pts[0]!;
-          const b = pts[1]!;
-          labels.push(pointFeature([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], { label: String(L) }));
+        // Cruce sobre los cuatro bordes: arriba, derecha, abajo, izquierda.
+        const e: (Pt | null)[] = [null, null, null, null];
+        if ((v00 - L) * (v10 - L) < 0) e[0] = [x0 + ((L - v00) / (v10 - v00)) * dx, y0];
+        if ((v10 - L) * (v11 - L) < 0) e[1] = [x0 + dx, y0 + ((L - v10) / (v11 - v10)) * dy];
+        if ((v01 - L) * (v11 - L) < 0) e[2] = [x0 + ((L - v01) / (v11 - v01)) * dx, y0 + dy];
+        if ((v00 - L) * (v01 - L) < 0) e[3] = [x0, y0 + ((L - v00) / (v01 - v00)) * dy];
+        if (!e[0] && !e[1] && !e[2] && !e[3]) continue;
+        const list = byLevel.get(L) ?? [];
+        byLevel.set(L, list);
+        if (e[0] && e[1] && e[2] && e[3]) {
+          // Silla: dos diagonales opuestas cruzan el nivel. El signo de v00 decide
+          // qué pares se unen, así no se descarta ningún punto.
+          if (v00 > L) list.push([e[0], e[3]], [e[1], e[2]]);
+          else list.push([e[0], e[1]], [e[2], e[3]]);
+        } else {
+          const pts = e.filter((p): p is Pt => p !== null);
+          if (pts.length === 2) list.push([pts[0]!, pts[1]!]);
         }
       }
+    }
+  }
+  for (const [L, segs] of byLevel) {
+    for (const poly of stitchSegments(segs)) {
+      if (poly.length < 2) continue;
+      lines.push(lineFeature(poly, { hpa: L }));
+      const mid = midpointOf(poly);
+      if (mid) labels.push(pointFeature(mid, { label: String(L) }));
     }
   }
   return { lines, labels };
@@ -528,19 +475,21 @@ export function updateForecastWeather(
   pkg: ForecastPackage,
   timeMs: number,
 ): boolean {
-  for (const id of ["wx-field", "wx-arrows", "wx-arrows-dot", "wx-current", "wx-cyclone", "wx-ice"]) {
-    setData(map, id, []);
-  }
+  const stride = weatherStride(map.getZoom());
   if (timeMs > forecastLastTime(pkg)) {
+    // Fuera del horizonte: viento y corriente desde la climatología del mes.
+    applyWindLayers(map, clim ? buildWeatherFeatures(climateSamples(map, clim), stride) : EMPTY_WIND);
     setData(map, "wx-isobars", []);
     setData(map, "wx-isobar-labels", []);
     setData(map, "wx-waves", clim ? climateWaves(map, clim) : []);
     return true;
   }
   const index = nearestForecastIndex(pkg, timeMs);
+  applyWindLayers(map, buildWeatherFeatures(forecastWindSamples(pkg, index, stride), stride));
   setData(map, "wx-isobars", isobars(pkg, index));
   setData(map, "wx-isobar-labels", isobarLabels(pkg, index));
-  setData(map, "wx-waves", waveArrows(pkg, index, weatherStride(map.getZoom())));
+  setData(map, "wx-waves", waveArrows(pkg, index, stride));
+  paintWindLayers(map);
   map.setPaintProperty("wx-isobars", "line-color", WX_ISOBAR_COLOR);
   map.setPaintProperty("wx-waves", "line-color", WX_WAVE_COLOR);
   map.setPaintProperty("wx-waves", "line-width", WX_WAVE_WIDTH);
@@ -659,6 +608,174 @@ function setData(map: MlMap, id: string, features: object[]): void {
   src?.setData({ type: "FeatureCollection", features } as never);
 }
 
+type Pt = [number, number];
+
+// Muestra de una celda para dibujar viento y corriente: `dirX/dirY` y
+// `cdirX/cdirY` son vectores unitarios hacia donde VA el viento/la corriente;
+// `wmag` es la magnitud del vector de viento (para no dibujar calmas).
+interface WxSample {
+  lon: number;
+  lat: number;
+  ws: number;
+  st: number;
+  wmag: number;
+  dirX: number;
+  dirY: number;
+  cmag: number;
+  cdirX: number;
+  cdirY: number;
+  tc: number;
+  ice: number;
+}
+
+interface WindFeatures {
+  field: object[];
+  arrows: object[];
+  dots: object[];
+  current: object[];
+  cyclone: object[];
+  ice: object[];
+}
+
+const EMPTY_WIND: WindFeatures = { field: [], arrows: [], dots: [], current: [], cyclone: [], ice: [] };
+
+// Convierte las muestras en las cinco capas de viento/corriente/ciclón/hielo.
+function buildWeatherFeatures(samples: WxSample[], stride: number): WindFeatures {
+  const field: object[] = [];
+  const arrows: object[] = [];
+  const dots: object[] = [];
+  const current: object[] = [];
+  const cyclone: object[] = [];
+  const ice: object[] = [];
+  const half = stride / 2;
+  for (const s of samples) {
+    const box = boxRing(s.lon, s.lat, half);
+    field.push(polygonFeature(box, { ws: round1(s.ws) }));
+    if (s.wmag > 0.05) {
+      const len = stride * clamp(0.2 + s.ws / 60, 0.25, 1.1);
+      const tip: Pt = [s.lon + s.dirX * len, s.lat + s.dirY * len];
+      const props = { ws: round1(s.ws), st: Math.round(s.st) };
+      arrows.push(segmentFeature([s.lon, s.lat], tip, props));
+      dots.push(pointFeature(tip, props));
+    }
+    if (s.cmag >= 0.15) {
+      const len = stride * clamp(0.2 + s.cmag * 0.7, 0.25, 1.3);
+      const tip: Pt = [s.lon + s.cdirX * len, s.lat + s.cdirY * len];
+      current.push(segmentFeature([s.lon, s.lat], tip, { mag: round2(s.cmag) }));
+    }
+    if (s.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(s.tc) }));
+    if (s.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(s.ice) }));
+  }
+  return { field, arrows, dots, current, cyclone, ice };
+}
+
+function applyWindLayers(map: MlMap, f: WindFeatures): void {
+  setData(map, "wx-field", f.field);
+  setData(map, "wx-arrows", f.arrows);
+  setData(map, "wx-arrows-dot", f.dots);
+  setData(map, "wx-current", f.current);
+  setData(map, "wx-cyclone", f.cyclone);
+  setData(map, "wx-ice", f.ice);
+}
+
+// Refuerza las propiedades que dependen de la data (por si el estilo se recargó).
+function paintWindLayers(map: MlMap): void {
+  map.setPaintProperty("wx-field", "fill-color", WX_FIELD_COLOR);
+  map.setPaintProperty("wx-field", "fill-opacity", 0.35);
+  map.setPaintProperty("wx-arrows", "line-color", WX_FIELD_COLOR);
+  map.setPaintProperty("wx-arrows", "line-width", WX_ARROW_WIDTH);
+  map.setPaintProperty("wx-arrows", "line-opacity", WX_ARROW_OPACITY);
+  map.setPaintProperty("wx-arrows-dot", "circle-color", WX_FIELD_COLOR);
+  map.setPaintProperty("wx-arrows-dot", "circle-opacity", WX_ARROW_OPACITY);
+  map.setPaintProperty("wx-current", "line-color", WX_CURRENT_COLOR);
+  map.setPaintProperty("wx-cyclone", "fill-opacity", WX_CYCLONE_OPACITY);
+  map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
+}
+
+// Celdas de mar visibles en la vista actual, muestreadas según el zoom: fuente
+// común del pilot chart y del empalme climatológico del pronóstico.
+function climateSamples(map: MlMap, clim: ClimMonth): WxSample[] {
+  const stride = weatherStride(map.getZoom());
+  const b = map.getBounds();
+  const west = b.getWest();
+  const east = b.getEast();
+  const south = b.getSouth();
+  const north = b.getNorth();
+  const [nx, ny] = clim.grid;
+  const [ox, oy] = clim.origin;
+  const half = stride / 2;
+  const out: WxSample[] = [];
+  for (let i = 0; i < ny; i += stride) {
+    const lat = oy + i;
+    if (lat + half < south || lat - half > north) continue;
+    for (let j = 0; j < nx; j += stride) {
+      const lon = ox + j;
+      if (!lonInBounds(lon, west, east, half)) continue;
+      const cell = getCell(clim, lat, lon);
+      if (cell === null) continue;
+      const mag = Math.hypot(cell.wu, cell.wv);
+      const cmag = Math.hypot(cell.cu, cell.cv);
+      out.push({
+        lon,
+        lat,
+        ws: cell.ws,
+        st: cell.st,
+        wmag: mag,
+        dirX: mag > 0 ? cell.wu / mag : 0,
+        dirY: mag > 0 ? cell.wv / mag : 0,
+        cmag,
+        cdirX: cmag > 0 ? cell.cu / cmag : 0,
+        cdirY: cmag > 0 ? cell.cv / cmag : 0,
+        tc: cell.tc,
+        ice: cell.ice,
+      });
+    }
+  }
+  return out;
+}
+
+// Viento y corriente del paquete de pronóstico. La dirección del API es de dónde
+// VIENE el viento, así que la flecha apunta hacia donde VA (dir + 180), como en
+// `waveArrows`. El pronóstico es determinista: `st: 100` (opacidad plena).
+function forecastWindSamples(pkg: ForecastPackage, index: number, stride: number): WxSample[] {
+  const { cols, rows, bbox } = pkg;
+  const step = pkg.times.length;
+  if (step === 0) return [];
+  const dx = cols > 1 ? (bbox[2] - bbox[0]) / (cols - 1) : 0;
+  const dy = rows > 1 ? (bbox[3] - bbox[1]) / (rows - 1) : 0;
+  const s = Math.max(1, Math.round(stride));
+  const out: WxSample[] = [];
+  for (let r = 0; r < rows; r += s) {
+    for (let c = 0; c < cols; c += s) {
+      const p = (r * cols + c) * step + index;
+      const speed = decodeForecast(pkg.vars.wind_speed[p] ?? FORECAST_MISSING);
+      const dir = decodeForecast(pkg.vars.wind_direction[p] ?? FORECAST_MISSING);
+      if (speed === null || dir === null) continue; // sin dato (tierra)
+      const to = ((dir + 180) * Math.PI) / 180;
+      const cvel = decodeForecast(pkg.vars.current_velocity[p] ?? FORECAST_MISSING);
+      const cdir = decodeForecast(pkg.vars.current_direction[p] ?? FORECAST_MISSING);
+      const cmag = cvel ?? 0;
+      const cAng = ((cdir ?? 0) * Math.PI) / 180;
+      out.push({
+        lon: bbox[0] + c * dx,
+        lat: bbox[1] + r * dy,
+        ws: speed,
+        st: 100,
+        wmag: speed,
+        dirX: speed > 0 ? Math.sin(to) : 0,
+        dirY: speed > 0 ? Math.cos(to) : 0,
+        cmag,
+        cdirX: cmag > 0 ? Math.sin(cAng) : 0,
+        cdirY: cmag > 0 ? Math.cos(cAng) : 0,
+        tc: 0,
+        ice: 0,
+      });
+    }
+  }
+  return out;
+}
+
+
 function lonInBounds(lon: number, west: number, east: number, margin: number): boolean {
   if (west <= east) return lon >= west - margin && lon <= east + margin;
   return lon >= west - margin || lon <= east + margin;
@@ -680,6 +797,86 @@ function polygonFeature(ring: [number, number][], props: Record<string, unknown>
 
 function segmentFeature(a: [number, number], b: [number, number], props: Record<string, unknown>): object {
   return { type: "Feature", properties: props, geometry: { type: "LineString", coordinates: [a, b] } };
+}
+
+function lineFeature(coords: Pt[], props: Record<string, unknown>): object {
+  return { type: "Feature", properties: props, geometry: { type: "LineString", coordinates: coords } };
+}
+
+// Tolerancia para reconocer que dos extremos son el mismo punto (celdas vecinas
+// calculan el cruce con la misma fórmula, así que coinciden salvo ruido de coma
+// flotante).
+const STITCH_TOL = 1e-4;
+
+// Cose los tramos de un mismo nivel en polilíneas contiguas: une extremos que
+// comparten punto (tolerancia STITCH_TOL) y devuelve cada tramo continuo.
+function stitchSegments(segments: [Pt, Pt][]): Pt[][] {
+  const key = (p: Pt): string => `${Math.round(p[0] / STITCH_TOL)}_${Math.round(p[1] / STITCH_TOL)}`;
+  const ends = new Map<string, number[]>();
+  segments.forEach((seg, i) => {
+    for (const p of seg) {
+      const k = key(p);
+      const arr = ends.get(k);
+      if (arr) arr.push(i);
+      else ends.set(k, [i]);
+    }
+  });
+  const used = new Set<number>();
+  const lines: Pt[][] = [];
+  const extend = (line: Pt[], front: boolean): void => {
+    for (;;) {
+      const end = front ? line[0]! : line[line.length - 1]!;
+      const cands = ends.get(key(end)) ?? [];
+      let next = -1;
+      for (const j of cands) {
+        if (!used.has(j)) {
+          next = j;
+          break;
+        }
+      }
+      if (next < 0) return;
+      used.add(next);
+      const s = segments[next]!;
+      const other = key(s[0]) === key(end) ? s[1] : s[0];
+      if (front) line.unshift(other);
+      else line.push(other);
+    }
+  };
+  for (let i = 0; i < segments.length; i++) {
+    if (used.has(i)) continue;
+    used.add(i);
+    const seg = segments[i]!;
+    const line: Pt[] = [seg[0], seg[1]];
+    extend(line, false);
+    extend(line, true);
+    if (line.length >= 2) lines.push(line);
+  }
+  return lines;
+}
+
+// Punto medio de una polilínea medido por longitud de arco (para la etiqueta).
+function midpointOf(line: Pt[]): Pt | null {
+  if (line.length === 0) return null;
+  if (line.length === 1) return line[0]!;
+  const lens: number[] = [];
+  let total = 0;
+  for (let i = 1; i < line.length; i++) {
+    const d = Math.hypot(line[i]![0] - line[i - 1]![0], line[i]![1] - line[i - 1]![1]);
+    lens.push(d);
+    total += d;
+  }
+  if (total === 0) return line[0]!;
+  let rem = total / 2;
+  for (let i = 0; i < lens.length; i++) {
+    if (rem <= lens[i]! || i === lens.length - 1) {
+      const t = lens[i]! > 0 ? rem / lens[i]! : 0;
+      const a = line[i]!;
+      const b = line[i + 1]!;
+      return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+    }
+    rem -= lens[i]!;
+  }
+  return line[line.length - 1]!;
 }
 
 function pointFeature(p: [number, number], props: Record<string, unknown>): object {
