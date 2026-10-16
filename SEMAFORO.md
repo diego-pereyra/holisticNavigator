@@ -1,32 +1,31 @@
 ADELANTE
 
-TAREA ÚNICA: E13.5 — El mapa nunca queda en azul pelado (piso sin techo de zoom) + corrientes
-legibles. Regresión reportada por Diego 2026-10-16: "volvió a fallar el zoom".
+TAREA ÚNICA: E12.2 — Rutas del catálogo que no tocan tierra (A* con margen sobre la máscara E12.1).
 
-Diagnóstico ya hecho (no buscar más):
-- web/src/main.ts:162, 169 y 176 — country-fill, country-line y coast-line tienen
-  maxzoom: 4: a partir de z5 el piso Natural Earth se apaga. La carta de detalle (minzoom 4)
-  cubre el hueco solo cuando el PMTiles terminó de cargar su directorio; en red lenta u
-  offline la pantalla queda en azul oscuro sin costa ni países. Con zona descargada se ve
-  bien: exactamente "general ✓ · intermedio sin descarga ✗ · descargado ✓".
-- web/src/ui/weather.ts:82-94 — WX_CURRENT_WIDTH interpola 0,5 → 1,6 → 2,6 px con dash
-  [1.6, 2] y opacity 0,85: corrientes típicas de 0,5–2 kn quedan casi invisibles.
+Especificación: docs/adr/008-weather-routing.md §Plan (T12.2) y §Decisión (niveles 1 y 5:
+"arreglar tierra" y "A* sobre la rejilla"). Es trabajo de pipeline (Python + datos); la app
+solo recibe el catálogo regenerado.
 
-Archivos: web/src/main.ts, web/src/ui/weather.ts (app.css solo si hace falta).
+Archivos: tools/optimize_coast.py (v2), tools/build_landmask.py (máscara, ya existe de E12.1),
+tools/build_v2_catalog.py (regenera el catálogo), scripts/sync-catalog.sh (ya copia). Nada de
+UI nueva.
 
-1. Piso sin techo: quitar el maxzoom: 4 de country-fill, country-line y coast-line. Los
-   rellenos y la costa siguen dibujados a cualquier zoom, por debajo de la carta de detalle:
-   cuando el PMTiles carga, detail-water/detail-earth los tapan; mientras carga u offline se
-   ve el piso tosco y no azul pelado. country-label, city-dot y city-label CONSERVAN su
-   techo (las etiquetas de z≥4 las pone detail-place).
-2. Corrientes gruesas: WX_CURRENT_WIDTH pasa a interpolar 1,8 → 3,4 → 4,2 px (mag 0 / 2 / 4),
-   line-opacity 0,95 y dash [2.5, 1.5]. La misma capa sirve en pilot chart y Pronóstico.
-3. Verificar que la nota de UX-3 ("Sin detalle a esta escala · descargá la zona") siga
-   apareciendo a z > 6 sin zona descargada — ahora sobre el piso visible, no sobre vacío.
-4. Prueba en browser (smoke de CI): z5 sin red y sin PMTiles cargado → costa y países del
-   piso visibles; con el detalle cargado → el piso queda debajo sin pelear; corrientes del
-   Caribe legibles a z3 sin acercar más.
-5. npm test (en web/), bash scripts/build-web.sh, commit "E13.5: piso siempre visible +
-   corrientes legibles", push, PARÁ.
+1. Medir de nuevo con la máscara 10m: re-corre el detector de cruces con margen (dilatación de
+   1 celda de 0,1° ≈ 3 nm) sobre las 2 268 variantes y reportá cuántas cruzan hoy — el "164"
+   del ADR se midió con la costa 110m; el número real puede ser otro.
+2. optimize_coast.py v2: por cada variante con cruces, re-enrutar SOLO los tramos que cruzan
+   con A* sobre la grilla 0,1° con la máscara dilatada, acotado al bbox del tramo + 2° de
+   margen, coste = distancia. Si A* no encuentra camino o el rodeo queda > 15 % más largo que
+   el tramo original, la variante queda needsReview (no se fuerza).
+3. Waypoints insertados: nombre "Costa 1…n" por variante, `corrected: true` (⚑ en la ficha),
+   simplificados con Douglas-Peucker (tol 0,05°) para no llenar la tabla. Los waypoints del
+   libro no se tocan; el trazado original queda como referencia en el pipeline, no en la app.
+4. Regenerar el catálogo completo (routes.geojson + facts + index con los nm recalculados de
+   los trazados corregidos), CATALOG_VERSION + 1, sync a web/public/catalog.
+5. Validación (falla si no se cumple): ninguna variante cruza tierra con margen según la
+   máscara nueva; needsReview baja a < 20 variantes; facts y routes.geojson siguen
+   coincidiendo en cantidad y orden de waypoints (validación existente del build).
+6. npm test (en web/), bash scripts/build-web.sh, commit "E12.2: rutas sin tocar tierra
+   (A* con margen)", push, PARÁ.
 
-E12.2 (rutas sin tocar tierra) vuelve a la cola: es la siguiente cuando esto esté verde.
+La siguiente será E12.3 (polar del barco: parser del formato tabulado + polar genérica).
