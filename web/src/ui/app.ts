@@ -131,8 +131,13 @@ import {
   WX_WAVE_STOPS,
   WX_WIND_COLORS,
   WX_WIND_STOPS,
+  applyWxLayers,
+  defaultWxLayers,
+  WX_LAYERS,
   type RouteWindSummary,
   type WeatherMode,
+  type WxLayerKey,
+  type WxLayers,
 } from "./weather.ts";
 
 type TabName = "aqui" | "rutas" | "travesia";
@@ -155,6 +160,7 @@ interface Settings {
   mob: Mob | null;
   theme?: ThemeChoice;
   redAtNight?: boolean;
+  wxLayers?: WxLayers;
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -228,6 +234,8 @@ interface UiState {
   // E8.3: modo del interruptor "Tiempo", caché de meses de climatología ya
   // cargados y cargas en curso (para no pedir el mismo mes dos veces).
   weather: Signal<WeatherMode>;
+  // E13.3: interruptores de capas del "Tiempo" (hn.settings.wxLayers).
+  wxLayers: Signal<WxLayers>;
   clim: Map<number, ClimMonth>;
   climInFlight: Map<number, Promise<ClimMonth | null>>;
   // E13.2: paquete de pronóstico cargado y paso del deslizador de hora.
@@ -291,12 +299,13 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     redAtNight: signal<boolean>(false),
     now: signal(Date.now()),
     weather: signal<WeatherMode>("off"),
+    wxLayers: signal<WxLayers>(defaultWxLayers()),
     clim: new Map(),
     climInFlight: new Map(),
     forecast: signal<ForecastPackage | null>(null),
     forecastHour: signal<number>(0),
     navFixes: [],
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers() },
     zones: deps.zones,
   };
 
@@ -405,12 +414,21 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   scaleNote.hidden = true;
   root.append(scaleNote);
 
-  // E8.3: leyenda compacta abajo a la izquierda cuando el interruptor "Tiempo"
-  // no está apagado (rampa de nudos, aviso de flechas tenues y rayado).
+  // E8.3/E13.3: leyenda compacta y selector de capas abajo a la izquierda,
+  // cuando el interruptor "Tiempo" no está apagado.
+  const wxStack = el("div", { class: "hn-wx-stack" });
+  const wxPanel = el("div", { class: "hn-wx-panel" });
   const wxLegend = el("div", { class: "hn-wx-legend" });
   wxLegend.hidden = true;
-  root.append(wxLegend);
-  effect(() => renderWeatherLegend(wxLegend, ui.weather(), ui.month(), ui.forecast(), ui.forecastHour()));
+  wxStack.append(wxPanel, wxLegend);
+  root.append(wxStack);
+  effect(() => renderWxLayers(wxPanel, ui, ui.weather(), ui.wxLayers()));
+  effect(() =>
+    renderWeatherLegend(wxLegend, ui.weather(), ui.month(), ui.forecast(), ui.forecastHour(), ui.wxLayers()),
+  );
+
+  // E13.3: encender/apagar cada capa wx-* según los interruptores.
+  effect(() => applyWxLayers(ui.map, ui.wxLayers()));
 
   // E13.2: deslizador de hora bajo la barra de contexto, solo en Pronóstico.
   // El alto real de la barra se mide y se expone como --hn-ctx-h.
@@ -613,6 +631,11 @@ async function restore(ui: UiState): Promise<void> {
     if (s.mob) ui.mob.set(s.mob);
     if (s.theme) ui.theme.set(s.theme);
     if (typeof s.redAtNight === "boolean") ui.redAtNight.set(s.redAtNight);
+    if (s.wxLayers) {
+      const layers = { ...defaultWxLayers(), ...s.wxLayers };
+      ui.wxLayers.set(layers);
+      ui.settings.wxLayers = layers;
+    }
   }
   const pos = readJson<Position | null>(position, null);
   if (pos) {
@@ -1600,13 +1623,55 @@ function paintForecast(ui: UiState): void {
   }
 }
 
-// Leyenda (ADR-009 §6): Pilot chart o Pronóstico, con rampa, avisos y fuente.
+// E13.3: mini-panel de capas del "Tiempo" (un interruptor por capa). Se
+// persiste en `hn.settings.wxLayers`.
+function renderWxLayers(host: HTMLElement, ui: UiState, mode: WeatherMode, layers: WxLayers): void {
+  clear(host);
+  if (mode === "off") {
+    host.hidden = true;
+    return;
+  }
+  host.hidden = false;
+  const grid = el("div", { class: "hn-wx-layers" });
+  for (const { key, label } of WX_LAYERS) {
+    const id = `hn-wxlay-${key}`;
+    const input = el("input", { id, type: "checkbox" }) as HTMLInputElement;
+    input.checked = layers[key];
+    input.addEventListener("change", () => setWxLayer(ui, key, input.checked));
+    grid.append(el("label", { class: "hn-wx-layer", for: id }, input, el("span", {}, label)));
+  }
+  host.append(el("div", { class: "hn-wx-title" }, "Capas"), grid);
+}
+
+function setWxLayer(ui: UiState, key: WxLayerKey, on: boolean): void {
+  const next: WxLayers = { ...ui.wxLayers(), [key]: on };
+  ui.wxLayers.set(next);
+  ui.settings.wxLayers = next;
+  saveSettings(ui);
+}
+
+// Rampa de colores con sus marcas (nudos o metros) para la leyenda.
+function wxRamp(stops: number[], colors: string[]): HTMLElement {
+  const ramp = el("div", { class: "hn-wx-ramp" });
+  for (let i = 0; i < stops.length; i++) {
+    const cell = el("div", { class: "hn-wx-cell" });
+    const sw = el("div", { class: "hn-wx-sw" });
+    sw.style.background = colors[i] ?? "#888";
+    cell.append(sw, el("div", { class: "hn-wx-kn" }, String(stops[i])));
+    ramp.append(cell);
+  }
+  return ramp;
+}
+
+// Leyenda (ADR-009 §6, E13.3): solo las capas encendidas; el pronóstico suma la
+// escala de hPa y el pilot chart la rampa de nudos con "flechas tenues".
 function renderWeatherLegend(
   host: HTMLElement,
   mode: WeatherMode,
   month: number,
   pkg: ForecastPackage | null,
   hour: number,
+  layers: WxLayers,
 ): void {
   clear(host);
   if (mode === "off") {
@@ -1614,6 +1679,7 @@ function renderWeatherLegend(
     return;
   }
   host.hidden = false;
+
   if (mode === "forecast") {
     if (!pkg) {
       host.append(
@@ -1624,18 +1690,15 @@ function renderWeatherLegend(
     }
     const time = slotTime(pkg, hour);
     const beyond = empalmeConClimatología(pkg, time);
-    const ramp = el("div", { class: "hn-wx-ramp" });
-    for (let i = 0; i < WX_WAVE_STOPS.length; i++) {
-      const cell = el("div", { class: "hn-wx-cell" });
-      const sw = el("div", { class: "hn-wx-sw" });
-      sw.style.background = WX_WAVE_COLORS[i] ?? "#888";
-      cell.append(sw, el("div", { class: "hn-wx-kn" }, String(WX_WAVE_STOPS[i])));
-      ramp.append(cell);
+    host.append(el("div", { class: "hn-wx-title" }, `Pronóstico · ${hourLabel(time)}`));
+    if (layers.isobars) {
+      host.append(el("div", { class: "hn-wx-note" }, `isobaras cada ${WX_ISOBAR_INTERVAL} hPa · etiqueta en hPa`));
     }
+    if (layers.waves) {
+      host.append(el("div", { class: "hn-wx-note" }, "altura de ola (m)"), wxRamp(WX_WAVE_STOPS, WX_WAVE_COLORS));
+    }
+    if (!layers.isobars && !layers.waves) host.append(el("div", { class: "hn-wx-note" }, "Sin capas encendidas."));
     host.append(
-      el("div", { class: "hn-wx-title" }, `Pronóstico · ${hourLabel(time)}`),
-      el("div", { class: "hn-wx-note" }, `isobaras cada ${WX_ISOBAR_INTERVAL} hPa · altura de ola (m)`),
-      ramp,
       el(
         "div",
         { class: "hn-wx-note" },
@@ -1645,20 +1708,18 @@ function renderWeatherLegend(
     );
     return;
   }
-  const ramp = el("div", { class: "hn-wx-ramp" });
-  for (let i = 0; i < WX_WIND_STOPS.length; i++) {
-    const cell = el("div", { class: "hn-wx-cell" });
-    const sw = el("div", { class: "hn-wx-sw" });
-    sw.style.background = WX_WIND_COLORS[i] ?? "#888";
-    cell.append(sw, el("div", { class: "hn-wx-kn" }, String(WX_WIND_STOPS[i])));
-    ramp.append(cell);
+
+  host.append(el("div", { class: "hn-wx-title" }, `Pilot chart · ${MONTH_NAME[month - 1] ?? ""}`));
+  if (layers.wind) {
+    host.append(wxRamp(WX_WIND_STOPS, WX_WIND_COLORS), el("div", { class: "hn-wx-note" }, "nudos · flechas tenues = viento variable"));
   }
-  host.append(
-    el("div", { class: "hn-wx-title" }, `Pilot chart · ${MONTH_NAME[month - 1] ?? ""}`),
-    ramp,
-    el("div", { class: "hn-wx-note" }, "flechas tenues = viento variable · rayado = ciclones"),
-    el("div", { class: "hn-wx-src" }, "ERA5 · OSCAR · IBTrACS (1991–2020)"),
-  );
+  if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: líneas azules finas y discontinuas"));
+  if (layers.cyclone) host.append(el("div", { class: "hn-wx-note" }, "rayado = ciclones"));
+  if (layers.ice) host.append(el("div", { class: "hn-wx-note" }, "hielo"));
+  if (!layers.wind && !layers.current && !layers.cyclone && !layers.ice) {
+    host.append(el("div", { class: "hn-wx-note" }, "Sin capas encendidas."));
+  }
+  host.append(el("div", { class: "hn-wx-src" }, "ERA5 · OSCAR · IBTrACS (1991–2020)"));
 }
 
 function goTo(ui: UiState, tab: TabName): void {

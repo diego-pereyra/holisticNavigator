@@ -84,12 +84,14 @@ export const WX_CURRENT_WIDTH: ExpressionSpecification = [
   ["linear"],
   ["get", "mag"],
   0,
-  0.8,
+  0.5,
   2,
+  1.6,
+  4,
   2.6,
-  4,
-  4,
 ];
+// E13.3: las corrientes van discontinuas para distinguirlas de rutas y costas.
+export const WX_CURRENT_DASH: [number, number] = [1.6, 2];
 
 export const WX_CYCLONE_COLOR = "#C62828";
 export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
@@ -139,16 +141,64 @@ export const WX_WAVE_WIDTH: ExpressionSpecification = [
 
 const HATCH_ID = "wx-hatch";
 
-// Las cinco del pilot chart más las dos del pronóstico (isobaras y olas).
+// Fuentes/líneas del pilot chart y del pronóstico, más las dos capas auxiliares
+// (círculo de las flechas y etiqueta de las isobaras) que comparten sus claves.
 export const WX_LAYER_IDS = [
   "wx-field",
   "wx-current",
   "wx-arrows",
+  "wx-arrows-dot",
   "wx-cyclone",
   "wx-ice",
   "wx-isobars",
+  "wx-isobar-labels",
   "wx-waves",
 ] as const;
+
+// E13.3 — Selector de capas. Seis interruptores persisten en `hn.settings.wxLayers`.
+// `wind` enciende el tinte (wx-field) y las flechas (wx-arrows + su círculo).
+export type WxLayerKey = "wind" | "current" | "waves" | "isobars" | "cyclone" | "ice";
+
+export type WxLayers = Record<WxLayerKey, boolean>;
+
+export const WX_LAYERS: { key: WxLayerKey; label: string }[] = [
+  { key: "wind", label: "Viento" },
+  { key: "current", label: "Corrientes" },
+  { key: "waves", label: "Olas" },
+  { key: "isobars", label: "Isobaras" },
+  { key: "cyclone", label: "Ciclones" },
+  { key: "ice", label: "Hielo" },
+];
+
+// Por defecto Viento y Corrientes encendidos; el resto apagado.
+export function defaultWxLayers(): WxLayers {
+  return { wind: true, current: true, waves: false, isobars: false, cyclone: false, ice: false };
+}
+
+// Capas del mapa que enciende cada interruptor (los símbolos de isobara y el
+// círculo de las flechas comparten fuente con su capa de línea).
+const WX_LAYER_TO_IDS: Record<WxLayerKey, string[]> = {
+  wind: ["wx-field", "wx-arrows", "wx-arrows-dot"],
+  current: ["wx-current"],
+  waves: ["wx-waves"],
+  isobars: ["wx-isobars", "wx-isobar-labels"],
+  cyclone: ["wx-cyclone"],
+  ice: ["wx-ice"],
+};
+
+export function applyWxLayers(map: MlMap, layers: WxLayers): void {
+  const all = new Set<string>(WX_LAYER_IDS);
+  for (const ids of Object.values(WX_LAYER_TO_IDS)) for (const id of ids) all.add(id);
+  for (const id of all) {
+    if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+  }
+  for (const { key } of WX_LAYERS) {
+    if (!layers[key]) continue;
+    for (const id of WX_LAYER_TO_IDS[key]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "visible");
+    }
+  }
+}
 
 // Densidad de flechas por zoom (ADR §5): z≤2 cada 4°, z3 cada 2°, z≥4 cada 1°.
 export function weatherStride(zoom: number): number {
@@ -168,20 +218,31 @@ export function initWeatherLayers(map: MlMap): void {
     id: "wx-field",
     type: "fill",
     source: "wx-field",
-    paint: { "fill-color": WX_FIELD_COLOR, "fill-opacity": 0.5 },
+    paint: { "fill-color": WX_FIELD_COLOR, "fill-opacity": 0.35 },
   });
   map.addLayer({
     id: "wx-current",
     type: "line",
     source: "wx-current",
     minzoom: 3,
-    paint: { "line-color": WX_CURRENT_COLOR, "line-width": WX_CURRENT_WIDTH, "line-opacity": 0.85 },
+    paint: {
+      "line-color": WX_CURRENT_COLOR,
+      "line-width": WX_CURRENT_WIDTH,
+      "line-opacity": 0.85,
+      "line-dasharray": WX_CURRENT_DASH,
+    },
   });
   map.addLayer({
     id: "wx-arrows",
     type: "line",
     source: "wx-arrows",
-    paint: { "line-color": "#eef4fb", "line-width": WX_ARROW_WIDTH, "line-opacity": WX_ARROW_OPACITY },
+    paint: { "line-color": WX_FIELD_COLOR, "line-width": WX_ARROW_WIDTH, "line-opacity": WX_ARROW_OPACITY },
+  });
+  map.addLayer({
+    id: "wx-arrows-dot",
+    type: "circle",
+    source: "wx-arrows-dot",
+    paint: { "circle-color": WX_FIELD_COLOR, "circle-radius": 2.4, "circle-opacity": WX_ARROW_OPACITY },
   });
   map.addLayer({
     id: "wx-cyclone",
@@ -193,13 +254,25 @@ export function initWeatherLayers(map: MlMap): void {
     id: "wx-ice",
     type: "fill",
     source: "wx-ice",
-    paint: { "fill-color": WX_ICE_COLOR, "fill-opacity": 0.75 },
+    paint: { "fill-color": WX_ICE_COLOR, "fill-opacity": 0.6 },
   });
   map.addLayer({
     id: "wx-isobars",
     type: "line",
     source: "wx-isobars",
     paint: { "line-color": WX_ISOBAR_COLOR, "line-width": 1, "line-opacity": 0.8 },
+  });
+  map.addLayer({
+    id: "wx-isobar-labels",
+    type: "symbol",
+    source: "wx-isobar-labels",
+    layout: {
+      "text-field": ["get", "label"],
+      "text-size": 10,
+      "text-allow-overlap": false,
+      "text-padding": 4,
+    },
+    paint: { "text-color": "#eef4fb", "text-halo-color": "#0b1626", "text-halo-width": 1.2 },
   });
   map.addLayer({
     id: "wx-waves",
@@ -225,6 +298,7 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
 
   const field: object[] = [];
   const arrows: object[] = [];
+  const dots: object[] = [];
   const current: object[] = [];
   const cyclone: object[] = [];
   const ice: object[] = [];
@@ -249,7 +323,9 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
       if (mag > 0.05) {
         const len = stride * clamp(0.2 + cell.ws / 60, 0.25, 1.1);
         const tip: [number, number] = [lon + (cell.wu / mag) * len, lat + (cell.wv / mag) * len];
-        arrows.push(segmentFeature([lon, lat], tip, { ws: round1(cell.ws), st: Math.round(cell.st) }));
+        const props = { ws: round1(cell.ws), st: Math.round(cell.st) };
+        arrows.push(segmentFeature([lon, lat], tip, props));
+        dots.push(pointFeature(tip, props));
       }
 
       const cmag = Math.hypot(cell.cu, cell.cv);
@@ -266,17 +342,22 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
 
   setData(map, "wx-field", field);
   setData(map, "wx-arrows", arrows);
+  setData(map, "wx-arrows-dot", dots);
   setData(map, "wx-current", current);
   setData(map, "wx-cyclone", cyclone);
   setData(map, "wx-ice", ice);
-  // Las dos del pronóstico quedan apagadas en modo pilot chart.
+  // Las del pronóstico quedan apagadas en modo pilot chart.
   setData(map, "wx-isobars", []);
+  setData(map, "wx-isobar-labels", []);
   setData(map, "wx-waves", []);
 
   // Refuerza las propiedades que dependen de la data (por si el estilo se recargó).
   map.setPaintProperty("wx-field", "fill-color", WX_FIELD_COLOR);
+  map.setPaintProperty("wx-field", "fill-opacity", 0.35);
+  map.setPaintProperty("wx-arrows", "line-color", WX_FIELD_COLOR);
   map.setPaintProperty("wx-arrows", "line-width", WX_ARROW_WIDTH);
   map.setPaintProperty("wx-arrows", "line-opacity", WX_ARROW_OPACITY);
+  map.setPaintProperty("wx-arrows-dot", "circle-color", WX_FIELD_COLOR);
   map.setPaintProperty("wx-current", "line-color", WX_CURRENT_COLOR);
   map.setPaintProperty("wx-cyclone", "fill-opacity", WX_CYCLONE_OPACITY);
   map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
@@ -318,11 +399,22 @@ export function nearestForecastIndex(pkg: ForecastPackage, ms: number): number {
 }
 
 // Isobaras cada 4 hPa (marching squares con interpolación lineal en los bordes
-// de cada celda de la grilla de presión).
+// de cada celda de la grilla de presión). Devuelve las líneas; `isobarLabels`
+// devuelve los puntos con el número en hPa para la capa de símbolos.
 export function isobars(pkg: ForecastPackage, index: number): object[] {
+  return marchIsobars(pkg, index).lines;
+}
+
+export function isobarLabels(pkg: ForecastPackage, index: number): object[] {
+  return marchIsobars(pkg, index).labels;
+}
+
+function marchIsobars(pkg: ForecastPackage, index: number): { lines: object[]; labels: object[] } {
   const { cols, rows, bbox } = pkg;
   const step = pkg.times.length;
-  if (cols < 2 || rows < 2 || step === 0) return [];
+  const lines: object[] = [];
+  const labels: object[] = [];
+  if (cols < 2 || rows < 2 || step === 0) return { lines, labels };
   const at = (c: number, r: number): number => {
     const raw = pkg.vars.pressure[(r * cols + c) * step + index] ?? FORECAST_MISSING;
     const v = decodeForecast(raw);
@@ -330,7 +422,6 @@ export function isobars(pkg: ForecastPackage, index: number): object[] {
   };
   const dx = (bbox[2] - bbox[0]) / (cols - 1);
   const dy = (bbox[3] - bbox[1]) / (rows - 1);
-  const features: object[] = [];
   for (let r = 0; r < rows - 1; r++) {
     for (let c = 0; c < cols - 1; c++) {
       const v00 = at(c, r);
@@ -352,17 +443,20 @@ export function isobars(pkg: ForecastPackage, index: number): object[] {
         if ((v00 - L) * (v10 - L) < 0) pts.push([x0 + ((L - v00) / (v10 - v00)) * dx, y0]);
         if ((v10 - L) * (v11 - L) < 0) pts.push([x0 + dx, y0 + ((L - v10) / (v11 - v10)) * dy]);
         if ((v01 - L) * (v11 - L) < 0) pts.push([x0 + ((L - v01) / (v11 - v01)) * dx, y0 + dy]);
-        if ((v00 - L) * (v01 - L) < 0) pts.push([x0, y0 + ((L - v00) / (v01 - v00)) * dy]);
-        if (pts.length === 2) {
-          features.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
-        } else if (pts.length === 4) {
-          features.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
-          features.push(segmentFeature(pts[2]!, pts[3]!, { hpa: L }));
+        if ((v00 - L) * (v01 - L) < 0) pts.push([x0, y0 + ((L - v01) / (v01 - v00)) * dy]);
+        if (pts.length >= 2) lines.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
+        if (pts.length === 4) lines.push(segmentFeature(pts[2]!, pts[3]!, { hpa: L }));
+        // Una etiqueta (el número en hPa) cada tanto; la colisión de MapLibre
+        // descarta las que se solapan, así queda legible a cualquier zoom.
+        if (pts.length >= 2 && (c + r) % 6 === 0) {
+          const a = pts[0]!;
+          const b = pts[1]!;
+          labels.push(pointFeature([(a[0] + b[0]) / 2, (a[1] + b[1]) / 2], { label: String(L) }));
         }
       }
     }
   }
-  return features;
+  return { lines, labels };
 }
 
 // Flechas de ola: la dirección del API es de dónde vienen, así que la flecha
@@ -434,16 +528,18 @@ export function updateForecastWeather(
   pkg: ForecastPackage,
   timeMs: number,
 ): boolean {
-  for (const id of ["wx-field", "wx-arrows", "wx-current", "wx-cyclone", "wx-ice"]) {
+  for (const id of ["wx-field", "wx-arrows", "wx-arrows-dot", "wx-current", "wx-cyclone", "wx-ice"]) {
     setData(map, id, []);
   }
   if (timeMs > forecastLastTime(pkg)) {
     setData(map, "wx-isobars", []);
+    setData(map, "wx-isobar-labels", []);
     setData(map, "wx-waves", clim ? climateWaves(map, clim) : []);
     return true;
   }
   const index = nearestForecastIndex(pkg, timeMs);
   setData(map, "wx-isobars", isobars(pkg, index));
+  setData(map, "wx-isobar-labels", isobarLabels(pkg, index));
   setData(map, "wx-waves", waveArrows(pkg, index, weatherStride(map.getZoom())));
   map.setPaintProperty("wx-isobars", "line-color", WX_ISOBAR_COLOR);
   map.setPaintProperty("wx-waves", "line-color", WX_WAVE_COLOR);
@@ -584,6 +680,10 @@ function polygonFeature(ring: [number, number][], props: Record<string, unknown>
 
 function segmentFeature(a: [number, number], b: [number, number], props: Record<string, unknown>): object {
   return { type: "Feature", properties: props, geometry: { type: "LineString", coordinates: [a, b] } };
+}
+
+function pointFeature(p: [number, number], props: Record<string, unknown>): object {
+  return { type: "Feature", properties: props, geometry: { type: "Point", coordinates: p } };
 }
 
 function clamp(v: number, lo: number, hi: number): number {
