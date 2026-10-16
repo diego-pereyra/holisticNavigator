@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 
 import {
   addWaypoint,
+  copyName,
+  copyOwnRoute,
   defaultName,
   insertWaypoint,
   isOwnCode,
@@ -10,6 +12,7 @@ import {
   legNm,
   moveWaypoint,
   newOwnRoute,
+  ownRouteFromPoints,
   ownRouteToGpx,
   parseOwnRoute,
   removeWaypoint,
@@ -136,4 +139,48 @@ test("E11.4 guarda, lee y borra rutas propias del índice", async () => {
   const after = await loadOwnRoutes(store);
   assert.deepEqual(after.map((r) => r.id), ["MIA-bbbbbb"]);
   assert.equal(await store.get(ownRouteKey("MIA-aaaaaa")), null);
+});
+
+test("E11.5 copiar una ruta del libro produce una propia idéntica", () => {
+  const points = [
+    { name: "Inicio", lat: 0, lon: 0 },
+    { name: "Medio", lat: 0, lon: 1 },
+    { name: "Fin", lat: 0, lon: 2 },
+  ];
+  const r = ownRouteFromPoints("MIA-copia1", copyName("AN12"), points, 1_700_000_000_000);
+  assert.ok(isOwnCode(r.id), "queda marcada como propia");
+  assert.equal(r.name, "AN12 (copia)");
+  assert.deepEqual(r.waypoints.map((w) => w.name), ["Inicio", "Medio", "Fin"]);
+  assert.deepEqual(r.waypoints.map((w) => [w.lat, w.lon]), [[0, 0], [0, 1], [0, 2]]);
+  assert.ok(Math.abs(r.distanceNm - 120.08) < 0.6, `distancia ${r.distanceNm}`);
+
+  // Los puntos de origen no se comparten: tocar el origen no toca la copia.
+  points[0]!.lat = 99;
+  assert.equal(r.waypoints[0]!.lat, 0, "copia independiente del origen");
+});
+
+test("E11.5 copiar una ruta propia da dos rutas independientes", () => {
+  let a = newOwnRoute("MIA-aaaaaa", "Original", 1);
+  a = addWaypoint(a, 0, 0);
+  a = addWaypoint(a, 0, 1);
+  const b = copyOwnRoute(a, "MIA-bbbbbb", copyName(a.name), 2);
+  assert.equal(b.id, "MIA-bbbbbb");
+  assert.equal(b.name, "Original (copia)");
+  assert.deepEqual(b.waypoints, a.waypoints, "mismos waypoints");
+
+  // Editar la copia (mover un waypoint) no toca la original.
+  const b2 = moveWaypoint(b, 0, 5, 5);
+  assert.equal(a.waypoints[0]!.lat, 0, "la original sigue igual");
+  assert.equal(b.waypoints[0]!.lat, 0, "la copia previa sigue igual");
+  assert.equal(b2.waypoints[0]!.lat, 5);
+  assert.notEqual(b.waypoints[0], a.waypoints[0], "waypoints de objetos distintos");
+});
+
+test("E11.5 eliminar quita del store y no reaparece tras recargar", async () => {
+  const store = memStore();
+  await saveOwnRoute(store, addWaypoint(newOwnRoute("MIA-x1", "A"), 0, 0));
+  await saveOwnRoute(store, addWaypoint(newOwnRoute("MIA-x2", "B"), 1, 1));
+  await deleteOwnRoute(store, "MIA-x1");
+  const reloaded = await loadOwnRoutes(store);
+  assert.deepEqual(reloaded.map((r) => r.id), ["MIA-x2"]);
 });

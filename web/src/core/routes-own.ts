@@ -118,6 +118,42 @@ export function renameRoute(route: OwnRoute, name: string): OwnRoute {
   return { ...route, name: clean };
 }
 
+// E11.5 — sufijo de una ruta copiada: "AN12 (copia)", "Mi salida (copia)".
+export function copyName(base: string): string {
+  return `${base} (copia)`;
+}
+
+// E11.5 — copia editable de una ruta propia: nuevo id y nombre, waypoints
+// independientes (editar la copia no toca la original), distancia recalculada.
+export function copyOwnRoute(route: OwnRoute, id: string, name: string, now = Date.now()): OwnRoute {
+  return normalize({
+    id,
+    name: name.trim() === "" ? copyName(route.name) : name,
+    createdAt: now,
+    updatedAt: now,
+    waypoints: route.waypoints.map((w) => ({ ...w })),
+    distanceNm: 0,
+  });
+}
+
+// E11.5 — ruta propia a partir de puntos con nombre (copiar una ruta del libro o
+// una importada): mismo orden y nombres de waypoint.
+export function ownRouteFromPoints(
+  id: string,
+  name: string,
+  points: { name: string; lat: number; lon: number }[],
+  now = Date.now(),
+): OwnRoute {
+  return normalize({
+    id,
+    name: name.trim() === "" ? "Ruta sin nombre" : name.trim(),
+    createdAt: now,
+    updatedAt: now,
+    waypoints: points.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon })),
+    distanceNm: 0,
+  });
+}
+
 export function ownRouteToGpx(route: OwnRoute): string {
   const parts = [
     '<?xml version="1.0" encoding="UTF-8"?>\n' +

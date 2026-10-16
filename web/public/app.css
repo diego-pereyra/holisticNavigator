@@ -1657,6 +1657,11 @@ html[data-theme="red"] {
   border-color: currentColor;
   color: inherit;
 }
+/* E11.5 — confirmación destructiva (¿Eliminar ruta?), sin modal del navegador. */
+.hn-fixband.hn-danger {
+  background: var(--hn-warn);
+  color: #fff;
+}
 @media (min-width: 700px) {
   .hn-fixband {
     left: 400px;
@@ -1857,6 +1862,58 @@ html[data-theme="red"] {
   min-height: 32px;
   padding: 4px 10px;
   font-size: 12px;
+}
+/* E11.5 — fila con acción al final (Copiar importada / Eliminar en Mis rutas). */
+.hn-own-row {
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+}
+.hn-own-row > .hn-row {
+  flex: 1;
+  min-width: 0;
+}
+.hn-row-act {
+  flex: 0 0 auto;
+  min-height: 44px;
+  padding: 0 12px;
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line);
+  border-radius: 10px;
+  color: var(--hn-muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.hn-row-act:hover {
+  border-color: var(--hn-accent);
+  color: var(--hn-accent);
+}
+.hn-row-act.hn-row-danger {
+  color: var(--hn-warn);
+}
+.hn-row-act.hn-row-danger:hover {
+  border-color: var(--hn-warn);
+  color: var(--hn-warn);
+}
+/* E11.5 — nota de solo lectura del libro, con el botón Copiar al lado. */
+.hn-readonly {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 8px 0;
+  padding: 8px 12px;
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line);
+  border-left: 3px solid var(--hn-accent);
+  border-radius: 8px;
+  color: var(--hn-muted);
+  font-size: 13px;
+}
+.hn-readonly .hn-btn-mini {
+  flex: 0 0 auto;
 }
 .hn-own-sig {
   flex: 0 0 auto;

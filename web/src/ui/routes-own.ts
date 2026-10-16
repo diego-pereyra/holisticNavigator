@@ -6,12 +6,15 @@ import type { Map as MlMap, MapMouseEvent } from "maplibre-gl";
 import { signal } from "../core/store.ts";
 import {
   addWaypoint,
+  copyName,
+  copyOwnRoute,
   importedToOwn,
   insertWaypoint,
   legBearingsDeg,
   legNm,
   moveWaypoint,
   newOwnRoute,
+  ownRouteFromPoints,
   ownRouteToGpx,
   removeWaypoint,
   renameRoute,
@@ -91,6 +94,11 @@ export function removeOwnRoute(ctx: OwnCtx, id: string): void {
   ctx.close();
 }
 
+// E11.5 — borrado con confirmación en banda (sin modal del navegador).
+export function confirmDeleteOwnRoute(ctx: OwnCtx, route: OwnRoute): void {
+  confirmBand(`¿Eliminar ${route.name}?`, "Eliminar", () => removeOwnRoute(ctx, route.id));
+}
+
 export async function importOwnFromGpx(ctx: OwnCtx): Promise<void> {
   const file = await pickTextFile(".gpx,.kml,.csv,.txt,text/plain");
   if (!file) return;
@@ -114,10 +122,17 @@ export function copyToOwn(
   coords: [number, number][],
   names: string[],
 ): OwnRoute {
-  let r = newOwnRoute(newId(), name);
-  coords.forEach((c, i) => {
-    r = addWaypoint(r, c[1], c[0], names[i]);
-  });
+  const points = coords.map((c, i) => ({ name: names[i] ?? `WP${i + 1}`, lat: c[1], lon: c[0] }));
+  const r = ownRouteFromPoints(newId(), copyName(name), points);
+  ownRoutes.update((list) => [r, ...list]);
+  void saveOwnRoute(ctx.store, r);
+  openOwnEditor(ctx, r);
+  return r;
+}
+
+// Copia una ruta propia (o una copia) a una nueva ruta propia independiente.
+export function copyOwnRouteToOwn(ctx: OwnCtx, route: OwnRoute): OwnRoute {
+  const r = copyOwnRoute(route, newId(), copyName(route.name));
   ownRoutes.update((list) => [r, ...list]);
   void saveOwnRoute(ctx.store, r);
   openOwnEditor(ctx, r);
@@ -139,6 +154,7 @@ export function renderMisRutas(host: HTMLElement, ctx: OwnCtx): void {
     host.append(el("p", { class: "hn-muted" }, "Todavía no tenés rutas propias."));
   }
   for (const r of list) {
+    const wrap = el("div", { class: "hn-own-row" });
     const row = el("button", { class: "hn-row", type: "button" });
     const main = el("div", { class: "hn-row-main" });
     main.append(
@@ -147,7 +163,14 @@ export function renderMisRutas(host: HTMLElement, ctx: OwnCtx): void {
     );
     row.append(main, el("span", { class: "hn-own-sig" }, dateShort(r.updatedAt)));
     row.addEventListener("click", () => openOwnEditor(ctx, r));
-    host.append(row);
+    // E11.5: eliminar al final de la fila (solo en Mis rutas), con confirmación.
+    const del = el("button", { class: "hn-row-act hn-row-danger", type: "button", title: `Eliminar ${r.name}` }, "Eliminar");
+    del.addEventListener("click", (ev) => {
+      ev.stopPropagation();
+      confirmDeleteOwnRoute(ctx, r);
+    });
+    wrap.append(row, del);
+    host.append(wrap);
   }
 
   const imp = el("button", { class: "hn-row hn-row-import", type: "button" });
@@ -254,9 +277,12 @@ export function renderOwnFicha(host: HTMLElement, ctx: OwnCtx, base: OwnRoute): 
     endOwn();
     ctx.follow(r);
   });
+  // E11.5: copiar la propia a otra ruta (con "(copia)") y eliminar con confirmación.
+  const copiar = el("button", { class: "hn-btn", type: "button" }, "Copiar ruta");
+  copiar.addEventListener("click", () => copyOwnRouteToOwn(ctx, r));
   const borrar = el("button", { class: "hn-btn", type: "button" }, "Eliminar ruta");
-  borrar.addEventListener("click", () => removeOwnRoute(ctx, r.id));
-  actions.append(add, inv, exp, seguir, borrar);
+  borrar.addEventListener("click", () => confirmDeleteOwnRoute(ctx, r));
+  actions.append(add, inv, exp, copiar, seguir, borrar);
   host.append(actions);
 }
 
@@ -329,6 +355,22 @@ function showBand(text: string): void {
   const done = el("button", { class: "hn-alarm-btn", type: "button" }, "Listo");
   done.addEventListener("click", () => endOwn());
   band.append(done);
+  document.body.append(band);
+}
+
+// E11.5 — banda de confirmación destructiva (sin modal del navegador).
+function confirmBand(text: string, actionLabel: string, onConfirm: () => void): void {
+  band?.remove();
+  band = el("div", { class: "hn-fixband hn-danger" });
+  band.append(el("span", { class: "hn-fixband-text" }, text));
+  const cancel = el("button", { class: "hn-alarm-btn", type: "button" }, "Cancelar");
+  cancel.addEventListener("click", () => endOwn());
+  const go = el("button", { class: "hn-alarm-btn", type: "button" }, actionLabel);
+  go.addEventListener("click", () => {
+    endOwn();
+    onConfirm();
+  });
+  band.append(cancel, go);
   document.body.append(band);
 }
 

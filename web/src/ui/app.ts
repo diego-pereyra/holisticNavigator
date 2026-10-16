@@ -2880,10 +2880,23 @@ function renderRutas(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): v
     if (imported.length > 0) {
       list.append(el("h3", { class: "hn-h3" }, "Importadas"));
       for (const r of imported) {
+        const wrap = el("div", { class: "hn-own-row" });
         const row = el("button", { class: "hn-row", type: "button" });
         row.append(el("div", { class: "hn-row-main" }, el("div", { class: "hn-row-title" }, r.name), el("div", { class: "hn-row-sub" }, `${r.points.length} puntos`)));
         row.addEventListener("click", () => showImported(ui, r));
-        list.append(row);
+        // E11.5: copiar una importada a "Mis rutas" para poder editarla.
+        const copiar = el("button", { class: "hn-row-act", type: "button", title: `Copiar ${r.name}` }, "Copiar");
+        copiar.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          copyToOwn(
+            ownCtx(ui),
+            r.name,
+            r.points.map((p) => [p.lon, p.lat] as [number, number]),
+            r.points.map((_p, i) => `WP${i + 1}`),
+          );
+        });
+        wrap.append(row, copiar);
+        list.append(wrap);
       }
     }
     // Importar deja de estar arriba: es la última fila de la lista (W4.8 #4).
@@ -3250,10 +3263,12 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   const recorrer = el("button", { class: "hn-btn" }, "Recorrer");
   recorrer.addEventListener("click", () => simOpen(ui, d, head));
 
-  const copiar = el("button", { class: "hn-btn" }, "Copiar a mis rutas");
+  // E11.5 — la ruta del libro es de solo lectura: se copia a "Mis rutas" para
+  // editarla. El botón va junto a la nota de solo lectura (abajo del título).
+  const copiar = el("button", { class: "hn-btn hn-btn-mini" }, "Copiar ruta");
   copiar.addEventListener("click", () => {
     const g = selectedGeometry(ui, d.code);
-    if (g) copyToOwn(ownCtx(ui), `${d.code} (copia)`, g.coords, g.names);
+    if (g) copyToOwn(ownCtx(ui), d.code, g.coords, g.names);
   });
 
   const enlace = el("button", { class: "hn-btn" }, "Enlace");
@@ -3264,8 +3279,15 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     enlace.textContent = "Copiado";
   });
 
-  actions.append(seguir, exportar, copiar, recorrer, enlace);
+  actions.append(seguir, exportar, recorrer, enlace);
   head.append(actions);
+
+  const readonly = el("div", { class: "hn-readonly" });
+  readonly.append(
+    el("span", { class: "hn-readonly-text" }, "Ruta del libro · solo lectura — Copiala para editarla"),
+    copiar,
+  );
+  head.append(readonly);
 
   // SIM: si el simulador sigue en camino de esta misma ruta, la fila de control
   // vuelve a la ficha (que se rearma al cambiar de variante).
