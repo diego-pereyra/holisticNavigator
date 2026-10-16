@@ -46,6 +46,7 @@ import { loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts"
 import {
   bboxOfBounds,
   bboxOfTrack,
+  empalmeConClimatología,
   forecastBytes,
   getForecastAge,
   type BBox,
@@ -101,11 +102,19 @@ import {
 import { resolveTheme, THEME_LABEL, THEME_ORDER, themeIcon, type ThemeChoice, type ThemeName } from "./theme.ts";
 import {
   clearWeather,
+  hourLabel,
   initWeatherLayers,
+  nearestSlot,
+  SLIDER_SLOTS,
+  slotTime,
   summarizeRoute,
+  updateForecastWeather,
   updateWeather,
   WEATHER_LABEL,
   WEATHER_ORDER,
+  WX_ISOBAR_INTERVAL,
+  WX_WAVE_COLORS,
+  WX_WAVE_STOPS,
   WX_WIND_COLORS,
   WX_WIND_STOPS,
   type RouteWindSummary,
@@ -207,6 +216,9 @@ interface UiState {
   weather: Signal<WeatherMode>;
   clim: Map<number, ClimMonth>;
   climInFlight: Map<number, Promise<ClimMonth | null>>;
+  // E13.2: paquete de pronóstico cargado y paso del deslizador de hora.
+  forecast: Signal<ForecastPackage | null>;
+  forecastHour: Signal<number>;
   navFixes: Fix[];
   settings: Settings;
   zones?: ZoneHooks;
@@ -267,6 +279,8 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     weather: signal<WeatherMode>("off"),
     clim: new Map(),
     climInFlight: new Map(),
+    forecast: signal<ForecastPackage | null>(null),
+    forecastHour: signal<number>(0),
     navFixes: [],
     settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false },
     zones: deps.zones,
@@ -294,11 +308,13 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     if (moveTimer !== undefined) window.clearTimeout(moveTimer);
     moveTimer = window.setTimeout(() => {
       applyCatalogFilter(ui);
-      // E8.3: la climatología se dibuja solo en la vista actual; al mover el
-      // mapa hay que repintar las celdas visibles.
+      // E8.3/E13.2: las capas wx se dibujan solo en la vista actual; al mover
+      // el mapa hay que repintar.
       if (ui.weather() === "pilot") {
         const clim = ui.clim.get(ui.month());
         if (clim) updateWeather(ui.map, clim, ui.month());
+      } else if (ui.weather() === "forecast") {
+        paintForecast(ui);
       }
     }, 300);
   });
@@ -310,18 +326,45 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     applyCatalogFilter(ui);
   });
 
-  // E8.3: al cambiar de modo o de mes, encender Pilot chart carga (y cachea) el
-  // mes de planificación y repinta; apagar limpia las capas.
+  // E8.3/E13.2: al cambiar de modo o de mes, encender Pilot chart carga (y
+  // cachea) el mes de planificación y repinta; Pronóstico limpia y pinta el
+  // paquete; Apagado limpia todo.
   effect(() => {
     const mode = ui.weather();
     const month = ui.month();
-    if (mode !== "pilot") {
+    if (mode === "off") {
       clearWeather(ui.map);
       return;
     }
-    const cached = ui.clim.get(month);
-    if (cached) updateWeather(ui.map, cached, month);
-    else void ensureClim(ui, month);
+    if (mode === "pilot") {
+      const cached = ui.clim.get(month);
+      if (cached) updateWeather(ui.map, cached, month);
+      else void ensureClim(ui, month);
+      return;
+    }
+    clearWeather(ui.map);
+    paintForecast(ui);
+  });
+
+  // E13.2: al elegir Pronóstico, carga el paquete de la travesía (o de la vista)
+  // y coloca el deslizador en "ahora".
+  effect(() => {
+    const mode = ui.weather();
+    const id = ui.active()?.code ?? ui.selected()?.code ?? "vista";
+    if (mode !== "forecast") return;
+    void loadForecast(ui.store, id).then((pkg) => {
+      ui.forecast.set(pkg);
+      ui.forecastHour.set(pkg ? nearestSlot(pkg, Date.now()) : 0);
+    });
+  });
+
+  // E13.2: repinta cuando cambia la hora del deslizador.
+  effect(() => {
+    ui.weather();
+    ui.forecast();
+    ui.forecastHour();
+    ui.month();
+    paintForecast(ui);
   });
 
   const root = el("div", { id: "hn-ui" });
@@ -353,7 +396,49 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   const wxLegend = el("div", { class: "hn-wx-legend" });
   wxLegend.hidden = true;
   root.append(wxLegend);
-  effect(() => renderWeatherLegend(wxLegend, ui.weather(), ui.month()));
+  effect(() => renderWeatherLegend(wxLegend, ui.weather(), ui.month(), ui.forecast(), ui.forecastHour()));
+
+  // E13.2: deslizador de hora bajo la barra de contexto, solo en Pronóstico.
+  // El alto real de la barra se mide y se expone como --hn-ctx-h.
+  const wxBar = el("div", { class: "hn-wx-bar" });
+  const wxLabel = el("div", { class: "hn-wx-hora" });
+  const wxRange = el("input", { class: "hn-wx-range", type: "range", min: "0" });
+  wxRange.max = String(SLIDER_SLOTS - 1);
+  wxRange.step = "1";
+  wxRange.value = "0";
+  wxRange.setAttribute("aria-label", "Hora del pronóstico");
+  const wxNow = el("button", { class: "hn-btn hn-wx-now", type: "button" }, "ahora");
+  wxBar.append(wxLabel, wxRange, wxNow);
+  wxBar.hidden = true;
+  root.append(wxBar);
+  wxRange.addEventListener("input", () => ui.forecastHour.set(Number(wxRange.value)));
+  wxNow.addEventListener("click", () => {
+    const pkg = ui.forecast();
+    if (pkg) ui.forecastHour.set(nearestSlot(pkg, Date.now()));
+  });
+  if (typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => {
+      const h = contextBar.getBoundingClientRect().height;
+      if (h > 0) document.documentElement.style.setProperty("--hn-ctx-h", `${h}px`);
+    });
+    ro.observe(contextBar);
+    window.addEventListener("pagehide", () => ro.disconnect(), { once: true });
+  }
+  effect(() => {
+    const mode = ui.weather();
+    const pkg = ui.forecast();
+    const hour = ui.forecastHour();
+    if (mode !== "forecast" || !pkg) {
+      wxBar.hidden = true;
+      return;
+    }
+    wxBar.hidden = false;
+    if (Number(wxRange.value) !== hour) wxRange.value = String(hour);
+    const time = slotTime(pkg, hour);
+    clear(wxLabel);
+    wxLabel.append(document.createTextNode(hourLabel(time)));
+    if (empalmeConClimatología(pkg, time)) wxLabel.append(el("span", { class: "hn-wx-medio" }, "clima medio"));
+  });
 
   // E9.3: botón flotante de hombre al agua. Mantener apretado 600 ms marca la
   // caída con la posición actual (un toque suelto no hace nada).
@@ -1408,6 +1493,7 @@ function ensureClim(ui: UiState, month: number): Promise<ClimMonth | null> {
       ui.clim.set(month, clim);
       ui.climInFlight.delete(month);
       if (ui.weather() === "pilot" && ui.month() === month) updateWeather(ui.map, clim, month);
+      else if (ui.weather() === "forecast" && ui.month() === month) paintForecast(ui);
       return clim;
     })
     .catch(() => {
@@ -1418,8 +1504,32 @@ function ensureClim(ui: UiState, month: number): Promise<ClimMonth | null> {
   return p;
 }
 
-// Leyenda del Pilot chart (ADR-009 §6): rampa de nudos, avisos y fuente.
-function renderWeatherLegend(host: HTMLElement, mode: WeatherMode, month: number): void {
+// E13.2: pinta el pronóstico para la hora actual del deslizador. Si la hora
+// cae más allá del horizonte del paquete, `updateForecastWeather` usa la
+// climatología del mes; si todavía no está cargada, la pide y repinta.
+function paintForecast(ui: UiState): void {
+  const pkg = ui.forecast();
+  if (ui.weather() !== "forecast" || !pkg) return;
+  const time = slotTime(pkg, ui.forecastHour());
+  const month = ui.month();
+  const clim = ui.clim.get(month) ?? null;
+  const beyond = updateForecastWeather(ui.map, clim, pkg, time);
+  if (beyond && !clim) {
+    void ensureClim(ui, month).then(() => {
+      const c = ui.clim.get(month) ?? null;
+      if (c) updateForecastWeather(ui.map, c, pkg, time);
+    });
+  }
+}
+
+// Leyenda (ADR-009 §6): Pilot chart o Pronóstico, con rampa, avisos y fuente.
+function renderWeatherLegend(
+  host: HTMLElement,
+  mode: WeatherMode,
+  month: number,
+  pkg: ForecastPackage | null,
+  hour: number,
+): void {
   clear(host);
   if (mode === "off") {
     host.hidden = true;
@@ -1427,7 +1537,34 @@ function renderWeatherLegend(host: HTMLElement, mode: WeatherMode, month: number
   }
   host.hidden = false;
   if (mode === "forecast") {
-    host.append(el("div", { class: "hn-wx-note" }, "Pronóstico: todavía no hay un paquete descargado."));
+    if (!pkg) {
+      host.append(
+        el("div", { class: "hn-wx-title" }, "Pronóstico"),
+        el("div", { class: "hn-wx-note" }, "Todavía no hay un paquete descargado. Se baja desde el panel «Sin conexión»."),
+      );
+      return;
+    }
+    const time = slotTime(pkg, hour);
+    const beyond = empalmeConClimatología(pkg, time);
+    const ramp = el("div", { class: "hn-wx-ramp" });
+    for (let i = 0; i < WX_WAVE_STOPS.length; i++) {
+      const cell = el("div", { class: "hn-wx-cell" });
+      const sw = el("div", { class: "hn-wx-sw" });
+      sw.style.background = WX_WAVE_COLORS[i] ?? "#888";
+      cell.append(sw, el("div", { class: "hn-wx-kn" }, String(WX_WAVE_STOPS[i])));
+      ramp.append(cell);
+    }
+    host.append(
+      el("div", { class: "hn-wx-title" }, `Pronóstico · ${hourLabel(time)}`),
+      el("div", { class: "hn-wx-note" }, `isobaras cada ${WX_ISOBAR_INTERVAL} hPa · altura de ola (m)`),
+      ramp,
+      el(
+        "div",
+        { class: "hn-wx-note" },
+        beyond ? "clima medio · más allá del horizonte de 7 días" : "flechas = dirección de la ola",
+      ),
+      el("div", { class: "hn-wx-src" }, "Open-Meteo · CC BY 4.0"),
+    );
     return;
   }
   const ramp = el("div", { class: "hn-wx-ramp" });

@@ -6,6 +6,12 @@
 
 import type { Map as MlMap, GeoJSONSource, ExpressionSpecification } from "maplibre-gl";
 import { getCell, sampleAlongRoute, type ClimLineString, type ClimMonth } from "../core/clim.ts";
+import {
+  FORECAST_MISSING,
+  decodeForecast,
+  forecastLastTime,
+  type ForecastPackage,
+} from "../core/forecast.ts";
 import { initialBearingDeg } from "../core/navigation.ts";
 
 export type WeatherMode = "off" | "pilot" | "forecast";
@@ -96,9 +102,53 @@ export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
 
 export const WX_ICE_COLOR = "#d7ecf7";
 
+// E13.2 — Pronóstico en vivo: isobaras cada 4 hPa y olas por altura/dirección.
+export const WX_ISOBAR_COLOR = "#e6eef7";
+export const WX_ISOBAR_INTERVAL = 4;
+
+export const WX_WAVE_STOPS = [0, 1, 2, 3, 4, 6];
+export const WX_WAVE_COLORS = ["#1b3a5c", "#1e5f8f", "#2e9bff", "#42c8c0", "#fdd835", "#e53935"];
+export const WX_WAVE_COLOR: ExpressionSpecification = [
+  "step",
+  ["get", "h"],
+  WX_WAVE_COLORS[0]!,
+  1,
+  WX_WAVE_COLORS[1]!,
+  2,
+  WX_WAVE_COLORS[2]!,
+  3,
+  WX_WAVE_COLORS[3]!,
+  4,
+  WX_WAVE_COLORS[4]!,
+  6,
+  WX_WAVE_COLORS[5]!,
+];
+export const WX_WAVE_WIDTH: ExpressionSpecification = [
+  "interpolate",
+  ["linear"],
+  ["get", "h"],
+  0,
+  0.6,
+  2,
+  2,
+  4,
+  3.4,
+  8,
+  5,
+];
+
 const HATCH_ID = "wx-hatch";
 
-export const WX_LAYER_IDS = ["wx-field", "wx-current", "wx-arrows", "wx-cyclone", "wx-ice"] as const;
+// Las cinco del pilot chart más las dos del pronóstico (isobaras y olas).
+export const WX_LAYER_IDS = [
+  "wx-field",
+  "wx-current",
+  "wx-arrows",
+  "wx-cyclone",
+  "wx-ice",
+  "wx-isobars",
+  "wx-waves",
+] as const;
 
 // Densidad de flechas por zoom (ADR §5): z≤2 cada 4°, z3 cada 2°, z≥4 cada 1°.
 export function weatherStride(zoom: number): number {
@@ -144,6 +194,18 @@ export function initWeatherLayers(map: MlMap): void {
     type: "fill",
     source: "wx-ice",
     paint: { "fill-color": WX_ICE_COLOR, "fill-opacity": 0.75 },
+  });
+  map.addLayer({
+    id: "wx-isobars",
+    type: "line",
+    source: "wx-isobars",
+    paint: { "line-color": WX_ISOBAR_COLOR, "line-width": 1, "line-opacity": 0.8 },
+  });
+  map.addLayer({
+    id: "wx-waves",
+    type: "line",
+    source: "wx-waves",
+    paint: { "line-color": WX_WAVE_COLOR, "line-width": WX_WAVE_WIDTH, "line-opacity": 0.9 },
   });
 }
 
@@ -207,6 +269,9 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
   setData(map, "wx-current", current);
   setData(map, "wx-cyclone", cyclone);
   setData(map, "wx-ice", ice);
+  // Las dos del pronóstico quedan apagadas en modo pilot chart.
+  setData(map, "wx-isobars", []);
+  setData(map, "wx-waves", []);
 
   // Refuerza las propiedades que dependen de la data (por si el estilo se recargó).
   map.setPaintProperty("wx-field", "fill-color", WX_FIELD_COLOR);
@@ -215,6 +280,175 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
   map.setPaintProperty("wx-current", "line-color", WX_CURRENT_COLOR);
   map.setPaintProperty("wx-cyclone", "fill-opacity", WX_CYCLONE_OPACITY);
   map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
+}
+
+// ----------------------------------------------------- pronóstico E13.2
+
+export const SLIDER_SLOTS = Math.floor((16 * 24) / 3); // 16 días a 3 h
+
+const DAY_ABBR = ["dom", "lun", "mar", "mié", "jue", "vie", "sáb"];
+
+// Hora (ms epoch) del paso `index` del deslizador, alineada con el paquete.
+export function slotTime(pkg: ForecastPackage, index: number): number {
+  const base = pkg.times[0] ?? pkg.fetchedAt;
+  return base + index * pkg.stepHours * 3600_000;
+}
+
+// Paso más cercano a "ahora" (botón del deslizador).
+export function nearestSlot(pkg: ForecastPackage, nowMs: number): number {
+  const base = pkg.times[0] ?? pkg.fetchedAt;
+  const i = Math.round((nowMs - base) / (pkg.stepHours * 3600_000));
+  return Math.max(0, Math.min(SLIDER_SLOTS - 1, i));
+}
+
+// "mié 14 · 15:00 UTC".
+export function hourLabel(ms: number): string {
+  const d = new Date(ms);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${DAY_ABBR[d.getUTCDay()]} ${d.getUTCDate()} · ${hh}:${mm} UTC`;
+}
+
+// Índice del paso del paquete más cercano a la hora pedida.
+export function nearestForecastIndex(pkg: ForecastPackage, ms: number): number {
+  const base = pkg.times[0] ?? pkg.fetchedAt;
+  const last = pkg.times.length - 1;
+  const i = Math.round((ms - base) / (pkg.stepHours * 3600_000));
+  return Math.max(0, Math.min(last, i));
+}
+
+// Isobaras cada 4 hPa (marching squares con interpolación lineal en los bordes
+// de cada celda de la grilla de presión).
+export function isobars(pkg: ForecastPackage, index: number): object[] {
+  const { cols, rows, bbox } = pkg;
+  const step = pkg.times.length;
+  if (cols < 2 || rows < 2 || step === 0) return [];
+  const at = (c: number, r: number): number => {
+    const raw = pkg.vars.pressure[(r * cols + c) * step + index] ?? FORECAST_MISSING;
+    const v = decodeForecast(raw);
+    return v === null ? NaN : v;
+  };
+  const dx = (bbox[2] - bbox[0]) / (cols - 1);
+  const dy = (bbox[3] - bbox[1]) / (rows - 1);
+  const features: object[] = [];
+  for (let r = 0; r < rows - 1; r++) {
+    for (let c = 0; c < cols - 1; c++) {
+      const v00 = at(c, r);
+      const v10 = at(c + 1, r);
+      const v01 = at(c, r + 1);
+      const v11 = at(c + 1, r + 1);
+      if (Number.isNaN(v00) || Number.isNaN(v10) || Number.isNaN(v01) || Number.isNaN(v11)) continue;
+      const lo = Math.min(v00, v10, v01, v11);
+      const hi = Math.max(v00, v10, v01, v11);
+      const x0 = bbox[0] + c * dx;
+      const y0 = bbox[1] + r * dy;
+      for (
+        let L = Math.ceil(lo / WX_ISOBAR_INTERVAL) * WX_ISOBAR_INTERVAL;
+        L <= hi;
+        L += WX_ISOBAR_INTERVAL
+      ) {
+        if (L === 0) continue;
+        const pts: [number, number][] = [];
+        if ((v00 - L) * (v10 - L) < 0) pts.push([x0 + ((L - v00) / (v10 - v00)) * dx, y0]);
+        if ((v10 - L) * (v11 - L) < 0) pts.push([x0 + dx, y0 + ((L - v10) / (v11 - v10)) * dy]);
+        if ((v01 - L) * (v11 - L) < 0) pts.push([x0 + ((L - v01) / (v11 - v01)) * dx, y0 + dy]);
+        if ((v00 - L) * (v01 - L) < 0) pts.push([x0, y0 + ((L - v00) / (v01 - v00)) * dy]);
+        if (pts.length === 2) {
+          features.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
+        } else if (pts.length === 4) {
+          features.push(segmentFeature(pts[0]!, pts[1]!, { hpa: L }));
+          features.push(segmentFeature(pts[2]!, pts[3]!, { hpa: L }));
+        }
+      }
+    }
+  }
+  return features;
+}
+
+// Flechas de ola: la dirección del API es de dónde vienen, así que la flecha
+// apunta hacia donde van; el largo es proporcional a la altura.
+export function waveArrows(pkg: ForecastPackage, index: number, stride = 1): object[] {
+  const { cols, rows, bbox } = pkg;
+  const step = pkg.times.length;
+  if (step === 0) return [];
+  const dh = pkg.vars.wave_height;
+  const dd = pkg.vars.wave_direction;
+  const dx = cols > 1 ? (bbox[2] - bbox[0]) / (cols - 1) : 0;
+  const dy = rows > 1 ? (bbox[3] - bbox[1]) / (rows - 1) : 0;
+  const s = Math.max(1, Math.round(stride));
+  const features: object[] = [];
+  for (let r = 0; r < rows; r += s) {
+    for (let c = 0; c < cols; c += s) {
+      const p = (r * cols + c) * step + index;
+      const h = decodeForecast(dh[p] ?? FORECAST_MISSING);
+      const dirRaw = decodeForecast(dd[p] ?? FORECAST_MISSING);
+      if (h === null || dirRaw === null || h < 0.3) continue;
+      const to = ((dirRaw + 180) * Math.PI) / 180;
+      const len = clamp(0.4 + h * 0.6, 0.5, 3);
+      const lon = bbox[0] + c * dx;
+      const lat = bbox[1] + r * dy;
+      features.push(
+        segmentFeature(
+          [round2(lon - Math.sin(to) * len * 0.5), round2(lat - Math.cos(to) * len * 0.5)],
+          [round2(lon + Math.sin(to) * len * 0.5), round2(lat + Math.cos(to) * len * 0.5)],
+          { h: round1(h), dir: Math.round(dirRaw) },
+        ),
+      );
+    }
+  }
+  return features;
+}
+
+// Olas del mes (climatología) para el empalme más allá del horizonte: sin
+// dirección (la climatología no la guarda), color por altura.
+function climateWaves(map: MlMap, clim: ClimMonth): object[] {
+  const stride = weatherStride(map.getZoom());
+  const b = map.getBounds();
+  const west = b.getWest();
+  const east = b.getEast();
+  const south = b.getSouth();
+  const north = b.getNorth();
+  const [nx, ny] = clim.grid;
+  const [ox, oy] = clim.origin;
+  const half = stride / 2;
+  const out: object[] = [];
+  for (let i = 0; i < ny; i += stride) {
+    const lat = oy + i;
+    if (lat + half < south || lat - half > north) continue;
+    for (let j = 0; j < nx; j += stride) {
+      const lon = ox + j;
+      if (!lonInBounds(lon, west, east, half)) continue;
+      const cell = getCell(clim, lat, lon);
+      if (!cell || cell.hs <= 0) continue;
+      out.push(polygonFeature(boxRing(lon, lat, half), { h: round1(cell.hs) }));
+    }
+  }
+  return out;
+}
+
+// Repinta el pronóstico para la hora pedida. Devuelve true si la hora ya está
+// fuera del horizonte del paquete y se usó la climatología del mes.
+export function updateForecastWeather(
+  map: MlMap,
+  clim: ClimMonth | null,
+  pkg: ForecastPackage,
+  timeMs: number,
+): boolean {
+  for (const id of ["wx-field", "wx-arrows", "wx-current", "wx-cyclone", "wx-ice"]) {
+    setData(map, id, []);
+  }
+  if (timeMs > forecastLastTime(pkg)) {
+    setData(map, "wx-isobars", []);
+    setData(map, "wx-waves", clim ? climateWaves(map, clim) : []);
+    return true;
+  }
+  const index = nearestForecastIndex(pkg, timeMs);
+  setData(map, "wx-isobars", isobars(pkg, index));
+  setData(map, "wx-waves", waveArrows(pkg, index, weatherStride(map.getZoom())));
+  map.setPaintProperty("wx-isobars", "line-color", WX_ISOBAR_COLOR);
+  map.setPaintProperty("wx-waves", "line-color", WX_WAVE_COLOR);
+  map.setPaintProperty("wx-waves", "line-width", WX_WAVE_WIDTH);
+  return false;
 }
 
 // ------------------------------------------------------- resumen de ruta
