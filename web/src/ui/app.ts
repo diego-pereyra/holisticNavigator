@@ -43,6 +43,14 @@ import {
   type VariantGeometry,
 } from "../core/context.ts";
 import { loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
+import {
+  bboxOfBounds,
+  bboxOfTrack,
+  forecastBytes,
+  getForecastAge,
+  type BBox,
+  type ForecastPackage,
+} from "../core/forecast.ts";
 import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
 import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix } from "../core/navigation.ts";
@@ -70,6 +78,7 @@ import { sunTimes } from "../core/sun.ts";
 import { loadFact } from "../platform/catalog.ts";
 import { beep } from "../platform/sound.ts";
 import { KEYS, type KeyValueStore } from "../platform/store.ts";
+import { downloadForecast, loadForecast } from "../platform/forecast.ts";
 import {
   deleteZone,
   downloadZone,
@@ -1662,7 +1671,7 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
 
   body.append(alarmsCard(ui));
   body.append(anchorCard(ui, cleanup));
-  body.append(offlineCard(ui));
+  body.append(offlineCard(ui, cleanup));
   body.append(themeCard(ui, cleanup));
 }
 
@@ -1878,14 +1887,14 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
 // Panel "Sin conexión" en Aquí: qué se ve sin red y qué zonas de la carta
 // detallada están descargadas. Cada zona se baja a IndexedDB y queda disponible
 // en modo avión.
-function offlineCard(ui: UiState): HTMLElement {
+function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const card = el("div", { class: "hn-card" });
   card.append(el("div", { class: "hn-card-title" }, "Sin conexión"));
   card.append(offlineRow("Carta base · 0,2 MB", "siempre"));
   // Pilot charts (12 meses) · 1,8 MB · [Guardar]
   card.append(pilotChartsRow(ui));
   // Pronóstico de la travesía · 0,6 MB · hace X h · [Actualizar] (si hay paquete)
-  card.append(forecastRow(ui));
+  card.append(forecastRow(ui, cleanup));
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
   card.append(onlineSeamarkRow(ui));
 
@@ -1991,16 +2000,88 @@ function pilotChartsRow(_ui: UiState): HTMLElement {
   return row;
 }
 
-// Pronóstico de la travesía (E8.4): placeholder simple, compatible con spec.
-function forecastRow(_ui: UiState): HTMLElement {
+// Pronóstico de la travesía (E13.1): baja el paquete Open-Meteo de la caja de
+// la ruta (o de la vista) + 300 nm, lo guarda en IndexedDB con la edad visible
+// y lo reemplaza con "Actualizar".
+function forecastRow(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const row = el("div", { class: "hn-offline-row" });
-  row.append(
-    el("span", { class: "hn-offline-name" }, "Pronóstico de la travesía"),
-    el("span", { class: "hn-offline-info" }, "0,6 MB · hace — h"),
-    el("span", { class: "hn-offline-action" }, el("button", { class: "hn-btn", type: "button" }, "Actualizar")),
+  const info = el("span", { class: "hn-offline-info" }, "…");
+  const action = el("span", { class: "hn-offline-action" });
+  const btn = el("button", { class: "hn-btn", type: "button" }, "Descargar");
+  action.append(btn);
+  row.append(el("span", { class: "hn-offline-name" }, "Pronóstico de la travesía"), info, action);
+
+  let busy = false;
+  let pkg: ForecastPackage | null = null;
+  const ctxCode = (): string | null => ui.active()?.code ?? ui.selected()?.code ?? null;
+  const ctxId = (): string => ctxCode() ?? "vista";
+  const ctxBBox = (): BBox | null => {
+    const code = ctxCode();
+    if (code) {
+      const g = selectedGeometry(ui, code);
+      const bb = g ? bboxOfTrack(g.coords) : null;
+      if (bb) return bb;
+    }
+    return bboxOfBounds(ui.map.getBounds());
+  };
+
+  const showAge = (): void => {
+    info.textContent = pkg ? `${fmtMb1(forecastBytes(pkg))} · ${getForecastAge(pkg)}` : "sin paquete";
+  };
+  const showIdle = (): void => {
+    btn.disabled = false;
+    btn.textContent = pkg ? "Actualizar" : "Descargar";
+    showAge();
+  };
+
+  cleanup.push(
+    effect(() => {
+      const id = ctxId();
+      void loadForecast(ui.store, id).then((p) => {
+        if (ctxId() !== id) return;
+        pkg = p;
+        showIdle();
+      });
+    }),
   );
-  (row.lastElementChild as HTMLElement)?.querySelector("button")?.setAttribute("disabled", "true");
+  const timer = setInterval(() => {
+    if (pkg && !busy) showAge();
+  }, 60_000);
+  cleanup.push(() => clearInterval(timer));
+
+  btn.addEventListener("click", () => {
+    if (busy) return;
+    const box = ctxBBox();
+    if (!box) {
+      info.textContent = "sin caja de travesía";
+      return;
+    }
+    const id = ctxId();
+    busy = true;
+    btn.disabled = true;
+    btn.textContent = "Bajando…";
+    info.textContent = "0 %";
+    void downloadForecast(ui.store, id, box, (r) => {
+      info.textContent = `${Math.round(r * 100)} %`;
+    })
+      .then((p) => {
+        busy = false;
+        pkg = p;
+        showIdle();
+      })
+      .catch(() => {
+        busy = false;
+        btn.disabled = false;
+        btn.textContent = "Reintentar";
+        info.textContent = "error · sin conexión";
+      });
+  });
+
   return row;
+}
+
+function fmtMb1(bytes: number): string {
+  return `${(bytes / 1048576).toFixed(1).replace(".", ",")} MB`;
 }
 
 function fmtMb(bytes: number): string {
