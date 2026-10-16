@@ -56,7 +56,8 @@ const TILES_WORLD_URL = new URL("tiles/world-z6.pmtiles", document.baseURI).toSt
 const ATTRIBUTION = "© OpenStreetMap contributors · Protomaps · Natural Earth";
 
 // Fuente con los cuatro layers de la carta de detalle, apagados con minzoom para
-// que salgan recién a zoom ≥ 4 (donde se apagan las capas de Natural Earth).
+// que salgan recién a zoom ≥ 4. El piso de Natural Earth ya no tiene techo: sigue
+// dibujado debajo a cualquier zoom y el detalle lo tapa cuando termina de cargar.
 const DETAIL_LAYERS: LayerSpecification[] = [
   {
     id: "detail-water",
@@ -159,21 +160,18 @@ export function baseMapStyle(): StyleSpecification {
         id: "country-fill",
         type: "fill",
         source: "countries",
-        maxzoom: 4,
         paint: { "fill-color": fillColor },
       },
       {
         id: "country-line",
         type: "line",
         source: "countries",
-        maxzoom: 4,
         paint: { "line-color": "#3a4a5a", "line-width": 0.6 },
       },
       {
         id: "coast-line",
         type: "line",
         source: "countries",
-        maxzoom: 4,
         paint: { "line-color": "#3a4a5a", "line-width": 0.8 },
       },
       {

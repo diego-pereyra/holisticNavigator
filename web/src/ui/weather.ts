@@ -84,14 +84,14 @@ export const WX_CURRENT_WIDTH: ExpressionSpecification = [
   ["linear"],
   ["get", "mag"],
   0,
-  0.5,
+  1.8,
   2,
-  1.6,
+  3.4,
   4,
-  2.6,
+  4.2,
 ];
-// E13.3: las corrientes van discontinuas para distinguirlas de rutas y costas.
-export const WX_CURRENT_DASH: [number, number] = [1.6, 2];
+// E13.5: raya larga y hueco corto, para que las corrientes se lean sin lupa.
+export const WX_CURRENT_DASH: [number, number] = [2.5, 1.5];
 
 export const WX_CYCLONE_COLOR = "#C62828";
 export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
@@ -228,7 +228,7 @@ export function initWeatherLayers(map: MlMap): void {
     paint: {
       "line-color": WX_CURRENT_COLOR,
       "line-width": WX_CURRENT_WIDTH,
-      "line-opacity": 0.85,
+      "line-opacity": 0.95,
       "line-dasharray": WX_CURRENT_DASH,
     },
   });

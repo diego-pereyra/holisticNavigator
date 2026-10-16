@@ -19,6 +19,8 @@ import {
   WX_ARROW_OPACITY,
   WX_ARROW_WIDTH,
   WX_CURRENT_COLOR,
+  WX_CURRENT_DASH,
+  WX_CURRENT_WIDTH,
   WX_CYCLONE_OPACITY,
   WX_FIELD_COLOR,
   WX_ICE_COLOR,
@@ -331,4 +333,13 @@ test("E13.4 silla: dos diagonales dan dos tramos, sin descartar puntos", () => {
 test("E13.2 rampa de olas y constante de isobaras", () => {
   assert.equal(WX_WAVE_COLORS.length, 6);
   assert.equal(WX_ISOBAR_COLOR, "#e6eef7");
+});
+
+test("E13.5 corrientes gruesas y legibles", () => {
+  // La rampa va de 1,8 a 4,2 px (mag 0 → 2 → 4): visible sin lupa.
+  const steps = (WX_CURRENT_WIDTH as unknown as (string | number)[]).filter((x) => typeof x === "number");
+  assert.deepEqual(steps, [0, 1.8, 2, 3.4, 4, 4.2]);
+  // Raya más larga que el hueco.
+  assert.deepEqual(WX_CURRENT_DASH, [2.5, 1.5]);
+  assert.ok(WX_CURRENT_DASH[0]! > WX_CURRENT_DASH[1]!, "la raya supera al hueco");
 });
