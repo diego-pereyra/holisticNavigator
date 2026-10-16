@@ -641,6 +641,25 @@ zona (~50 KB por zona). `core/tides.ts`: predicción de altura y corriente por e
 zoom 8; tocar una → curva del día y próximas pleamar/bajamar; en la ficha de puerto de destino, la
 marea a la ETA. Tareas: E16.1 datos por zona · E16.2 motor y tests · E16.3 UI.
 
+## Sesión y multiusuario (pregunta de Diego, 2026-10-16 — para más adelante)
+
+Diego: "tengo que ver cómo manejo la sesión por usuario… ¿podría usar el login de GitHub?"
+
+Para qué serviría: sincronizar rutas propias, ajustes y paquetes entre dispositivos; compartir
+rutas. Hoy todo es local (IndexedDB) y la app funciona sin cuenta (ADR-002: sin backend).
+
+| Opción | Qué exige | Veredicto |
+|---|---|---|
+| Sin login (hoy) | nada | MVP correcto: local-first, offline total |
+| Archivos (GPX/JSON export/import) | nada | ya existe para rutas; extensible a ajustes |
+| Login de GitHub (OAuth) | backend mínimo para el intercambio del código (GitHub deprecó el flujo implícito SPA) + nueva ADR que revise la 002 | no recomendado como principal: la audiencia son navegantes, no devs |
+| Passkeys/WebAuthn | poco (device-bound, sin contraseñas) | si hiciera falta identidad por dispositivo |
+| Backend liviano (Workers/Supabase) + email magic link / Google / Apple | nueva ADR + coste | la vía si algún día hay sync multi-dispositivo real |
+
+Decisión: postergada. Antes de elegir mecanismo hay que definir QUÉ datos son por usuario
+(rutas propias, ajustes, paquetes de pronóstico) y si la sincronización es requisito real del
+producto. Hasta entonces: sin login.
+
 ## Opción futura, no decidida: camino a un plotter completo (orden posible tras E12)
 
 E15.2 SignalK → E15.3 AIS → E14.1–E14.4 cartas propias y NOAA ENC → E16 mareas → E11 herramientas
