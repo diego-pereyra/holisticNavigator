@@ -8,6 +8,14 @@ cd "$HN_ROOT"
 python3 tools/build_basemap.py
 bash "$HN_ROOT/scripts/sync-catalog.sh"
 
+# Máscara de tierra (E12.1): el motor de enrutado la necesita. El manifiesto de
+# precache la incluye como el resto de web/public/basemap/ (el service worker
+# la guarda en su caché de datos); no cuenta en la primera carga (budget.sh).
+if [ ! -f "$HN_ROOT/web/public/basemap/land.bits" ]; then
+  echo "falta basemap/land.bits: generá data/land/land.bits con 'python3 tools/build_landmask.py'." >&2
+  exit 1
+fi
+
 SHA="$(git rev-parse --short HEAD 2>/dev/null || echo dev)"
 ESBUILD="$HN_ROOT/web/node_modules/.bin/esbuild"
 if [ ! -x "$ESBUILD" ]; then

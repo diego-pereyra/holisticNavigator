@@ -19,3 +19,13 @@ if [ -f "$CSRC/clim.json" ]; then
   cp "$CSRC"/*.bin "$CSRC/clim.json" "$CDST/"
   echo "clima → $CDST ($(ls "$CDST"/*.bin 2>/dev/null | wc -l) meses)"
 fi
+
+# Máscara de tierra (E12.1): rejilla de bits de 0,1° para el motor de enrutado,
+# junto al resto de la carta base (por eso la precachea el service worker).
+LSRC="$ROOT/data/land/land.bits"
+LDST="$ROOT/web/public/basemap"
+if [ -f "$LSRC" ]; then
+  mkdir -p "$LDST"
+  cp "$LSRC" "$LDST/land.bits"
+  echo "máscara de tierra → $LDST/land.bits ($(( $(wc -c < "$LDST/land.bits") / 1024 )) KB)"
+fi

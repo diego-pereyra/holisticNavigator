@@ -118,3 +118,21 @@ del Golfo > 0,8 kn en (35 N, 75 W); `tc` = 4 en (18 N, 65 W) septiembre).
 
 **Decisión pendiente:** que Claude confirme el punto corregido en el ADR-009 §tarea E8.1.
 
+## E12.1 · coordenada "Gibraltar (36 N, 5 W)" y concordancia con `landcheck.py` — desvío
+
+**Qué falla (en la spec).**
+- El paso 4 pide que **Gibraltar (36 N, 5 W) sea tierra**, pero ese punto cae en aguas del
+  estrecho de Gibraltar: lo clasifican **mar** tanto la máscara nueva (Natural Earth 10m) como el
+  `landcheck.py` existente (NE 110m). El Peñón está en **36,14 N, 5,35 W**. Usé esa cota real
+  (sigue siendo "Gibraltar") en el test en lugar de la coordenada del enunciado.
+- El paso 5 espera **≥ 99 %** de concordancia con `landcheck.py` "en los tramos del catálogo".
+  Con la base de 10m la concordancia medida es **94,17 %** (212 423 puntos) y **todas** las
+  diferencias caen a menos de una celda (0,1°) de la costa, donde la base de 10m es más fina que
+  la de 110m; fuera de esa franja costera la concordancia es **100 %**. El script imprime el
+  porcentaje y no corta la build, tal como pide el propio punto 5.
+
+**Qué propongo.** Corregir la coordenada del test a 36,14 N / 5,35 W (o a otra cota terrestre del
+Peñón) y fijar la concordancia sobre puntos a más de una celda de la costa (o bajar el umbral a
+~94 % cuando la fuente es de 10m). Fuente usada: Natural Earth **10m** `ne_10m_land`.
+
+
