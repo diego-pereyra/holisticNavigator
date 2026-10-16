@@ -99,6 +99,23 @@ export const WX_CURRENT_DASH: [number, number] = [2.5, 1.5];
 export const WX_HEAD_BACK = 0.36;
 export const WX_HEAD_HALF = 0.22;
 
+// E13.7 — La punta es la misma para viento, corriente y olas; cambia la
+// proporción (`back` = avance de las alas sobre el largo, `half` = media
+// separación entre alas) y un tope absoluto en grados, para que una corriente no
+// salga como un cometa sobre un tramo largo.
+export interface HeadShape {
+  back: number;
+  half: number;
+  maxDeg: number;
+}
+
+export const WX_HEAD_WIND: HeadShape = { back: WX_HEAD_BACK, half: WX_HEAD_HALF, maxDeg: Infinity };
+// Corriente: ~20 % del largo (antes ~35 %), discreta, como una punta y no cometa.
+export const WX_HEAD_CURRENT: HeadShape = { back: 0.2, half: 0.12, maxDeg: 0.3 };
+// Olas: punta intermedia, mismo tope absoluto.
+export const WX_HEAD_WAVE: HeadShape = { back: 0.3, half: 0.18, maxDeg: 0.3 };
+
+
 export const WX_CYCLONE_COLOR = "#C62828";
 export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
   "step",
@@ -160,6 +177,7 @@ export const WX_LAYER_IDS = [
   "wx-isobars",
   "wx-isobar-labels",
   "wx-waves",
+  "wx-waves-head",
 ] as const;
 
 // E13.3 — Selector de capas. Seis interruptores persisten en `hn.settings.wxLayers`.
@@ -187,7 +205,7 @@ export function defaultWxLayers(): WxLayers {
 const WX_LAYER_TO_IDS: Record<WxLayerKey, string[]> = {
   wind: ["wx-field", "wx-arrows", "wx-arrows-head"],
   current: ["wx-current", "wx-current-head"],
-  waves: ["wx-waves"],
+  waves: ["wx-waves", "wx-waves-head"],
   isobars: ["wx-isobars", "wx-isobar-labels"],
   cyclone: ["wx-cyclone"],
   ice: ["wx-ice"],
@@ -294,6 +312,12 @@ export function initWeatherLayers(map: MlMap): void {
     source: "wx-waves",
     paint: { "line-color": WX_WAVE_COLOR, "line-width": WX_WAVE_WIDTH, "line-opacity": 0.9 },
   });
+  map.addLayer({
+    id: "wx-waves-head",
+    type: "fill",
+    source: "wx-waves-head",
+    paint: { "fill-color": WX_WAVE_COLOR, "fill-opacity": 0.9 },
+  });
 }
 
 export function clearWeather(map: MlMap): void {
@@ -307,6 +331,7 @@ export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
   setData(map, "wx-isobars", []);
   setData(map, "wx-isobar-labels", []);
   setData(map, "wx-waves", []);
+  setData(map, "wx-waves-head", []);
   paintWindLayers(map);
 }
 
@@ -421,8 +446,18 @@ function marchIsobars(pkg: ForecastPackage, index: number): { lines: object[]; l
 }
 
 // Flechas de ola: la dirección del API es de dónde vienen, así que la flecha
-// apunta hacia donde van; el largo es proporcional a la altura.
-export function waveArrows(pkg: ForecastPackage, index: number, stride = 1): object[] {
+// apunta hacia donde van; el largo es proporcional a la altura. El vector y su
+// punta salen del mismo cálculo, así la punta cae justo en el extremo de la raya.
+interface WaveVector {
+  tail: Pt;
+  tip: Pt;
+  dirX: number;
+  dirY: number;
+  len: number;
+  props: Record<string, unknown>;
+}
+
+function waveVectors(pkg: ForecastPackage, index: number, stride: number): WaveVector[] {
   const { cols, rows, bbox } = pkg;
   const step = pkg.times.length;
   if (step === 0) return [];
@@ -431,7 +466,7 @@ export function waveArrows(pkg: ForecastPackage, index: number, stride = 1): obj
   const dx = cols > 1 ? (bbox[2] - bbox[0]) / (cols - 1) : 0;
   const dy = rows > 1 ? (bbox[3] - bbox[1]) / (rows - 1) : 0;
   const s = Math.max(1, Math.round(stride));
-  const features: object[] = [];
+  const out: WaveVector[] = [];
   for (let r = 0; r < rows; r += s) {
     for (let c = 0; c < cols; c += s) {
       const p = (r * cols + c) * step + index;
@@ -439,19 +474,36 @@ export function waveArrows(pkg: ForecastPackage, index: number, stride = 1): obj
       const dirRaw = decodeForecast(dd[p] ?? FORECAST_MISSING);
       if (h === null || dirRaw === null || h < 0.3) continue;
       const to = ((dirRaw + 180) * Math.PI) / 180;
-      const len = clamp(0.4 + h * 0.6, 0.5, 3);
+      const raw = clamp(0.4 + h * 0.6, 0.5, 3);
       const lon = bbox[0] + c * dx;
       const lat = bbox[1] + r * dy;
-      features.push(
-        segmentFeature(
-          [round2(lon - Math.sin(to) * len * 0.5), round2(lat - Math.cos(to) * len * 0.5)],
-          [round2(lon + Math.sin(to) * len * 0.5), round2(lat + Math.cos(to) * len * 0.5)],
-          { h: round1(h), dir: Math.round(dirRaw) },
-        ),
-      );
+      const tail: Pt = [round2(lon - Math.sin(to) * raw * 0.5), round2(lat - Math.cos(to) * raw * 0.5)];
+      const tip: Pt = [round2(lon + Math.sin(to) * raw * 0.5), round2(lat + Math.cos(to) * raw * 0.5)];
+      const vx = tip[0] - tail[0];
+      const vy = tip[1] - tail[1];
+      const d = Math.hypot(vx, vy);
+      out.push({
+        tail,
+        tip,
+        dirX: d > 0 ? vx / d : Math.sin(to),
+        dirY: d > 0 ? vy / d : Math.cos(to),
+        len: d,
+        props: { h: round1(h), dir: Math.round(dirRaw) },
+      });
     }
   }
-  return features;
+  return out;
+}
+
+export function waveArrows(pkg: ForecastPackage, index: number, stride = 1): object[] {
+  return waveVectors(pkg, index, stride).map((v) => segmentFeature(v.tail, v.tip, v.props));
+}
+
+// Punta de las olas: mismo sentido que la flecha, color por altura.
+export function waveHeads(pkg: ForecastPackage, index: number, stride = 1): object[] {
+  return waveVectors(pkg, index, stride).map((v) =>
+    headFeature(v.tip, v.dirX, v.dirY, v.len, v.props, WX_HEAD_WAVE),
+  );
 }
 
 // Olas del mes (climatología) para el empalme más allá del horizonte: sin
@@ -496,6 +548,8 @@ export function updateForecastWeather(
     setData(map, "wx-isobars", []);
     setData(map, "wx-isobar-labels", []);
     setData(map, "wx-waves", clim ? climateWaves(map, clim) : []);
+    // La climatología no guarda dirección de ola: no hay punta que poner.
+    setData(map, "wx-waves-head", []);
     return true;
   }
   const index = nearestForecastIndex(pkg, timeMs);
@@ -503,10 +557,12 @@ export function updateForecastWeather(
   setData(map, "wx-isobars", isobars(pkg, index));
   setData(map, "wx-isobar-labels", isobarLabels(pkg, index));
   setData(map, "wx-waves", waveArrows(pkg, index, stride));
+  setData(map, "wx-waves-head", waveHeads(pkg, index, stride));
   paintWindLayers(map);
   map.setPaintProperty("wx-isobars", "line-color", WX_ISOBAR_COLOR);
   map.setPaintProperty("wx-waves", "line-color", WX_WAVE_COLOR);
   map.setPaintProperty("wx-waves", "line-width", WX_WAVE_WIDTH);
+  map.setPaintProperty("wx-waves-head", "fill-color", WX_WAVE_COLOR);
   return false;
 }
 
@@ -689,7 +745,7 @@ function buildWeatherFeatures(samples: WxSample[], stride: number): WindFeatures
       const tip: Pt = [s.lon + s.cdirX * len, s.lat + s.cdirY * len];
       const props = { mag: round2(s.cmag) };
       current.push(segmentFeature([s.lon, s.lat], tip, props));
-      currentHeads.push(headFeature(tip, s.cdirX, s.cdirY, len, props));
+      currentHeads.push(headFeature(tip, s.cdirX, s.cdirY, len, props, WX_HEAD_CURRENT));
     }
     if (s.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(s.tc) }));
     if (s.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(s.ice) }));
@@ -826,18 +882,22 @@ function polygonFeature(ring: [number, number][], props: Record<string, unknown>
   return { type: "Feature", properties: props, geometry: { type: "Polygon", coordinates: [ring] } };
 }
 
-// Punta de flecha (E13.6): triángulo con el ápice en `tip`, hacia donde apunta
-// (dx,dy), y dos alas atrás perpendiculares a la dirección. `len` es el largo del
-// vector; las alas se separan a cada lado de su punto medio.
+// Punta de flecha (E13.6, parametrizada en E13.7): triángulo con el ápice en
+// `tip`, hacia donde apunta (dx,dy), y dos alas atrás perpendiculares a la
+// dirección. `len` es el largo del vector; `shape` fija cuán atrás van las alas
+// y cuánto se separan, con tope absoluto en grados.
 function headFeature(
   tip: Pt,
   dx: number,
   dy: number,
   len: number,
   props: Record<string, unknown>,
+  shape: HeadShape = WX_HEAD_WIND,
 ): object {
-  const back = len * WX_HEAD_BACK;
-  const side = len * WX_HEAD_HALF;
+  const rawBack = len * shape.back;
+  const back = Math.min(rawBack, shape.maxDeg);
+  const k = rawBack > 0 ? back / rawBack : 0; // 1 salvo que el tope recorte
+  const side = len * shape.half * k;
   const bx = tip[0] - dx * back;
   const by = tip[1] - dy * back;
   return polygonFeature(

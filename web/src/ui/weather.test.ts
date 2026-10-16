@@ -16,6 +16,7 @@ import {
   updateForecastWeather,
   updateWeather,
   waveArrows,
+  waveHeads,
   WX_ARROW_OPACITY,
   WX_ARROW_WIDTH,
   WX_CURRENT_COLOR,
@@ -23,8 +24,10 @@ import {
   WX_CURRENT_WIDTH,
   WX_CYCLONE_OPACITY,
   WX_FIELD_COLOR,
-  WX_HEAD_BACK,
-  WX_HEAD_HALF,
+  WX_HEAD_CURRENT,
+  WX_HEAD_WAVE,
+  WX_HEAD_WIND,
+  type HeadShape,
   WX_ICE_COLOR,
   WX_ISOBAR_COLOR,
   WX_WAVE_COLOR,
@@ -114,6 +117,7 @@ test("E8.3/E13.2 arma las siete capas wx con paint propio", () => {
   assert.ok(!m.layers.has("wx-arrows-dot"), "el círculo viejo ya no va");
   assert.equal(initial("wx-isobars")["line-color"], WX_ISOBAR_COLOR);
   assert.equal(initial("wx-waves")["line-color"], WX_WAVE_COLOR);
+  assert.equal(initial("wx-waves-head")["fill-color"], WX_WAVE_COLOR);
 });
 
 test("E8.3 repinta diez celdas de prueba y setea el paint de cada capa", () => {
@@ -243,12 +247,14 @@ test("E13.2 dentro del horizonte pinta isobaras y olas; fuera, clima medio", () 
   assert.equal(beyond, false);
   assert.ok((m.data.get("wx-isobars")?.features.length ?? 0) > 0, "sin isobaras");
   assert.ok((m.data.get("wx-waves")?.features.length ?? 0) > 0, "sin olas");
+  assert.equal(m.data.get("wx-waves-head")?.features.length, m.data.get("wx-waves")?.features.length, "una punta por ola");
   assert.equal(m.data.get("wx-field")?.features.length, 9, "viento del pronóstico (3×3)");
 
   const outside = updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3 * 3600 * 1000);
   assert.equal(outside, true, "más allá del horizonte");
   assert.equal(m.data.get("wx-isobars")?.features.length, 0, "sin isobaras fuera del horizonte");
   assert.equal(m.data.get("wx-waves")?.features.length, 10, "olas de climatología");
+  assert.equal(m.data.get("wx-waves-head")?.features.length, 0, "climatología sin dirección: sin punta");
 });
 
 test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
@@ -263,6 +269,7 @@ test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
   assert.equal(m.data.get("wx-arrows-head")?.features.length, 9, "puntas de viento");
   assert.equal(m.data.get("wx-current")?.features.length, 9, "corrientes");
   assert.equal(m.data.get("wx-current-head")?.features.length, 9, "puntas de corriente");
+  assert.equal(m.data.get("wx-waves-head")?.features.length, 9, "puntas de ola");
 
   // Viento del E (90°): la flecha apunta hacia el O y lleva st:100 (firme).
   const arrow = m.data.get("wx-arrows")!.features[0] as {
@@ -354,28 +361,37 @@ test("E13.5 corrientes gruesas y legibles", () => {
   assert.ok(WX_CURRENT_DASH[0]! > WX_CURRENT_DASH[1]!, "la raya supera al hueco");
 });
 
-// --- E13.6: punta de flecha en viento y corrientes ---------------------
+// --- E13.6/E13.7: punta de flecha (viento, corriente y olas) ----------
 
-// Verifica que un triángulo de punta salga del vector (a→b): ápice en el extremo
-// `b`, alas atrás (mid a distancia WX_HEAD_BACK del largo) y separadas
-// perpendicularmente (WX_HEAD_HALF a cada lado).
-function checkHead(ring: [number, number][], a: [number, number], b: [number, number]): void {
+// Verifica que un triángulo de punta salga del vector (a→b) según su `shape`:
+// ápice en el extremo `b`, alas atrás (a `back`·largo, con tope `maxDeg`) y
+// separadas perpendicularmente (`half`·largo a cada lado).
+function checkHead(
+  ring: [number, number][],
+  a: [number, number],
+  b: [number, number],
+  shape: HeadShape,
+): void {
   const dx = b[0] - a[0];
   const dy = b[1] - a[1];
   const d = Math.hypot(dx, dy);
   const ux = dx / d;
   const uy = dy / d;
+  const raw = shape.back * d;
+  const back = Math.min(raw, shape.maxDeg);
+  const k = raw > 0 ? back / raw : 0;
+  const half = shape.half * d * k;
   assert.deepEqual(ring[0], b, "ápice en el extremo");
   assert.deepEqual(ring[3], ring[0], "anillo cerrado");
   const w1 = ring[1]!;
   const w2 = ring[2]!;
   const mid: [number, number] = [(w1[0] + w2[0]) / 2, (w1[1] + w2[1]) / 2];
-  const expe: [number, number] = [b[0] - ux * WX_HEAD_BACK * d, b[1] - uy * WX_HEAD_BACK * d];
+  const expe: [number, number] = [b[0] - ux * back, b[1] - uy * back];
   assert.ok(Math.abs(mid[0] - expe[0]) < 1e-9 && Math.abs(mid[1] - expe[1]) < 1e-9, `alas detrás: ${mid}`);
   // Alas perpendiculares: (w1−w2)·dir ≈ 0.
   assert.ok(Math.abs((w1[0] - w2[0]) * ux + (w1[1] - w2[1]) * uy) < 1e-9, "alas perpendiculares");
-  // Separación entre alas = 2·WX_HEAD_HALF·largo.
-  assert.ok(Math.abs(Math.hypot(w1[0] - w2[0], w1[1] - w2[1]) - 2 * WX_HEAD_HALF * d) < 1e-9, "ancho de alas");
+  // Separación entre alas = 2·half·largo.
+  assert.ok(Math.abs(Math.hypot(w1[0] - w2[0], w1[1] - w2[1]) - 2 * half) < 1e-9, "ancho de alas");
   // Alas detrás del ápice.
   assert.ok((mid[0] - b[0]) * ux + (mid[1] - b[1]) * uy < 0, "alas hacia atrás");
 }
@@ -394,7 +410,12 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
     geometry: { coordinates: [number, number][][] };
   };
   assert.equal(windHead.properties.st, 100, "pronóstico: opacidad plena");
-  checkHead(windHead.geometry.coordinates[0]!, arrow.geometry.coordinates[0]!, arrow.geometry.coordinates[1]!);
+  checkHead(
+    windHead.geometry.coordinates[0]!,
+    arrow.geometry.coordinates[0]!,
+    arrow.geometry.coordinates[1]!,
+    WX_HEAD_WIND,
+  );
 
   const cur = m.data.get("wx-current")!.features[0] as {
     geometry: { coordinates: [number, number][] };
@@ -402,7 +423,12 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
   const curHead = m.data.get("wx-current-head")!.features[0] as {
     geometry: { coordinates: [number, number][][] };
   };
-  checkHead(curHead.geometry.coordinates[0]!, cur.geometry.coordinates[0]!, cur.geometry.coordinates[1]!);
+  checkHead(
+    curHead.geometry.coordinates[0]!,
+    cur.geometry.coordinates[0]!,
+    cur.geometry.coordinates[1]!,
+    WX_HEAD_CURRENT,
+  );
 });
 
 test("E13.6 el pilot chart también lleva puntas", () => {
@@ -411,4 +437,51 @@ test("E13.6 el pilot chart también lleva puntas", () => {
   updateWeather(m.map, miniClim(), 1);
   assert.equal(m.data.get("wx-arrows-head")?.features.length, 10, "puntas de viento (clima)");
   assert.equal(m.data.get("wx-current-head")?.features.length, 10, "puntas de corriente (clima)");
+  assert.ok(!m.layers.has("wx-arrows-dot"), "el círculo viejo ya no va");
 });
+
+// --- E13.7: olas con punta y puntas de corriente más chicas ------------
+
+test("E13.7 las olas del pronóstico llevan punta por altura", () => {
+  const pkg = fcPackage(4);
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  updateForecastWeather(m.map, null, pkg, slotTime(pkg, 1));
+
+  const arrows = m.data.get("wx-waves")!.features;
+  const heads = m.data.get("wx-waves-head")!.features;
+  assert.ok(heads.length > 0, "sin olas");
+  assert.equal(heads.length, arrows.length, "una punta por flecha de ola");
+  for (let i = 0; i < heads.length; i++) {
+    const arrow = arrows[i] as { geometry: { coordinates: [number, number][] } };
+    const head = heads[i] as {
+      properties: { h: number };
+      geometry: { coordinates: [number, number][][] };
+    };
+    assert.equal(head.properties.h, 1.8, "misma altura que la ola, para la rampa de color");
+    checkHead(
+      head.geometry.coordinates[0]!,
+      arrow.geometry.coordinates[0]!,
+      arrow.geometry.coordinates[1]!,
+      WX_HEAD_WAVE,
+    );
+  }
+});
+
+test("E13.7 las olas de climatología no llevan punta (sin dirección)", () => {
+  const pkg = fcPackage(4);
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3600_000);
+  assert.ok((m.data.get("wx-waves")?.features.length ?? 0) > 0, "hay olas de clima");
+  assert.equal(m.data.get("wx-waves-head")?.features.length, 0, "cajas sin dirección: sin punta");
+});
+
+test("E13.7 la punta de corriente es más chica que la de viento", () => {
+  assert.ok(WX_HEAD_CURRENT.back < WX_HEAD_WIND.back, "las alas van menos atrás");
+  assert.ok(WX_HEAD_CURRENT.half < WX_HEAD_WIND.half, "alas más angostas");
+  assert.ok(Math.abs(WX_HEAD_CURRENT.back - 0.2) < 1e-9, "~20 % del largo, no ~35 %");
+  assert.ok(WX_HEAD_CURRENT.maxDeg < Infinity, "con tope absoluto en grados");
+  assert.ok(WX_HEAD_WAVE.back > 0 && WX_HEAD_WAVE.back < WX_HEAD_WIND.back, "olas: punta intermedia");
+});
+
