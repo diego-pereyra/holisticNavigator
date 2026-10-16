@@ -175,4 +175,18 @@ que baja a 17 produce rutas mar adentro irreales — peor producto para ganar un
 enunciado era mi estimación, no un requisito del producto. (4) Quedan registrados los conteos
 reales: 400 rutas / 779 variantes (la spec citaba 2 268, que era el conteo viejo del backlog).
 
+## E12.5 · capa del trazado optimizado no está en "Nombres fijos" — desvío
+
+**Qué falla (en la spec).** El botón "Optimizar con el viento" muestra un trazado propuesto punteado
+sobre el mapa, pero la tabla "Nombres fijos" (`docs/04-backlog-ux.md` §orden de capas) solo define
+`wx-isochrones` (que sí se usa, `#80CBC4` α0,45, 1 px). No hay id ni color fijado para la línea de la
+propuesta.
+
+**Qué hice.** Se agregó la capa `route-opt` (source `optroute`), dibujada con el color ya fijo de la
+ruta activa (`#4FC3F7`, 2,5 px) pero punteada `[3, 2]`, para distinguirla de la ruta real sin
+inventar un color nuevo. Se apaga al "Descartar" o al cambiar de ruta.
+
+**Decisión pendiente:** confirmar el nombre `route-opt`/`optroute` (o asignarle uno en la tabla de
+Nombres fijos).
+
 

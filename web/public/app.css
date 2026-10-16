@@ -1998,3 +1998,57 @@ html[data-theme="red"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* E12.5 — optimización con el viento (isócronas + trazado óptimo). */
+.hn-optimize {
+  margin: 10px 0;
+  padding: 10px 12px;
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line);
+  border-left: 3px solid var(--hn-info);
+  border-radius: 8px;
+}
+.hn-opt-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.hn-opt-status {
+  color: var(--hn-muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-opt-compare {
+  margin: 8px 0 4px;
+  color: var(--hn-fg);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.hn-opt-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  color: var(--hn-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.hn-opt-acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.hn-btn-ghost {
+  background: transparent;
+}
+.hn-readonly-acts {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 8px;
+}
+.hn-err {
+  margin: 6px 0 0;
+  color: var(--hn-error);
+  font-size: 13px;
+}
+

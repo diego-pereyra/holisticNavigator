@@ -113,6 +113,21 @@ export function reverseRoute(route: OwnRoute): OwnRoute {
   return normalize({ ...route, waypoints: [...route.waypoints].reverse() });
 }
 
+// E12.5 — reemplaza todos los waypoints (aplicar la optimización del viento):
+// conserva id, nombre y fecha de creación, recalcula la distancia y actualiza
+// la fecha de modificación. Waypoints independientes de los de entrada.
+export function replaceWaypoints(
+  route: OwnRoute,
+  points: { name: string; lat: number; lon: number }[],
+  now = Date.now(),
+): OwnRoute {
+  return normalize({
+    ...route,
+    updatedAt: now,
+    waypoints: points.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon })),
+  });
+}
+
 export function renameRoute(route: OwnRoute, name: string): OwnRoute {
   const clean = name.trim() === "" ? route.name : name.trim();
   return { ...route, name: clean };

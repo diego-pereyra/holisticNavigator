@@ -65,10 +65,18 @@ import {
   ownRoutes,
   renderMisRutas,
   renderOwnFicha,
+  replaceOwnRoute,
   type OwnCtx,
 } from "./routes-own.ts";
-import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix } from "../core/navigation.ts";
+import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix, type LonLat } from "../core/navigation.ts";
 import type { OwnRoute } from "../core/routes-own.ts";
+import { genericPolar } from "../core/routing/polar.ts";
+import { forecastHorizon } from "../core/routing/windfield.ts";
+import {
+  type IsoBaseline,
+  type IsoResult,
+  type IsoWorkerResponse,
+} from "../core/routing/isochrones.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
   evalAlarms,
@@ -766,7 +774,17 @@ function installBaseLayers(map: MlMap): void {
   // y por debajo de catálogo, rutas y posición (nada tapa rutas ni avisos).
   initWeatherLayers(map);
 
-  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp", "anchor", "mob"]) {
+  // Isócronas del enrutado con el viento (E12.5): capa wx- en el tramo fijo,
+  // justo por encima de las flechas de viento y por debajo de rutas.
+  map.addSource("wx-isochrones", { type: "geojson", data: empty });
+  map.addLayer({
+    id: "wx-isochrones",
+    type: "line",
+    source: "wx-isochrones",
+    paint: { "line-color": "#80CBC4", "line-opacity": 0.45, "line-width": 1 },
+  });
+
+  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp", "anchor", "mob", "optroute"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
 
@@ -811,6 +829,14 @@ function installBaseLayers(map: MlMap): void {
     type: "line",
     source: "selected",
     paint: { "line-color": "#4FC3F7", "line-opacity": 0.6, "line-width": 2.2 },
+  });
+  // Trazado óptimo propuesto (E12.5): mismo color que la ruta activa pero
+  // punteado, para distinguirlo de la ruta real sin inventar un color nuevo.
+  map.addLayer({
+    id: "route-opt",
+    type: "line",
+    source: "optroute",
+    paint: { "line-color": "#4FC3F7", "line-width": 2.5, "line-dasharray": [3, 2] },
   });
   // Waypoints de la ruta elegida: puntos tocables para seleccionar la fila (W4.5 #3 bis).
   map.addLayer({
@@ -3184,7 +3210,303 @@ function accordion(
   host.append(acc);
 }
 
+// ----------------------------------------- optimización con el viento (E12.5)
+
+interface OptJob {
+  code: string;
+  kind: "book" | "own";
+  coords: LonLat[];
+  names: string[];
+  status: "running" | "done" | "cancelled" | "error";
+  ratio: number;
+  workerId: number;
+  result: IsoResult | null;
+  baseline: IsoBaseline | null;
+  climateOnly: boolean;
+  beyondForecast: boolean;
+  error?: string;
+}
+
+const optJobs = new Map<string, OptJob>();
+const optJobCode = new Map<number, string>();
+let optWorker: Worker | null = null;
+let optJobSeq = 0;
+let optLandBytes: Uint8Array | null = null;
+let optPanelEl: HTMLElement | null = null;
+let optPanelMeta: { code: string; kind: "book" | "own"; coords: LonLat[]; names: string[] } | null = null;
+
+async function optLandBytesLoad(): Promise<Uint8Array> {
+  if (optLandBytes) return optLandBytes;
+  const res = await fetch(new URL("basemap/land.bits", document.baseURI));
+  if (!res.ok) throw new Error(`land.bits: ${res.status}`);
+  optLandBytes = new Uint8Array(await res.arrayBuffer());
+  return optLandBytes;
+}
+
+function optWorkerGet(ui: UiState): Worker {
+  if (!optWorker) {
+    optWorker = new Worker(new URL("isochrones.worker.js", document.baseURI), { type: "module" });
+    optWorker.onmessage = (ev: MessageEvent) => optHandle(ui, ev.data as IsoWorkerResponse);
+  }
+  return optWorker;
+}
+
+function optHandle(ui: UiState, msg: IsoWorkerResponse): void {
+  const code = optJobCode.get(msg.id);
+  if (!code) return;
+  const job = optJobs.get(code);
+  if (!job) return;
+  if (msg.type === "progress") {
+    job.status = "running";
+    job.ratio = msg.progress.ratio;
+  } else if (msg.type === "done") {
+    job.status = "done";
+    job.ratio = 1;
+    job.result = msg.result;
+    job.baseline = msg.baseline;
+    const pkg = ui.forecast();
+    job.beyondForecast = !!pkg && !job.climateOnly && job.result.etaMs > forecastHorizon(pkg);
+    optJobCode.delete(msg.id);
+  } else if (msg.type === "cancelled") {
+    job.status = "cancelled";
+    optJobCode.delete(msg.id);
+  } else {
+    job.status = "error";
+    job.error = msg.message;
+    optJobCode.delete(msg.id);
+  }
+  optRefreshPanel(ui);
+  optDraw(ui, code);
+}
+
+async function optStart(
+  ui: UiState,
+  code: string,
+  kind: "book" | "own",
+  coords: LonLat[],
+  names: string[],
+): Promise<void> {
+  if (coords.length < 2) return;
+  const pkg = ui.forecast();
+  const month = ui.month();
+  let clim = ui.clim.get(month) ?? null;
+  if (!clim) clim = await ensureClim(ui, month);
+  if (!clim && !pkg) {
+    optJobs.set(code, {
+      code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
+      climateOnly: true, beyondForecast: false, error: "no hay datos de viento",
+    });
+    optRefreshPanel(ui);
+    return;
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await optLandBytesLoad();
+  } catch (err) {
+    optJobs.set(code, {
+      code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
+      climateOnly: !pkg, beyondForecast: false, error: err instanceof Error ? err.message : String(err),
+    });
+    optRefreshPanel(ui);
+    return;
+  }
+  const id = ++optJobSeq;
+  const job: OptJob = {
+    code, kind, coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
+    climateOnly: !pkg, beyondForecast: false,
+  };
+  optJobs.set(code, job);
+  optJobCode.set(id, code);
+  job.workerId = id;
+  optWorkerGet(ui).postMessage({
+    type: "run",
+    id,
+    from: coords[0]!,
+    to: coords[coords.length - 1]!,
+    startMs: Date.now(),
+    original: coords,
+    pkg,
+    clim,
+    polar: genericPolar(),
+    landBytes: bytes,
+    climateOnly: !pkg,
+  });
+  optRefreshPanel(ui);
+}
+
+function optDraw(ui: UiState, code: string): void {
+  if (!optPanelMeta || optPanelMeta.code !== code) return;
+  const job = optJobs.get(code);
+  if (!job?.result) {
+    setSource(ui.map, "wx-isochrones", featureCollection([]));
+    setSource(ui.map, "optroute", featureCollection([]));
+    return;
+  }
+  const isos = job.result.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
+  setSource(ui.map, "wx-isochrones", featureCollection(isos));
+  const line = job.result.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+  setSource(ui.map, "optroute", featureCollection([lineFeature(line)]));
+}
+
+function optClearLayers(ui: UiState): void {
+  setSource(ui.map, "wx-isochrones", featureCollection([]));
+  setSource(ui.map, "optroute", featureCollection([]));
+}
+
+function optWaypointName(names: string[], i: number, n: number): string {
+  if (i === 0) return names[0] ?? "Inicio";
+  if (i === n - 1) return names[names.length - 1] ?? "Fin";
+  return `WP${i + 1}`;
+}
+
+function optApply(ui: UiState, code: string): void {
+  const job = optJobs.get(code);
+  const route = ownRouteById(code);
+  if (!job?.result || !route) return;
+  const pts = job.result.waypoints.map((w, i) => ({
+    name: optWaypointName(job.names, i, job.result!.waypoints.length),
+    lat: w.lat,
+    lon: w.lon,
+  }));
+  const before = route.waypoints.map((w) => ({ ...w }));
+  replaceOwnRoute(ownCtx(ui), route, pts);
+  showUndoBand("Optimización aplicada", () => {
+    const cur = ownRouteById(code);
+    if (cur) replaceOwnRoute(ownCtx(ui), cur, before);
+  });
+  optDiscard(ui, code);
+}
+
+function optDiscard(ui: UiState, code: string): void {
+  optJobs.delete(code);
+  optClearLayers(ui);
+  optRefreshPanel(ui);
+}
+
+function optCompareText(job: OptJob): string {
+  const r = job.result!;
+  const base = job.baseline!;
+  const dEta = (job.baseline!.etaMs - r.etaMs) / 3600_000;
+  const dNm = r.nm - base.nm;
+  const parts = [
+    `${dEta >= 0 ? "−" : "+"}${knTexto(Math.abs(dEta))} h`,
+    `${dNm >= 0 ? "+" : "−"}${nmDecimal(Math.abs(dNm))}`,
+  ];
+  if (job.baseline!.windMax > 0 || r.windMax !== null) {
+    parts.push(`viento máx ${job.baseline!.windMax > 0 ? knTexto(job.baseline!.windMax) : "—"} → ${r.windMax !== null ? knTexto(r.windMax) : "—"} kn`);
+  }
+  return parts.join(" · ");
+}
+
+function optRender(
+  ui: UiState,
+  panel: HTMLElement,
+  code: string,
+  kind: "book" | "own",
+  coords: LonLat[],
+  names: string[],
+): void {
+  clear(panel);
+  panel.dataset.code = code;
+  const job = optJobs.get(code);
+  const hasPkg = !!ui.forecast();
+  const canRun = coords.length >= 2;
+  const head = el("div", { class: "hn-opt-head" });
+
+  if (job?.status === "running") {
+    head.append(
+      el("span", { class: "hn-opt-status" }, `Calculando… ${Math.round(job.ratio * 100)}%`),
+      (() => {
+        const cancel = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Cancelar");
+        cancel.addEventListener("click", () => optWorker?.postMessage({ type: "cancel", id: job.workerId }));
+        return cancel;
+      })(),
+    );
+  } else {
+    const run = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, hasPkg ? "Optimizar con el viento" : "Ruta del mes");
+    run.disabled = !canRun;
+    run.addEventListener("click", () => void optStart(ui, code, kind, coords, names));
+    head.append(el("span", { class: "hn-opt-status" }, "Optimización"), run);
+  }
+  panel.append(head);
+
+  if (!canRun) {
+    panel.append(el("p", { class: "hn-muted" }, "La ruta necesita al menos dos waypoints."));
+    return;
+  }
+
+  if (job?.status === "done" && job.result && job.baseline) {
+    panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
+    const stats = el("div", { class: "hn-opt-stats" });
+    stats.append(
+      el("span", {}, `Optimizada: ${duracionTexto(job.result.etaMs / 3600_000)} · ${nm(job.result.nm)}`),
+      el("span", {}, `Ceñidas: ${job.result.tacks} bordos`),
+      el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`),
+    );
+    panel.append(stats);
+    if (job.beyondForecast) {
+      panel.append(el("p", { class: "hn-muted" }, "Pasado el horizonte del pronóstico se usa la climatología del mes."));
+    }
+    const acts = el("div", { class: "hn-opt-acts" });
+    if (kind === "own") {
+      const apply = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Aplicar optimización");
+      apply.addEventListener("click", () => optApply(ui, code));
+      acts.append(apply);
+    }
+    const close = el("button", { class: "hn-btn hn-btn-mini hn-btn-ghost", type: "button" }, "Descartar");
+    close.addEventListener("click", () => {
+      optJobs.delete(code);
+      optDraw(ui, code);
+      optRefreshPanel(ui);
+    });
+    acts.append(close);
+    panel.append(acts);
+  } else if (job?.status === "cancelled") {
+    panel.append(el("p", { class: "hn-muted" }, "Optimización cancelada."));
+  } else if (job?.status === "error") {
+    panel.append(el("p", { class: "hn-err" }, `No se pudo optimizar: ${job.error ?? "error"}.`));
+  } else if (job?.status === "running") {
+    panel.append(el("p", { class: "hn-muted" }, "Trazando isócronas…"));
+  } else {
+    panel.append(
+      el(
+        "p",
+        { class: "hn-muted" },
+        hasPkg
+          ? "Calcula el trazado de menor tiempo con el viento. No cambia la ruta hasta que apliques."
+          : "Usa la climatología del mes (promedio histórico). Descargá el pronóstico para más precisión.",
+      ),
+    );
+  }
+  if (job?.result) optDraw(ui, code);
+}
+
+function optMount(
+  ui: UiState,
+  host: HTMLElement,
+  code: string,
+  kind: "book" | "own",
+  coords: LonLat[],
+  names: string[],
+): void {
+  const panel = el("div", { class: "hn-optimize" });
+  host.append(panel);
+  optPanelEl = panel;
+  optPanelMeta = { code, kind, coords, names };
+  optRender(ui, panel, code, kind, coords, names);
+}
+
+function optRefreshPanel(ui: UiState): void {
+  const meta = optPanelMeta;
+  const panel = optPanelEl;
+  if (!meta || !panel || !panel.isConnected) return;
+  optRender(ui, panel, meta.code, meta.kind, meta.coords, meta.names);
+}
+
 function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
+  optPanelEl = null;
+  optPanelMeta = null;
+  optClearLayers(ui);
   // Cabecera y acciones fijas (W4.5 #1): quedan pegadas arriba de la columna.
   const head = el("div", { class: "hn-ficha-head" });
   const back = el("button", { class: "hn-back" }, "‹ Rutas");
@@ -3200,6 +3522,9 @@ function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: stri
     const host = el("div", { class: "hn-ficha-host" });
     body.append(host);
     renderOwnFicha(host, ownCtx(ui), own);
+    const coords = own.waypoints.map((w) => [w.lon, w.lat] as LonLat);
+    const names = own.waypoints.map((w) => w.name);
+    optMount(ui, host, own.id, "own", coords, names);
     return;
   }
 
@@ -3283,9 +3608,22 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   head.append(actions);
 
   const readonly = el("div", { class: "hn-readonly" });
+  const readonlyBtns = el("span", { class: "hn-readonly-acts" });
+  readonlyBtns.append(copiar);
+  // E12.5: si ya hay optimización, se puede copiar también el trazado óptimo.
+  const optJob = optJobs.get(d.code);
+  if (optJob?.status === "done" && optJob.result) {
+    const copiarOpt = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Copiar optimizada");
+    copiarOpt.addEventListener("click", () => {
+      const r = optJob.result!;
+      const coords = r.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+      copyToOwn(ownCtx(ui), `${d.code} optimizada`, coords, optJob.names);
+    });
+    readonlyBtns.append(copiarOpt);
+  }
   readonly.append(
     el("span", { class: "hn-readonly-text" }, "Ruta del libro · solo lectura — Copiala para editarla"),
-    copiar,
+    readonlyBtns,
   );
   head.append(readonly);
 
@@ -3433,6 +3771,10 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
       if (d.attribution) b.append(el("p", { class: "hn-attrib" }, d.attribution));
     });
   }
+
+  // E12.5: optimización con el viento sobre la ruta del libro (solo lectura).
+  const g = selectedGeometry(ui, d.code);
+  if (g) optMount(ui, host, d.code, "book", g.coords, g.names);
 }
 
 // E8.3: "Viento medio en ruta". Muestrea la climatología del mes a lo largo del

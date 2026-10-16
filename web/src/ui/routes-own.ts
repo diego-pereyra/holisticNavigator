@@ -17,6 +17,7 @@ import {
   ownRouteFromPoints,
   ownRouteToGpx,
   removeWaypoint,
+  replaceWaypoints,
   renameRoute,
   renameWaypoint,
   reverseRoute,
@@ -128,6 +129,22 @@ export function copyToOwn(
   void saveOwnRoute(ctx.store, r);
   openOwnEditor(ctx, r);
   return r;
+}
+
+// E12.5 — aplica el resultado de la optimización a una ruta propia: reemplaza
+// sus waypoints (recálculo de nm) conservando id y nombre. Devuelve la ruta
+// previa para la banda de deshacer.
+export function replaceOwnRoute(
+  ctx: OwnCtx,
+  route: OwnRoute,
+  points: { name: string; lat: number; lon: number }[],
+): OwnRoute {
+  const updated = replaceWaypoints(route, points);
+  ownRoutes.update((list) => list.map((r) => (r.id === updated.id ? updated : r)));
+  if (ownEdit()?.id === updated.id) ownEdit.set(updated);
+  void saveOwnRoute(ctx.store, updated);
+  ctx.redraw();
+  return updated;
 }
 
 // Copia una ruta propia (o una copia) a una nueva ruta propia independiente.

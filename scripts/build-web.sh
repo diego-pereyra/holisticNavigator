@@ -29,6 +29,11 @@ mkdir -p web/dist
 "$ESBUILD" web/src/main.ts --bundle --minify --format=esm --target=es2020 \
   --outfile=web/dist/main.js
 
+# Worker de enrutado (E12.5): bundle aparte, mismo patrón que main.js; entra al
+# precache del service worker como cualquier otro archivo de la dist.
+"$ESBUILD" web/src/core/routing/isochrones.worker.ts --bundle --minify --format=esm --target=es2020 \
+  --outfile=web/dist/isochrones.worker.js
+
 cp -R web/public/. web/dist/
 # Worker de MapLibre (archivo aparte, ver main.ts)
 cp web/node_modules/maplibre-gl/dist/maplibre-gl-worker.mjs web/dist/
