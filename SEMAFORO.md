@@ -13,11 +13,15 @@ Archivos: web/src/ui/app.ts, web/src/core/routes-own.ts (+test), web/public/app.
    propias — y queda seleccionada, lista para Seguir, Exportar o editar.
 2. Solo lectura reforzada: en rutas del catálogo el editor no abre; la ficha muestra
    "Ruta del libro · solo lectura — Copiala para editarla" con el botón al lado.
-3. Editor (existe de E11.4): verificar que agregar/quitar/mover waypoints y eliminar la ruta
-   funcionan en propias, importadas y copias, con recálculo de nm al editar.
+3. Editor y eliminación (existe de E11.4; hoy falta poder eliminar — Diego lo probó):
+   "Eliminar ruta" SOLO en Mis rutas (propias, importadas y copias): en la ficha y al final
+   de la fila de Mis rutas, con confirmación en banda ("¿Eliminar <nombre>? · Eliminar", sin
+   modal del navegador). Las rutas del catálogo jamás muestran "Eliminar". Verificar que
+   agregar/quitar/mover waypoints funcionan en propias, importadas y copias, con recálculo
+   de nm al editar.
 4. Tests: copiar una del catálogo produce una propia idéntica (mismos waypoints) marcada
    como propia; copiar una propia produce dos rutas independientes (editar una no toca la
-   otra).
+   otra); eliminar quita la ruta del store y de la lista, y no reaparece tras recargar.
 5. npm test (en web/), bash scripts/build-web.sh, commit "E11.5: copiar ruta + catálogo solo
    lectura", push, PARÁ.
 
