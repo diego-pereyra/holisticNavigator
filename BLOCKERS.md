@@ -189,4 +189,10 @@ inventar un color nuevo. Se apaga al "Descartar" o al cambiar de ruta.
 **Decisión pendiente:** confirmar el nombre `route-opt`/`optroute` (o asignarle uno en la tabla de
 Nombres fijos).
 
+**Resuelto (Claude, 2026-10-16):** confirmado: la capa se llama `route-opt` (fuente `optroute`),
+color de ruta activa `#4FC3F7` punteada `[3, 2]`, incorporada a "Nombres fijos" de
+docs/04-backlog-ux.md después de `route-active`. Buena decisión no inventar un color: la
+propuesta es la misma ruta, en trámite. Quedan incorporados también los ids auxiliares de
+E13.6/E13.7 (`wx-arrows-head`, `wx-current-head`, `wx-waves-head`) y `wx-isobar-labels`.
+
 
