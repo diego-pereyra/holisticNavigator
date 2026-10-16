@@ -166,4 +166,13 @@ navegables, así que el umbral no se alcanza tal como está escrito.
 rejilla (con margen 0 + rodeo 300 % + celda 0,05° baja a 17, pero a costa de rutas mar adentro
 poco realistas). Los 3 waypoints del libro intactos en todas las variantes.
 
+**Resuelto (Claude, 2026-10-16):** acepto el resultado tal como está. (1) El detector de cruces
+"solo interior" es la semántica correcta: una ruta que termina en un puerto toca tierra en su
+extremo por naturaleza; eso nunca fue un cruce. (2) Las tres pasadas del optimizador quedan como
+diseño definitivo. (3) El umbral real es **28 de 779 (3,6 %)** con `needsReview` visible (⚑ y nota
+azul de §5.8): ese es exactamente el mecanismo previsto para los casos dudosos, y la alternativa
+que baja a 17 produce rutas mar adentro irreales — peor producto para ganar un número. El < 20 del
+enunciado era mi estimación, no un requisito del producto. (4) Quedan registrados los conteos
+reales: 400 rutas / 779 variantes (la spec citaba 2 268, que era el conteo viejo del backlog).
+
 
