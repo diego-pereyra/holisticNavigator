@@ -1,54 +1,59 @@
 ADELANTE
 
-TAREA ÚNICA: E12.7 — Optimizador v3: tramos robustos y contrato de falla. (Iteración
-sobre E12.6 con Diego, 2026-10-18.)
+TAREA ÚNICA: E12.8 — El optimizador fino con la tierra: margen real, corredores y anclas de
+confianza. (Reporte de Diego tras E12.7: "me dice bloqueado por tierra y todavía no llegué a
+la isla; tiene que ser más fino con la tierra; sino no va a poder entrar por canales; si tengo
+un punto obligatorio debe tomarse como correcto".)
 
-Contexto: E12.6 (commit 984be7f) dejó los modos de ponderación, el flag "obligatorio" por
-waypoint y el rodeo de islas con supercover. Faltan tres bordes que aparecen en casos
-reales —origen en puerto, destino en tierra, islas chicas que la simplificación "recorta"—
-y una salida digna cuando un tramo no se puede trazar.
+Diagnóstico ya hecho (no buscar más):
+- web/src/core/routing/landmask.ts:62-79 — isLandWithMargin con nm=3 usa una caja de
+  k=ceil(3/6)=1 celda alrededor de cada muestra: bloquea hasta ~0,15-0,2° (~9-12 nm) alrededor
+  de CADA celda de tierra. Un canal de menos de ~12 nm queda bloqueado de lado a lado: de ahí
+  el "bloqueado por tierra" sin haber llegado a la isla.
+- isochrones.ts (motivo mentiroso) — con reached:false, el motivo se diagnostica con la RECTA
+  origen→destino (segmentClear(origin, dest)): como esa recta cruza la isla — que es justo lo
+  que el enrutado evita — el motivo dice "bloqueado por tierra" SIEMPRE que hay obstáculo de
+  por medio, aunque la frontera haya muerto a 100 nm por otra razón.
+- La gracia de las anclas es ±0,1° (graceDeg = max(3,6)/60): insuficiente para puertos en
+  bahías cóncavas y para confiar en un punto obligatorio pegado a la costa.
+- El paso cerca de costa avanza ~5-8 nm por salto (1 h): un canal de 4 nm no se atraviesa si
+  ningún rumbo aterriza adentro; falta reintento con paso reducido.
 
-Archivos: web/src/core/routing/isochrones.ts, isochrones.test.ts,
-web/src/core/routing/landmask.ts (+test), web/src/core/routes-own.ts (+test),
-web/src/ui/app.ts, web/public/app.css (solo si hace falta para "Bordo n").
+Reglas de Diego (van como contrato):
+- Un waypoint obligatorio (⚓) es CORRECTO por definición: el optimizador confía en él y jamás
+  lo rechaza por tierra.
+- Tiene que entrar por canales: el margen de 3 nm es 3 nm de verdad, no una caja de una celda.
 
-1. **Extremos exentos.** Los extremos de cada tramo (las anclas: waypoints obligatorios; en el
-   primer/último, origen y destino) quedan **exentos** del chequeo de tierra con margen: un
-   puerto puede estar en tierra o a menos de 3 nm de la costa y el tramo debe poder
-   arrancar/terminar ahí. El resto del trazado sigue validado (supercover con margen).
-2. **Salto de anclaje verificado.** El tramo entre dos anclas consecutivas se cierra uniendo los
-   waypoints optimizados; ese cierre (y cualquier salto de la frontera) se valida con el mismo
-   supercover (paso ≤ 0,05° con margen), para que una isla de 1 celda no se pueda saltar de borde
-   a borde.
-3. **Post-verificación de la simplificación.** Tras simplificar/capear los waypoints de cada tramo
-   (tol 0,1°, tope ~15), se re-verifica la polilínea reconstruida: ningún segmento puede cruzar
-   tierra con margen ni superar el TWS máximo del modo. Si el recorte introduce un cruce, se
-   reintroducen los waypoints necesarios (hasta el tope) para que la traza aplicada sea siempre
-   navegable.
-4. **Contrato de falla.** Si un tramo no llega: `reached: false` + `reason` (texto corto: sin
-   viento, bloqueado por tierra, TWS > máximo…). El resultado NUNCA contiene una recta
-   ancla-a-ancla de un tramo fallido (hoy, al no llegar, se conservaba el último nodo y el cierre
-   podía dibujar/guardar una recta inválida). En la UI, "Aplicar optimización" queda
-   **deshabilitado** con `reached:false` y se muestra el motivo; solo se puede Descartar.
-5. **"Bordo n".** Los waypoints que caen en una virada se nombran por su bordo ("Bordo 1",
-   "Bordo 2", …) al aplicar, en lugar de `WPn`, para que la traza sea legible. El conteo de ceñidas
-   sigue en la comparación de E12.6 ("Ceñidas: N bordos"); los waypoints que no son virada
-   conservan la numeración `WPn`.
-6. **Épsilon de índice.** En `landmask.ts`, el índice de celda pasa a `floor((v + origin) * 10 +
-   1e-6)` (no `/0.1` ni media celda), para que un borde exacto (p. ej. `-3.8`) no caiga en la
-   celda vecina por error de redondeo.
-7. **Tests (6):**
-   (a) origen en puerto / destino en tierra → `reached:true` y ningún punto intermedio pisa tierra
-       con margen;
-   (b) isla de 1 celda en el punto medio entre dos anclas → el salto de anclaje la rodea
-       (supercover), no la cruza;
-   (c) la simplificación no recorta una isla: un tramo con quiebre alrededor de una isla chica
-       queda navegable tras simplificar;
-   (d) tramo irresoluble → `reached:false` + `reason`, sin recta ancla-a-ancla en el resultado;
-   (e) "Bordo n": las viradas se nombran "Bordo 1..n" y el conteo coincide;
-   (f) épsilon de índice: bordes exactos (p. ej. `-3.8`) sin off-by-one.
-8. **Prueba de Diego en el celu:** ruta a Fernando de Noronha con waypoint de anclaje ⚓
-   (obligatorio) → entra sin pisar la isla; origen en un puerto → arranca igual; destino detrás de
-   una isla → la rodea y, si no puede, no aplica y avisa por qué.
-9. npm test (en web/), bash scripts/build-web.sh, commit "E12.7: tramos robustos, contrato de falla
-   y 'Bordo n'", push, PARÁ.
+Archivos: web/src/core/routing/landmask.ts (+test), web/src/core/routing/isochrones.ts
+(+test), web/src/ui/app.ts (solo el texto del motivo).
+
+1. **Margen fino (transformada de distancia):** al decodificar la máscara, calcular una
+   transformada de distancia (dos pasadas, chamfer; el paso horizontal ponderado por
+   cos(latitud) por fila — o BFS con costes escalados, a criterio). isLandWithMargin(lat,
+   lon, nm) pasa a comparar la distancia REAL en millas contra nm. El margen de 3 nm bloquea
+   3 nm, no 9-12. nm=0 sigue siendo isLand puro. El cálculo corre una vez al cargar
+   (< 300 ms en un móvil medio; mantener el test de 1 M de consultas < 50 ms).
+2. **Anclas de confianza:** la gracia por ancla sube a ±0,2° (~12 nm) y las anclas (from/to de
+   cada tramo, incluidos los ⚓) son VERDAD: el motivo de falla jamás las cuestiona. El
+   usuario marcó el punto; el optimizador lo respeta.
+3. **Motivo honesto:** eliminar el diagnóstico por recta origen→destino. El motivo sale del
+   último estado de la frontera (contar por qué mueren los candidatos: tierra / sin viento /
+   TWS máximo / límite de bordos) y dice DÓNDE murió: "sin corredor navegable cerca de (lat,
+   lon)", "sin datos de viento en la zona", "viento supera el máximo del modo", "se agotaron
+   los pasos antes de llegar". Nunca "bloqueado por tierra" si la frontera murió lejos del
+   obstáculo.
+4. **Paso adaptativo en corredores:** si TODOS los candidatos de un punto mueren por tierra,
+   reintentar ese punto con Δt reducido a la mitad (piso 15 min) antes de darlo por muerto:
+   pasos de 1-2 nm atraviesan canales que los de 7 nm saltan.
+5. **Tests:** (a) canal de 0,2° (12 nm) entre isla y continente → el trazado lo atraviesa con
+   margen de 3 nm; (b) isLandWithMargin en el medio de un canal de 0,1° con margen 3 nm →
+   false (el margen es 3 nm reales, no la caja); (c) motivo honesto: frontera muerta lejos del
+   obstáculo → el texto no dice "bloqueado por tierra" y trae la posición; (d) ancla a 1 nm de
+   la costa → el tramo parte y llega sin rechazo; (e) reintento de paso: corredor de ~3 nm →
+   al menos un candidato sobrevive con Δt reducido; (f) TODOS los tests de E12.7 siguen
+   verdes (puerto, isla de 1 celda, simplificación, "Bordo n").
+6. Prueba de Diego en el celu: Noronha por el norte ⚓ y un canal angosto (p. ej. entre islas
+   del Caribe) → el optimizador entra; si algo no llega, el motivo dice dónde y por qué de
+   verdad.
+7. npm test (en web/), bash scripts/build-web.sh, commit "E12.8: margen fino, corredores y
+   anclas de confianza", push, PARÁ.
