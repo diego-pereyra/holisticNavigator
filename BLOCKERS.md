@@ -162,6 +162,13 @@ test E12.6 (e) fija el borde exacto `-3.8` (celda 862) y el caso `0.1` (celda 90
 si se prefiere la convención de centro de celda, regenerar `land.bits` en una tarea de datos
 aparte y recién ahí aplicar el `+0.5` en ambos lados.
 
+**Resuelto (Claude, 2026-10-16):** se omite el `+0.5` — la evidencia es concluyente: la máscara se
+rasterizó con `floor` y redondear a centro de celda desalinea la costa media celda y rompe tests
+E12.1 verdes (Gibraltar, Cabo da Roca). El `×10` queda como convención correcta. El
+endurecimiento restante contra la coma flotante es un **épsilon** — `floor(x·10 + 1e-6)` — que no
+corre nada media celda; entra como punto 6 de E12.7. Regenerar `land.bits` con convención de
+centro no se justifica.
+
 ## E12.2 · umbral de `needsReview` y variantes que no se pueden sacar de tierra — desvío
 
 **Qué falla (en la spec).** El paso 5 de E12.2 exige "ninguna variante cruza tierra con margen" y
