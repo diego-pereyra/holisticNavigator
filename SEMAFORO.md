@@ -1,50 +1,54 @@
 ADELANTE
 
-TAREA ÚNICA: E12.7 — La optimización no pisa tierra: completar el contrato de seguridad de
-E12.6 (el trazado optimizado cruza tierra; reporte de Diego tras 984be7f).
+TAREA ÚNICA: E12.7 — Optimizador v3: tramos robustos y contrato de falla. (Iteración
+sobre E12.6 con Diego, 2026-10-18.)
 
-Diagnóstico ya hecho (no buscar más):
-- web/src/core/routing/isochrones.ts:579-581 — el salto de anclaje final (candidato de
-  llegada → destino exacto, hasta ~29 nm en modo océano) jamás pasa por segmentClear.
-- isochrones.ts:583 — la simplificación Douglas-Peucker con tol 0,1° (~6 nm, el doble del
-  margen de 3 nm) endereza el trazado verificado y nunca se re-verifica contra la máscara.
-- isochrones.ts:404 — segmentClear muestrea desde i=0: el origen NO está exento. Un origen
-  o ancla en celda de puerto (los puertos son tierra en la máscara, lección de E12.2)
-  colapsa la frontera, el tramo no llega y multiRouteCoords une las anclas con líneas
-  rectas: el esqueleto que "pisa tierra".
-- Además faltan del spec aprobado: el contrato de falla (reached:false + reason, Aplicar
-  bloqueado — grep: cero "reached"/"reason" en la UI) y "Bordo n" (cero apariciones).
+Contexto: E12.6 (commit 984be7f) dejó los modos de ponderación, el flag "obligatorio" por
+waypoint y el rodeo de islas con supercover. Faltan tres bordes que aparecen en casos
+reales —origen en puerto, destino en tierra, islas chicas que la simplificación "recorta"—
+y una salida digna cuando un tramo no se puede trazar.
 
-Archivos: web/src/core/routing/isochrones.ts (+test), web/src/core/routing/landmask.ts,
-web/src/ui/app.ts, web/src/ui/routes-own.ts.
+Archivos: web/src/core/routing/isochrones.ts, isochrones.test.ts,
+web/src/core/routing/landmask.ts (+test), web/src/core/routes-own.ts (+test),
+web/src/ui/app.ts, web/public/app.css (solo si hace falta para "Bordo n").
 
-1. **Extremos exentos:** origen, destino y anclas obligatorias exentos del chequeo de
-   margen — solo el camino ENTRE extremos se verifica. segmentClear gana modo escape:
-   salta la muestra i=0 del origen y usa isLand sin margen a menos de ~0,05° de cada
-   extremo (salir y entrar a puerto es legal).
-2. **Salto de anclaje verificado:** un candidato solo "llega" si la recta de él al
-   destino exacto despeja la máscara (extremo exento); si no, la frontera sigue avanzando
-   y otro candidato puede llegar. Jamás reemplazar el último punto por las coordenadas del
-   destino sin verificar ese tramo.
-3. **Post-verificación de la simplificación:** cada segmento del trazado simplificado pasa
-   por segmentClear; el que falla se re-subdivide con los puntos crudos a tolerancia
-   mitad (piso 0,02°). Los waypoints emitidos siempre dibujan una línea que despeja la
-   máscara (salvo en los extremos exentos).
-4. **Contrato de falla:** tramo colapsado o no llegado → reached:false + reason
-   ("sin-camino" / "sin-viento-en-la-zona"); multiRouteCoords JAMÁS une anclas con recta
-   de un tramo fallido (el tramo se corta y se marca); Aplicar se bloquea con el aviso —
-   la ruta del usuario nunca se destruye por un cálculo fallido.
-5. **Bordo n (aprobado en E12.6, faltante):** los cambios de amura del camino
-   reconstruido se marcan como viradas; D-P no puede eliminarlos; al aplicar se llaman
-   "Bordo 1…n".
-6. **Épsilon de índice:** cellIndex/rowIndex pasan a floor(x·10 + 1e-6) (endurecimiento
-   menor; el +0,5 quedó descartado por desalinear la costa — resuelto en BLOCKERS).
-7. **Tests:** (a) origen en celda de puerto → corre y produce trazado (no esqueleto
-   recto); (b) destino tras isla de 1 celda → acercamiento final claro; (c) simplificación
-   con rodeo exigido < 6 nm → nunca cruza la máscara; (d) tramo fallido → reached:false y
-   Aplicar bloqueado; (e) contra el viento → ≥ 2 waypoints "Bordo" en zigzag; (f) índice
-   en -3,8 exacto y 0,1 exacto.
-8. Prueba de Diego en el celu: Noronha con aproximación al norte ⚓; ruta con origen en
-   puerto; ruta con destino tras una isla — ninguna línea pisa tierra.
-9. npm test (en web/), bash scripts/build-web.sh, commit "E12.7: la optimización no pisa
-   tierra (contrato de seguridad de E12.6)", push, PARÁ.
+1. **Extremos exentos.** Los extremos de cada tramo (las anclas: waypoints obligatorios; en el
+   primer/último, origen y destino) quedan **exentos** del chequeo de tierra con margen: un
+   puerto puede estar en tierra o a menos de 3 nm de la costa y el tramo debe poder
+   arrancar/terminar ahí. El resto del trazado sigue validado (supercover con margen).
+2. **Salto de anclaje verificado.** El tramo entre dos anclas consecutivas se cierra uniendo los
+   waypoints optimizados; ese cierre (y cualquier salto de la frontera) se valida con el mismo
+   supercover (paso ≤ 0,05° con margen), para que una isla de 1 celda no se pueda saltar de borde
+   a borde.
+3. **Post-verificación de la simplificación.** Tras simplificar/capear los waypoints de cada tramo
+   (tol 0,1°, tope ~15), se re-verifica la polilínea reconstruida: ningún segmento puede cruzar
+   tierra con margen ni superar el TWS máximo del modo. Si el recorte introduce un cruce, se
+   reintroducen los waypoints necesarios (hasta el tope) para que la traza aplicada sea siempre
+   navegable.
+4. **Contrato de falla.** Si un tramo no llega: `reached: false` + `reason` (texto corto: sin
+   viento, bloqueado por tierra, TWS > máximo…). El resultado NUNCA contiene una recta
+   ancla-a-ancla de un tramo fallido (hoy, al no llegar, se conservaba el último nodo y el cierre
+   podía dibujar/guardar una recta inválida). En la UI, "Aplicar optimización" queda
+   **deshabilitado** con `reached:false` y se muestra el motivo; solo se puede Descartar.
+5. **"Bordo n".** Los waypoints que caen en una virada se nombran por su bordo ("Bordo 1",
+   "Bordo 2", …) al aplicar, en lugar de `WPn`, para que la traza sea legible. El conteo de ceñidas
+   sigue en la comparación de E12.6 ("Ceñidas: N bordos"); los waypoints que no son virada
+   conservan la numeración `WPn`.
+6. **Épsilon de índice.** En `landmask.ts`, el índice de celda pasa a `floor((v + origin) * 10 +
+   1e-6)` (no `/0.1` ni media celda), para que un borde exacto (p. ej. `-3.8`) no caiga en la
+   celda vecina por error de redondeo.
+7. **Tests (6):**
+   (a) origen en puerto / destino en tierra → `reached:true` y ningún punto intermedio pisa tierra
+       con margen;
+   (b) isla de 1 celda en el punto medio entre dos anclas → el salto de anclaje la rodea
+       (supercover), no la cruza;
+   (c) la simplificación no recorta una isla: un tramo con quiebre alrededor de una isla chica
+       queda navegable tras simplificar;
+   (d) tramo irresoluble → `reached:false` + `reason`, sin recta ancla-a-ancla en el resultado;
+   (e) "Bordo n": las viradas se nombran "Bordo 1..n" y el conteo coincide;
+   (f) épsilon de índice: bordes exactos (p. ej. `-3.8`) sin off-by-one.
+8. **Prueba de Diego en el celu:** ruta a Fernando de Noronha con waypoint de anclaje ⚓
+   (obligatorio) → entra sin pisar la isla; origen en un puerto → arranca igual; destino detrás de
+   una isla → la rodea y, si no puede, no aplica y avisa por qué.
+9. npm test (en web/), bash scripts/build-web.sh, commit "E12.7: tramos robustos, contrato de falla
+   y 'Bordo n'", push, PARÁ.
