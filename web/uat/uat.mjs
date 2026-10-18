@@ -65,7 +65,10 @@ function tester(page, dir, journey) {
   };
 
   const exists = async (label, locator) => {
-    const found = (await locator.first().isVisible({ timeout: 2000 }).catch(() => false)) === true;
+    const found = await locator
+      .first()
+      .waitFor({ state: "visible", timeout: 2500 })
+      .then(() => true, () => false);
     note(`existe: ${label}`, found);
     return found;
   };

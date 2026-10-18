@@ -90,7 +90,7 @@ jobs:
           PY
           (cd /tmp/site && python3 /tmp/serve-range.py >/dev/null 2>&1 &)
           sleep 2
-      - name: Correr UAT (mide: no corta el workflow)
+      - name: "Correr UAT (mide: no corta el workflow)"
         run: node web/uat/uat.mjs http://localhost:8087/holisticNavigator/ web/uat/out
       - uses: actions/upload-artifact@v4
         if: always()
