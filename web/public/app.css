@@ -1977,6 +1977,20 @@ html[data-theme="red"] {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+.hn-own-mand {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  color: var(--hn-muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.hn-own-mand input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--hn-accent);
+}
 .hn-own-wp-acts {
   grid-column: 1 / -1;
   display: flex;
@@ -2006,6 +2020,9 @@ html[data-theme="red"] {
   border: 1px solid var(--hn-line);
   border-left: 3px solid var(--hn-info);
   border-radius: 8px;
+}
+.hn-opt-modes {
+  margin-bottom: 8px;
 }
 .hn-opt-head {
   display: flex;

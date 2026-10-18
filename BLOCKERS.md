@@ -141,6 +141,27 @@ enunciado (36 N, 5 W) cae en agua del estrecho; el test queda en el Peñón real
 de la franja costera (ahí la máscara 10m manda sobre la referencia 110m de `landcheck.py`); el
 umbral de 99 % del enunciado estaba mal planteado contra una referencia más gruesa.
 
+## E12.6 · el `+0.5` de la máscara desalinea la costa — desvío
+
+**Qué falla (en la spec).** El paso 5 de E12.6 pide usar `floor((lat+90)*10 + 0.5)` (ídem lon) al
+calcular los índices de `landmask.ts` y, si corresponde, en el generador. Medido: ese `+0.5`
+redondea a la **celda de centro más cercano**, pero `basemap/land.bits` se rasterizó con
+`floor((coord+offset)/0.1)` (`tools/build_landmask.py`, `px()` y `verify()`). El corrimiento de
+media celda (~0,05°) mueve la costa y **rompe tests E12.1 ya verdes**: "Gibraltar (36,14 N,
+5,35 W) es tierra" pasaba a mar, y "Cabo da Roca a 5 nm de la costa es mar" pasaba a tierra
+(la tierra se estira ~media celda hacia el mar). Regenerar `land.bits` con la nueva convención
+exige la fuente Natural Earth y la build de datos: queda fuera de esta tarea.
+
+**Qué hice.** Implementé la parte que sí corrige el off-by-one real: el índice se calcula
+**multiplicando por 10** — `floor((v + origin) * 10)` — en vez de **dividir por 0,1** (que en
+`0.1` da `900.99…` y caía en la celda 900 en vez de 901). **No** agregué el `+0.5` para no
+desalinear la lectura contra la máscara existente. Queda en helpers `cellIndex`/`rowIndex` y el
+test E12.6 (e) fija el borde exacto `-3.8` (celda 862) y el caso `0.1` (celda 901).
+
+**Decisión pendiente:** confirmar que se omite el `+0.5` (recomendado: el generador no lo usa) o,
+si se prefiere la convención de centro de celda, regenerar `land.bits` en una tarea de datos
+aparte y recién ahí aplicar el `+0.5` en ambos lados.
+
 ## E12.2 · umbral de `needsReview` y variantes que no se pueden sacar de tierra — desvío
 
 **Qué falla (en la spec).** El paso 5 de E12.2 exige "ninguna variante cruza tierra con margen" y

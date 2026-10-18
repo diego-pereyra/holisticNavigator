@@ -13,6 +13,28 @@ export const LANDMASK_BYTES = (LANDMASK_WIDTH * LANDMASK_HEIGHT) / 8; // 810 000
 // Celdas por grado (10, porque la rejilla es de 0,1°).
 const PER_DEG = 1 / LANDMASK_CELL_DEG;
 
+// E12.6 — índice de celda sin off-by-one de coma flotante: se multiplica por 10
+// (en vez de dividir por 0,1, que para 0,1 da 900,99… y cae en la celda 900) y
+// se toma el piso. Se multiplica por `PER_DEG` y no se suma 0,5: sumar media
+// celda correría la costa media celda (0,05°) y desalinearía la máscara (ver
+// BLOCKERS.md).
+function cellIndex(v: number, origin: number, count: number): number {
+  let i = Math.floor((v + origin) * PER_DEG);
+  i = i >= count ? i - count : i < 0 ? i + count : i;
+  return i;
+}
+
+// Igual que `cellIndex` pero acotado (no envuelve): para la fila (latitud).
+function rowIndex(lat: number): number {
+  const r = Math.floor((lat + 90) * PER_DEG);
+  return r < 0 ? 0 : r >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : r;
+}
+
+// Vuelta en la antimeridiana para una columna ya calculada.
+function wrapCol(c: number): number {
+  return c >= LANDMASK_WIDTH ? c - LANDMASK_WIDTH : c < 0 ? c + LANDMASK_WIDTH : c;
+}
+
 export interface Landmask {
   readonly width: number;
   readonly height: number;
@@ -27,14 +49,12 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
     throw new Error(`land.bits pesa ${bytes.length} B (esperado ${LANDMASK_BYTES})`);
   }
 
-  // Índice de celda de una posición normalizada: fila = lat·10 + 900 (clamp),
-  // columna = lon·10 + 1800 (con vuelta en la antimeridiana). Rápido a
+  // Índice de celda de una posición normalizada: fila = (lat+90)·10 (clamp),
+  // columna = (lon+180)·10 (con vuelta en la antimeridiana). Rápido a
   // propósito: es el camino de la consulta O(1).
   const isLand = (lat: number, lon: number): boolean => {
-    let col = ((lon + 180) * PER_DEG) | 0;
-    col = col >= LANDMASK_WIDTH ? col - LANDMASK_WIDTH : col < 0 ? col + LANDMASK_WIDTH : col;
-    let row = ((lat + 90) * PER_DEG) | 0;
-    row = row < 0 ? 0 : row >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row;
+    const col = cellIndex(lon, 180, LANDMASK_WIDTH);
+    const row = rowIndex(lat);
     const i = row * LANDMASK_WIDTH + col;
     return (bytes[i >> 3]! & (128 >> (i & 7))) !== 0;
   };
@@ -42,19 +62,15 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
   const isLandWithMargin = (lat: number, lon: number, nm: number): boolean => {
     if (!(nm > 0)) return isLand(lat, lon);
     const k = Math.max(1, Math.ceil(nm / 6)); // 6 nm ≈ 0,1° de latitud
-
-    let col = ((lon + 180) * PER_DEG) | 0;
-    col = col >= LANDMASK_WIDTH ? col - LANDMASK_WIDTH : col < 0 ? col + LANDMASK_WIDTH : col;
-    let row = ((lat + 90) * PER_DEG) | 0;
-    row = row < 0 ? 0 : row >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row;
+    const col = cellIndex(lon, 180, LANDMASK_WIDTH);
+    const row = rowIndex(lat);
 
     const r0 = row - k < 0 ? 0 : row - k;
     const r1 = row + k >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row + k;
     for (let r = r0; r <= r1; r++) {
       const base = r * LANDMASK_WIDTH;
       for (let dc = -k; dc <= k; dc++) {
-        let c = col + dc;
-        c = c >= LANDMASK_WIDTH ? c - LANDMASK_WIDTH : c < 0 ? c + LANDMASK_WIDTH : c;
+        const c = wrapCol(col + dc);
         const i = base + c;
         if ((bytes[i >> 3]! & (128 >> (i & 7))) !== 0) return true;
       }

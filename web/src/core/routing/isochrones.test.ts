@@ -2,7 +2,16 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { genericPolar } from "./polar.ts";
-import { routeOptimal, traverseRoute, type IsoInput } from "./isochrones.ts";
+import {
+  multiRouteCoords,
+  routeOptimal,
+  routeOptimalMulti,
+  routingModeConfig,
+  traverseRoute,
+  type IsoInput,
+  type IsoMultiInput,
+  type RoutingMode,
+} from "./isochrones.ts";
 import type { Landmask } from "./landmask.ts";
 import type { WindField } from "./windfield.ts";
 import type { LonLat } from "../navigation.ts";
@@ -113,4 +122,74 @@ test("E12.5 Canarias → Barbados con viento sintético en < 5 s", () => {
   assert.equal(res.reached, true);
   assert.ok(res.etaMs > 0);
   assert.ok(elapsed < 5000, `tardó ${elapsed} ms`);
+});
+
+// E12.6 — optimización tramo a tramo y modos de ponderación.
+
+function routeMulti(over: Partial<IsoMultiInput>) {
+  return routeOptimalMulti({
+    anchors: [
+      [0, 0],
+      [0, 6],
+    ],
+    startMs: 0,
+    wind: uniform(240, 12),
+    polar: genericPolar(),
+    land: noLand(),
+    ...over,
+  });
+}
+
+test("E12.6 destino detrás de una isla de 1 celda → el trazado la rodea", () => {
+  // Isla de una sola celda (0,1° × 0,1°) centrada en el origen.
+  const island = blockLand(-0.05, -0.05, 0.05, 0.05);
+  const res = routeOptimal(
+    base({ from: [0.6, 0], to: [-0.6, 0], wind: uniform(90, 12), land: island }),
+  );
+  assert.equal(res.reached, true, "tiene que llegar por arriba o por abajo");
+  for (const w of res.waypoints) {
+    assert.ok(!island.isLandWithMargin(w.lat, w.lon, 3), `pisó la isla en (${w.lat},${w.lon})`);
+  }
+  const maxDev = Math.max(...res.waypoints.map((w) => Math.abs(w.lat)));
+  assert.ok(maxDev > 0.1, `debe rodear la isla (${maxDev.toFixed(2)}°)`);
+});
+
+test("E12.6 waypoint obligatorio intermedio → el trazado pasa por él", () => {
+  const res = routeMulti({ anchors: [[0, 0], [0, 3], [0, 6]] });
+  assert.equal(res.reached, true);
+  assert.equal(res.segments.length, 2, "un tramo por par de obligatorios");
+  assert.deepEqual(res.anchors, [[0, 0], [0, 3], [0, 6]]);
+  const coords = multiRouteCoords(res);
+  assert.deepEqual(coords[0], [0, 0]);
+  assert.deepEqual(coords[coords.length - 1], [0, 6]);
+  assert.ok(
+    coords.some((c) => c[0] === 0 && c[1] === 3),
+    "el trazado pasa por el obligatorio intermedio",
+  );
+});
+
+test("E12.6 modos: Confort el más abierto, Crucero intermedio, Regata ETA mínimo", () => {
+  // Viento del norte: el rumbo directo (N) cae en el cono muerto → todos ciñen.
+  const from: LonLat = [0, 0];
+  const to: LonLat = [0, 6];
+  const wind = uniform(0, 14);
+  const opts = (mode: RoutingMode) => ({
+    from,
+    to,
+    startMs: 0,
+    wind,
+    polar: genericPolar(),
+    land: noLand(),
+    config: routingModeConfig(mode),
+  });
+  const conf = routeOptimal(opts("confort"));
+  const cru = routeOptimal(opts("crucero"));
+  const reg = routeOptimal(opts("regata"));
+  assert.ok(conf.reached && cru.reached && reg.reached);
+
+  assert.ok(reg.etaMs < cru.etaMs, `Regata llega antes que Crucero (${reg.etaMs} < ${cru.etaMs})`);
+  assert.ok(cru.etaMs < conf.etaMs, `Crucero llega antes que Confort (${cru.etaMs} < ${conf.etaMs})`);
+  // "Más abierto" = el trazado más largo (menos ceñida): Confort > Crucero > Regata.
+  assert.ok(conf.nm > cru.nm, `Confort recorre más millas que Crucero (${conf.nm} > ${cru.nm})`);
+  assert.ok(cru.nm > reg.nm, `Crucero recorre más millas que Regata (${cru.nm} > ${reg.nm})`);
 });

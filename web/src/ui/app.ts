@@ -55,6 +55,7 @@ import {
 import { formatLat, formatLon, parseCoords } from "../core/coords.ts";
 import { parseRouteFile, importedRouteToGeoJson, type ImportedRoute } from "../core/gpx.ts";
 import {
+  applyOptimizationToOwn,
   copyToOwn,
   endOwn,
   endOwnEdit,
@@ -73,9 +74,14 @@ import type { OwnRoute } from "../core/routes-own.ts";
 import { genericPolar } from "../core/routing/polar.ts";
 import { forecastHorizon } from "../core/routing/windfield.ts";
 import {
+  DEFAULT_ROUTING_MODE,
+  ROUTING_MODES,
+  multiRouteCoords,
+  routingModeConfig,
   type IsoBaseline,
-  type IsoResult,
+  type IsoMultiResult,
   type IsoWorkerResponse,
+  type RoutingMode,
 } from "../core/routing/isochrones.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
@@ -169,6 +175,8 @@ interface Settings {
   theme?: ThemeChoice;
   redAtNight?: boolean;
   wxLayers?: WxLayers;
+  // E12.6: modo de ponderación del optimizador (Confort / Crucero / Regata).
+  routingMode?: RoutingMode;
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -313,7 +321,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     forecast: signal<ForecastPackage | null>(null),
     forecastHour: signal<number>(0),
     navFixes: [],
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers() },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE },
     zones: deps.zones,
   };
 
@@ -646,6 +654,9 @@ async function restore(ui: UiState): Promise<void> {
       const layers = { ...defaultWxLayers(), ...s.wxLayers };
       ui.wxLayers.set(layers);
       ui.settings.wxLayers = layers;
+    }
+    if (s.routingMode && ROUTING_MODES.some((m) => m.id === s.routingMode)) {
+      ui.settings.routingMode = s.routingMode;
     }
   }
   const pos = readJson<Position | null>(position, null);
@@ -3220,10 +3231,12 @@ interface OptJob {
   status: "running" | "done" | "cancelled" | "error";
   ratio: number;
   workerId: number;
-  result: IsoResult | null;
+  result: IsoMultiResult | null;
   baseline: IsoBaseline | null;
   climateOnly: boolean;
   beyondForecast: boolean;
+  // E12.6: opcionales que el trazado optimizado ya no toca (solo rutas propias).
+  dropped: number;
   error?: string;
 }
 
@@ -3279,6 +3292,19 @@ function optHandle(ui: UiState, msg: IsoWorkerResponse): void {
   optDraw(ui, code);
 }
 
+// E12.6 — extremos de los tramos a optimizar: en una ruta propia son sus
+// waypoints obligatorios; en una del libro, el primer y el último punto.
+function bookAnchors(coords: LonLat[]): LonLat[] {
+  return coords.length >= 2 ? [coords[0]!, coords[coords.length - 1]!] : coords;
+}
+
+// Waypoints obligatorios de una ruta propia (en orden), en [lon, lat].
+function optOwnAnchors(code: string): LonLat[] {
+  const route = ownRouteById(code);
+  if (!route) return [];
+  return route.waypoints.filter((w) => w.mandatory).map((w) => [w.lon, w.lat] as LonLat);
+}
+
 async function optStart(
   ui: UiState,
   code: string,
@@ -3286,7 +3312,9 @@ async function optStart(
   coords: LonLat[],
   names: string[],
 ): Promise<void> {
-  if (coords.length < 2) return;
+  const anchors = kind === "own" ? optOwnAnchors(code) : bookAnchors(coords);
+  if (anchors.length < 2) return;
+  const dropped = kind === "own" ? Math.max(0, coords.length - anchors.length) : 0;
   const pkg = ui.forecast();
   const month = ui.month();
   let clim = ui.clim.get(month) ?? null;
@@ -3294,7 +3322,7 @@ async function optStart(
   if (!clim && !pkg) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: true, beyondForecast: false, error: "no hay datos de viento",
+      climateOnly: true, beyondForecast: false, dropped, error: "no hay datos de viento",
     });
     optRefreshPanel(ui);
     return;
@@ -3305,7 +3333,7 @@ async function optStart(
   } catch (err) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: !pkg, beyondForecast: false, error: err instanceof Error ? err.message : String(err),
+      climateOnly: !pkg, beyondForecast: false, dropped, error: err instanceof Error ? err.message : String(err),
     });
     optRefreshPanel(ui);
     return;
@@ -3313,23 +3341,24 @@ async function optStart(
   const id = ++optJobSeq;
   const job: OptJob = {
     code, kind, coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
-    climateOnly: !pkg, beyondForecast: false,
+    climateOnly: !pkg, beyondForecast: false, dropped,
   };
   optJobs.set(code, job);
   optJobCode.set(id, code);
   job.workerId = id;
+  const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
   optWorkerGet(ui).postMessage({
     type: "run",
     id,
-    from: coords[0]!,
-    to: coords[coords.length - 1]!,
     startMs: Date.now(),
+    anchors,
     original: coords,
     pkg,
     clim,
     polar: genericPolar(),
     landBytes: bytes,
     climateOnly: !pkg,
+    config: routingModeConfig(mode),
   });
   optRefreshPanel(ui);
 }
@@ -3344,7 +3373,7 @@ function optDraw(ui: UiState, code: string): void {
   }
   const isos = job.result.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
   setSource(ui.map, "wx-isochrones", featureCollection(isos));
-  const line = job.result.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
+  const line = multiRouteCoords(job.result) as [number, number][];
   setSource(ui.map, "optroute", featureCollection([lineFeature(line)]));
 }
 
@@ -3353,24 +3382,21 @@ function optClearLayers(ui: UiState): void {
   setSource(ui.map, "optroute", featureCollection([]));
 }
 
-function optWaypointName(names: string[], i: number, n: number): string {
-  if (i === 0) return names[0] ?? "Inicio";
-  if (i === n - 1) return names[names.length - 1] ?? "Fin";
-  return `WP${i + 1}`;
-}
-
 function optApply(ui: UiState, code: string): void {
   const job = optJobs.get(code);
   const route = ownRouteById(code);
   if (!job?.result || !route) return;
-  const pts = job.result.waypoints.map((w, i) => ({
-    name: optWaypointName(job.names, i, job.result!.waypoints.length),
-    lat: w.lat,
-    lon: w.lon,
-  }));
+  // E12.6: conserva los obligatorios y agrega los puntos optimizados de cada
+  // tramo; los opcionales que el trazado ya no toca se descartan.
+  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon })));
   const before = route.waypoints.map((w) => ({ ...w }));
-  replaceOwnRoute(ownCtx(ui), route, pts);
-  showUndoBand("Optimización aplicada", () => {
+  applyOptimizationToOwn(ownCtx(ui), route, segments);
+  const dropped = job.dropped;
+  const msg =
+    dropped > 0
+      ? `Optimización aplicada · se descartan ${dropped} waypoint${dropped === 1 ? "" : "s"} opcional${dropped === 1 ? "" : "es"}`
+      : "Optimización aplicada";
+  showUndoBand(msg, () => {
     const cur = ownRouteById(code);
     if (cur) replaceOwnRoute(ownCtx(ui), cur, before);
   });
@@ -3410,9 +3436,28 @@ function optRender(
   panel.dataset.code = code;
   const job = optJobs.get(code);
   const hasPkg = !!ui.forecast();
-  const canRun = coords.length >= 2;
-  const head = el("div", { class: "hn-opt-head" });
+  const anchors = kind === "own" ? optOwnAnchors(code) : bookAnchors(coords);
+  const canRun = anchors.length >= 2;
+  const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
 
+  // E12.6 — chips de modo (Confort / Crucero / Regata), persistidos.
+  const modes = el("div", { class: "hn-chips hn-opt-modes" });
+  for (const m of ROUTING_MODES) {
+    const chip = el(
+      "button",
+      { class: `hn-chip${m.id === mode ? " on" : ""}`, type: "button", title: m.hint },
+      m.label,
+    );
+    chip.addEventListener("click", () => {
+      ui.settings.routingMode = m.id;
+      saveSettings(ui);
+      optRefreshPanel(ui);
+    });
+    modes.append(chip);
+  }
+  panel.append(modes);
+
+  const head = el("div", { class: "hn-opt-head" });
   if (job?.status === "running") {
     head.append(
       el("span", { class: "hn-opt-status" }, `Calculando… ${Math.round(job.ratio * 100)}%`),
@@ -3431,7 +3476,15 @@ function optRender(
   panel.append(head);
 
   if (!canRun) {
-    panel.append(el("p", { class: "hn-muted" }, "La ruta necesita al menos dos waypoints."));
+    panel.append(
+      el(
+        "p",
+        { class: "hn-muted" },
+        kind === "own"
+          ? "Marcá al menos dos waypoints obligatorios para optimizar."
+          : "La ruta necesita al menos dos waypoints.",
+      ),
+    );
     return;
   }
 
@@ -3449,7 +3502,12 @@ function optRender(
     }
     const acts = el("div", { class: "hn-opt-acts" });
     if (kind === "own") {
-      const apply = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Aplicar optimización");
+      const dropped = job.dropped;
+      const label =
+        dropped > 0
+          ? `Aplicar optimización · se descartan ${dropped} opcional${dropped === 1 ? "" : "es"}`
+          : "Aplicar optimización";
+      const apply = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, label);
       apply.addEventListener("click", () => optApply(ui, code));
       acts.append(apply);
     }
@@ -3473,7 +3531,7 @@ function optRender(
         "p",
         { class: "hn-muted" },
         hasPkg
-          ? "Calcula el trazado de menor tiempo con el viento. No cambia la ruta hasta que apliques."
+          ? "Calcula el trazado con el viento según el modo. No cambia la ruta hasta que apliques."
           : "Usa la climatología del mes (promedio histórico). Descargá el pronóstico para más precisión.",
       ),
     );
@@ -3616,8 +3674,9 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     const copiarOpt = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Copiar optimizada");
     copiarOpt.addEventListener("click", () => {
       const r = optJob.result!;
-      const coords = r.waypoints.map((w) => [w.lon, w.lat] as [number, number]);
-      copyToOwn(ownCtx(ui), `${d.code} optimizada`, coords, optJob.names);
+      const coords = multiRouteCoords(r).map((c) => [c[0], c[1]] as [number, number]);
+      const names = coords.map((_, i) => (i === 0 ? (optJob.names[0] ?? "Inicio") : i === coords.length - 1 ? (optJob.names[optJob.names.length - 1] ?? "Fin") : `WP${i + 1}`));
+      copyToOwn(ownCtx(ui), `${d.code} optimizada`, coords, names);
     });
     readonlyBtns.append(copiarOpt);
   }

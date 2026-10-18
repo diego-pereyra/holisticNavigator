@@ -8,6 +8,9 @@ export interface OwnWaypoint {
   name: string;
   lat: number;
   lon: number;
+  // E12.6 — el optimizador pasa solo por los obligatorios; los opcionales pueden
+  // caerse al aplicar. Por defecto todos nacen obligatorios.
+  mandatory: boolean;
 }
 
 export interface OwnRoute {
@@ -70,7 +73,7 @@ function normalize(route: OwnRoute): OwnRoute {
 }
 
 export function addWaypoint(route: OwnRoute, lat: number, lon: number, name?: string): OwnRoute {
-  const wp: OwnWaypoint = { name: name?.trim() || defaultName(route), lat, lon };
+  const wp: OwnWaypoint = { name: name?.trim() || defaultName(route), lat, lon, mandatory: true };
   return normalize({ ...route, waypoints: [...route.waypoints, wp] });
 }
 
@@ -84,7 +87,7 @@ export function insertWaypoint(
 ): OwnRoute {
   const len = route.waypoints.length;
   const at = index < 0 || index > len ? len : index;
-  const wp: OwnWaypoint = { name: name?.trim() || defaultName(route), lat, lon };
+  const wp: OwnWaypoint = { name: name?.trim() || defaultName(route), lat, lon, mandatory: true };
   const waypoints = [...route.waypoints.slice(0, at), wp, ...route.waypoints.slice(at)];
   return normalize({ ...route, waypoints });
 }
@@ -118,14 +121,56 @@ export function reverseRoute(route: OwnRoute): OwnRoute {
 // la fecha de modificación. Waypoints independientes de los de entrada.
 export function replaceWaypoints(
   route: OwnRoute,
-  points: { name: string; lat: number; lon: number }[],
+  points: { name: string; lat: number; lon: number; mandatory?: boolean }[],
   now = Date.now(),
 ): OwnRoute {
   return normalize({
     ...route,
     updatedAt: now,
-    waypoints: points.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon })),
+    waypoints: points.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon, mandatory: w.mandatory ?? true })),
   });
+}
+
+// E12.6 — marca/desmarca un waypoint como obligatorio (no cambia la geometría).
+export function setMandatory(route: OwnRoute, index: number, mandatory: boolean): OwnRoute {
+  if (index < 0 || index >= route.waypoints.length) return route;
+  return { ...route, waypoints: route.waypoints.map((w, i) => (i === index ? { ...w, mandatory } : w)) };
+}
+
+// E12.6 — índices (en orden) de los waypoints obligatorios: extremos de cada
+// tramo que el optimizador debe respetar.
+export function mandatoryIndexes(route: OwnRoute): number[] {
+  const out: number[] = [];
+  route.waypoints.forEach((w, i) => {
+    if (w.mandatory) out.push(i);
+  });
+  return out;
+}
+
+// E12.6 — aplica el resultado de una optimización tramo a tramo: conserva TODOS
+// los obligatorios (con nombre y posición) y agrega, entre cada par consecutivo,
+// los puntos optimizados (nacen opcionales). Los waypoints opcionales que el
+// trazado ya no toca se descartan. `segments[k]` son los puntos intermedios del
+// tramo entre el obligatorio k y el k+1.
+export function applyOptimization(
+  route: OwnRoute,
+  segments: { lat: number; lon: number }[][],
+  now = Date.now(),
+): OwnRoute {
+  const anchors = route.waypoints.filter((w) => w.mandatory);
+  if (anchors.length < 2) return route;
+  const out: OwnWaypoint[] = [];
+  for (let k = 0; k < anchors.length; k++) {
+    const a = anchors[k]!;
+    out.push({ ...a });
+    const seg = segments[k];
+    if (seg) for (const p of seg) out.push({ name: "", lat: p.lat, lon: p.lon, mandatory: false });
+  }
+  // Los puntos optimizados no traen nombre: se numeran sin pisar los del usuario.
+  out.forEach((w, i) => {
+    if (w.name === "") w.name = `WP${i + 1}`;
+  });
+  return normalize({ ...route, updatedAt: now, waypoints: out });
 }
 
 export function renameRoute(route: OwnRoute, name: string): OwnRoute {
@@ -164,7 +209,7 @@ export function ownRouteFromPoints(
     name: name.trim() === "" ? "Ruta sin nombre" : name.trim(),
     createdAt: now,
     updatedAt: now,
-    waypoints: points.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon })),
+    waypoints: points.map((p) => ({ name: p.name, lat: p.lat, lon: p.lon, mandatory: true })),
     distanceNm: 0,
   });
 }
@@ -220,7 +265,13 @@ export function parseOwnRoute(text: string): OwnRoute | null {
   for (const w of r.waypoints) {
     const wp = w as Partial<OwnWaypoint>;
     if (typeof wp.name !== "string" || !Number.isFinite(wp.lat) || !Number.isFinite(wp.lon)) continue;
-    waypoints.push({ name: wp.name, lat: wp.lat as number, lon: wp.lon as number });
+    // Rutas guardadas antes de E12.6 no traen el flag: nacen obligatorias.
+    waypoints.push({
+      name: wp.name,
+      lat: wp.lat as number,
+      lon: wp.lon as number,
+      mandatory: wp.mandatory !== false,
+    });
   }
   return normalize({
     id: r.id,

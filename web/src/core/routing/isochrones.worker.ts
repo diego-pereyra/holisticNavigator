@@ -1,14 +1,15 @@
-// Web Worker del enrutado por isócronas (E12.5, ADR-008 componente 4).
+// Web Worker del enrutado por isócronas (E12.5, E12.6, ADR-008 componente 4).
 //
-// Corre `routeOptimalSteps` fuera del hilo principal, con progreso por frontera
-// y cancelación. Recibe el pronóstico (E13.1), la climatología del mes, la polar
-// (E12.3) y los bytes de la máscara de tierra (E12.1) ya serializados; reconstruye
-// el campo de viento y decodifica la máscara. Es un bundle aparte (ver
-// scripts/build-web.sh): el core queda puro para node:test.
+// Corre `routeOptimalMultiSteps` (tramo a tramo, E12.6) fuera del hilo principal,
+// con progreso por frontera y cancelación. Recibe el pronóstico (E13.1), la
+// climatología del mes, la polar (E12.3) y los bytes de la máscara de tierra
+// (E12.1) ya serializados; reconstruye el campo de viento y decodifica la
+// máscara. Es un bundle aparte (ver scripts/build-web.sh): el core queda puro
+// para node:test.
 
 import { decodeLandmask } from "./landmask.ts";
 import {
-  routeOptimalSteps,
+  routeOptimalMultiSteps,
   traverseRoute,
   type IsoBaseline,
   type IsoWorkerRequest,
@@ -52,9 +53,8 @@ async function run(msg: Extract<IsoWorkerRequest, { type: "run" }>): Promise<voi
         }
       : undefined;
 
-    const gen = routeOptimalSteps({
-      from: msg.from,
-      to: msg.to,
+    const gen = routeOptimalMultiSteps({
+      anchors: msg.anchors,
       startMs: msg.startMs,
       wind,
       polar: msg.polar,

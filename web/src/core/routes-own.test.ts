@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 
 import {
   addWaypoint,
+  applyOptimization,
   copyName,
   copyOwnRoute,
   defaultName,
@@ -10,6 +11,7 @@ import {
   isOwnCode,
   legBearingsDeg,
   legNm,
+  mandatoryIndexes,
   moveWaypoint,
   newOwnRoute,
   ownRouteFromPoints,
@@ -18,7 +20,9 @@ import {
   removeWaypoint,
   renameRoute,
   renameWaypoint,
+  replaceWaypoints,
   reverseRoute,
+  setMandatory,
   totalNm,
   type OwnRoute,
 } from "./routes-own.ts";
@@ -184,3 +188,45 @@ test("E11.5 eliminar quita del store y no reaparece tras recargar", async () => 
   const reloaded = await loadOwnRoutes(store);
   assert.deepEqual(reloaded.map((r) => r.id), ["MIA-x2"]);
 });
+
+test("E12.6 los waypoints nacen obligatorios y se pueden marcar opcionales", () => {
+  let r = newOwnRoute("MIA-m1", "Modos", 1);
+  r = addWaypoint(r, 0, 0);
+  r = addWaypoint(r, 0, 1);
+  r = addWaypoint(r, 0, 2);
+  assert.deepEqual(r.waypoints.map((w) => w.mandatory), [true, true, true]);
+
+  r = setMandatory(r, 1, false);
+  assert.deepEqual(r.waypoints.map((w) => w.mandatory), [true, false, true]);
+  assert.deepEqual(mandatoryIndexes(r), [0, 2]);
+  assert.equal(setMandatory(r, 9, false), r, "índice fuera de rango no cambia nada");
+
+  // Rutas guardadas antes de E12.6 no traen el flag: nacen obligatorias.
+  const legacy = parseOwnRoute(
+    JSON.stringify({ id: "MIA-old", name: "Vieja", waypoints: [{ name: "WP1", lat: 0, lon: 0 }] }),
+  );
+  assert.equal(legacy?.waypoints[0]?.mandatory, true);
+});
+
+test("E12.6 aplicar optimización conserva obligatorios y descarta opcionales", () => {
+  let r = newOwnRoute("MIA-o1", "Óptima", 1);
+  r = addWaypoint(r, 0, 0, "Inicio");
+  r = addWaypoint(r, 0, 1, "Opci");
+  r = addWaypoint(r, 1, 1, "Opci2");
+  r = addWaypoint(r, 0, 2, "Fin");
+  r = setMandatory(r, 1, false);
+  r = setMandatory(r, 2, false);
+
+  // Un tramo entre Inicio y Fin, con dos puntos intermedios optimizados.
+  const out = applyOptimization(r, [[{ lat: 0.1, lon: 0.5 }, { lat: 0.2, lon: 1.5 }]], 2);
+  assert.deepEqual(out.waypoints.map((w) => w.name), ["Inicio", "WP2", "WP3", "Fin"]);
+  assert.deepEqual(out.waypoints.map((w) => w.mandatory), [true, false, false, true]);
+  assert.deepEqual(out.waypoints.map((w) => [w.lat, w.lon]), [
+    [0, 0],
+    [0.1, 0.5],
+    [0.2, 1.5],
+    [0, 2],
+  ]);
+  assert.equal(out.updatedAt, 2);
+});
+

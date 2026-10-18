@@ -38,6 +38,17 @@ export interface IsoConfig {
   /** Coste de una virada, en minutos (se suma a la ETA del bordo nuevo). */
   tackPenaltyMin: number;
   maxTacks: number;
+  /** Máximo de waypoints conservados al simplificar (por tramo). */
+  maxWaypoints: number;
+  // E12.6 — penalizaciones de los modos de enrutado (Confort/Crucero/Regata).
+  // Ceñida: por debajo de `beatTwaDeg`, la velocidad se multiplica por un factor
+  // que baja linealmente de 1 en `beatTwaDeg` hasta `beatPenaltyMin` en el cono
+  // muerto (0 = sin penalización).
+  beatTwaDeg: number;
+  beatPenaltyMin: number;
+  /** Viento fuerte: por encima de `heavyTwsKn`, factor `heavyPenalty` (Infinity = ninguno). */
+  heavyTwsKn: number;
+  heavyPenalty: number;
 }
 
 export const DEFAULT_ISO_CONFIG: IsoConfig = {
@@ -53,7 +64,55 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   coastMarginNm: 3,
   tackPenaltyMin: 5,
   maxTacks: 200,
+  maxWaypoints: 40,
+  beatTwaDeg: 0,
+  beatPenaltyMin: 1,
+  heavyTwsKn: Infinity,
+  heavyPenalty: 1,
 };
+
+// E12.6 — modos de ponderación del optimizador (reglas de Diego): cada uno es un
+// preset de `IsoConfig`. Confort vira lo menos posible aunque alargue el ETA;
+// Crucero es el equilibrio por defecto; Regata usa la polar cruda (ETA mínimo).
+export type RoutingMode = "confort" | "crucero" | "regata";
+
+export interface RoutingModeDef {
+  id: RoutingMode;
+  label: string;
+  hint: string;
+  config: Partial<IsoConfig>;
+}
+
+export const ROUTING_MODES: RoutingModeDef[] = [
+  {
+    id: "confort",
+    label: "Confort",
+    hint: "Casi sin ceñida y viento suave; vira lo menos posible aunque el ETA se alargue.",
+    config: { beatTwaDeg: 70, beatPenaltyMin: 0.55, heavyTwsKn: 18, heavyPenalty: 0.6, tackPenaltyMin: 20, maxTws: 22, maxWaypoints: 15 },
+  },
+  {
+    id: "crucero",
+    label: "Crucero",
+    hint: "Equilibrio: evita la ceñida sin demorar el ETA de forma absurda.",
+    config: { beatTwaDeg: 55, beatPenaltyMin: 0.75, heavyTwsKn: 25, heavyPenalty: 0.75, tackPenaltyMin: 10, maxTws: 30, maxWaypoints: 15 },
+  },
+  {
+    id: "regata",
+    label: "Regata",
+    hint: "Polar cruda, vira seguido y va por el ETA mínimo.",
+    config: { beatTwaDeg: 0, beatPenaltyMin: 1, heavyTwsKn: Infinity, heavyPenalty: 1, tackPenaltyMin: 3, maxTws: 45, maxWaypoints: 15 },
+  },
+];
+
+export const DEFAULT_ROUTING_MODE: RoutingMode = "crucero";
+
+export function routingModeConfig(mode: RoutingMode): Partial<IsoConfig> {
+  return (ROUTING_MODES.find((m) => m.id === mode) ?? ROUTING_MODES[1]!).config;
+}
+
+export function routingModeLabel(mode: RoutingMode): string {
+  return ROUTING_MODES.find((m) => m.id === mode)?.label ?? "Crucero";
+}
 
 export interface IsoInput {
   from: LonLat; // [lon, lat]
@@ -114,10 +173,10 @@ export interface IsoProgress {
 export interface IsoWorkerRun {
   type: "run";
   id: number;
-  from: LonLat;
-  to: LonLat;
   startMs: number;
-  /** Trazado original (para la comparación "vs original"). */
+  /** Waypoints obligatorios en orden: extremos de cada tramo (>= 2). */
+  anchors: LonLat[];
+  /** Trazado original completo (para la comparación "vs original"). */
   original: LonLat[];
   pkg: ForecastPackage | null;
   clim: ClimMonth | null;
@@ -137,9 +196,36 @@ export interface IsoBaseline {
   nm: number;
 }
 
+// E12.6 — resultado de un tramo entre dos waypoints obligatorios consecutivos.
+export interface IsoLegSegment {
+  reached: boolean;
+  /** ETA absoluta al final del tramo (ms). */
+  etaMs: number;
+  nm: number;
+  tacks: number;
+  windMax: number | null;
+  /** Puntos optimizados intermedios (sin los extremos obligatorios). */
+  points: IsoWaypoint[];
+  isochrones: IsochroneLine[];
+}
+
+// E12.6 — resultado de la optimización tramo a tramo: la ruta optimizada
+// completa es anchors[0] + segments[0].points + anchors[1] + … + anchors[n].
+export interface IsoMultiResult {
+  reached: boolean;
+  etaMs: number;
+  nm: number;
+  tacks: number;
+  windMax: number | null;
+  anchors: LonLat[];
+  segments: IsoLegSegment[];
+  isochrones: IsochroneLine[];
+  steps: number;
+}
+
 export type IsoWorkerResponse =
   | { type: "progress"; id: number; progress: IsoProgress }
-  | { type: "done"; id: number; result: IsoResult; baseline: IsoBaseline }
+  | { type: "done"; id: number; result: IsoMultiResult; baseline: IsoBaseline }
   | { type: "cancelled"; id: number }
   | { type: "error"; id: number; message: string };
 
@@ -187,6 +273,44 @@ function nearCoast(land: Landmask, lat: number, lon: number, coastDeg: number): 
   return false;
 }
 
+// E12.6 — factor de velocidad del modo: penaliza la ceñida (por debajo de
+// `beatTwaDeg`, bajando hasta `beatPenaltyMin` en el cono muerto) y el viento
+// fuerte (por encima de `heavyTwsKn`). Con la config por defecto no penaliza.
+function modeSpeedFactor(cfg: IsoConfig, deadAngle: number, twaAbs: number, tws: number): number {
+  let f = 1;
+  if (cfg.beatTwaDeg > 0 && cfg.beatPenaltyMin < 1 && twaAbs < cfg.beatTwaDeg) {
+    const span = Math.max(1, cfg.beatTwaDeg - deadAngle);
+    const x = Math.min(1, (cfg.beatTwaDeg - twaAbs) / span);
+    f *= 1 - x * (1 - cfg.beatPenaltyMin);
+  }
+  if (Number.isFinite(cfg.heavyTwsKn) && tws > cfg.heavyTwsKn) f *= cfg.heavyPenalty;
+  return f;
+}
+
+// E12.6 — camino libre de tierra en TODO el segmento p→q (no solo en el punto de
+// aterrizaje): recorre con paso ≤ 0,05° ("supercover") para no poder salvar una
+// isla de una sola celda (0,1°) saltándola de borde a borde.
+function segmentClear(
+  land: Landmask,
+  lat0: number,
+  lon0: number,
+  lat1: number,
+  lon1: number,
+  marginNm: number,
+): boolean {
+  const dLat = lat1 - lat0;
+  const dLon = lon1 - lon0;
+  const spanDeg = Math.max(Math.abs(dLat), Math.abs(dLon));
+  const steps = Math.max(1, Math.ceil(spanDeg / 0.05));
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const lat = lat0 + dLat * f;
+    const lon = normLon(lon0 + dLon * f);
+    if (land.isLandWithMargin(lat, lon, marginNm)) return false;
+  }
+  return true;
+}
+
 // Simplificación Douglas–Peucker sobre [lon, lat]; devuelve índices conservados.
 function simplifyIndices(coords: LonLat[], tol: number): number[] {
   const keep = new Set<number>();
@@ -219,8 +343,6 @@ function simplifyIndices(coords: LonLat[], tol: number): number[] {
   }
   return [...keep].sort((x, y) => x - y);
 }
-
-const MAX_WAYPOINTS = 40;
 
 export function routeOptimal(opts: IsoInput): IsoResult {
   const gen = routeOptimalSteps(opts);
@@ -268,11 +390,18 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
 
       for (const h of headings) {
         const twa = relative(h, wp.dir);
-        const speed = boatSpeed(polar, twa, wp.speed);
+        let speed = boatSpeed(polar, twa, wp.speed);
+        if (speed <= 0) continue;
+        // El modo penaliza la ceñida y el viento fuerte solo a vela (a motor el
+        // rumbo no importa).
+        if (wp.speed >= polar.config.motorTws) {
+          speed *= modeSpeedFactor(cfg, polar.config.deadAngle, Math.abs(twa), wp.speed);
+        }
         if (speed <= 0) continue;
         const advanceNm = speed * dtH;
         const q = advance(p.lat, p.lon, h, advanceNm);
-        if (land.isLandWithMargin(q.lat, q.lon, cfg.coastMarginNm)) continue;
+        // E12.6: valida TODO el salto, no solo el punto de aterrizaje.
+        if (!segmentClear(land, p.lat, p.lon, q.lat, q.lon, cfg.coastMarginNm)) continue;
         if (ice) {
           const v = ice(q.lat, q.lon, p.t + dtMs);
           if (v !== null && v >= cfg.iceMax) continue;
@@ -339,7 +468,98 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   for (let cur: Node | null = end; cur; cur = cur.parent) path.push(cur);
   path.reverse();
 
-  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reachedNode !== null);
+  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reachedNode !== null, cfg.maxWaypoints);
+}
+
+// E12.6 — optimización tramo a tramo: los `anchors` son los waypoints
+// obligatorios en orden; cada tramo entre consecutivos se optimiza como una
+// pasada de isócronas independiente y se concatena.
+export interface IsoMultiInput {
+  anchors: LonLat[];
+  startMs: number;
+  wind: WindField;
+  polar: Polar;
+  land: Landmask;
+  ice?: (lat: number, lon: number, tMs: number) => number | null;
+  config?: Partial<IsoConfig>;
+}
+
+export function routeOptimalMulti(opts: IsoMultiInput): IsoMultiResult {
+  const gen = routeOptimalMultiSteps(opts);
+  let r = gen.next();
+  while (!r.done) r = gen.next();
+  return r.value;
+}
+
+export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgress, IsoMultiResult, void> {
+  const anchors = opts.anchors;
+  const n = Math.max(1, anchors.length - 1);
+  const segments: IsoLegSegment[] = [];
+  const isochrones: IsochroneLine[] = [];
+  let startMs = opts.startMs;
+  let nm = 0;
+  let tacks = 0;
+  let steps = 0;
+  let reached = true;
+  let windMax: number | null = null;
+
+  for (let leg = 0; leg + 1 < anchors.length; leg++) {
+    const gen = routeOptimalSteps({
+      from: anchors[leg]!,
+      to: anchors[leg + 1]!,
+      startMs,
+      wind: opts.wind,
+      polar: opts.polar,
+      land: opts.land,
+      ice: opts.ice,
+      config: opts.config,
+    });
+    let cur = gen.next();
+    while (!cur.done) {
+      yield {
+        ratio: Math.min(1, (leg + cur.value.ratio) / n),
+        step: cur.value.step,
+        maxSteps: cur.value.maxSteps,
+        reached: cur.value.reached,
+      };
+      cur = gen.next();
+    }
+    const r = cur.value;
+    // El primer punto es el ancla de salida; si llegó, el último también es el
+    // ancla de llegada (los aporta la UI). Sin llegar, se conserva el último.
+    const points = r.reached ? r.waypoints.slice(1, -1) : r.waypoints.slice(1);
+    segments.push({
+      reached: r.reached,
+      etaMs: r.etaMs,
+      nm: r.nm,
+      tacks: r.tacks,
+      windMax: r.windMax,
+      points,
+      isochrones: r.isochrones,
+    });
+    for (const iso of r.isochrones) isochrones.push(iso);
+    startMs = r.etaMs;
+    nm += r.nm;
+    tacks += r.tacks;
+    steps += r.steps;
+    if (r.windMax !== null) windMax = windMax === null ? r.windMax : Math.max(windMax, r.windMax);
+    if (!r.reached) reached = false;
+  }
+
+  return { reached, etaMs: startMs, nm, tacks, windMax, anchors, segments, isochrones, steps };
+}
+
+// Ruta optimizada completa (anclas + puntos intermedios de cada tramo).
+export function multiRouteCoords(result: IsoMultiResult): LonLat[] {
+  const out: LonLat[] = [];
+  if (result.anchors.length === 0) return out;
+  out.push(result.anchors[0]!);
+  for (let i = 0; i < result.segments.length; i++) {
+    for (const p of result.segments[i]!.points) out.push([p.lon, p.lat]);
+    const anchor = result.anchors[i + 1];
+    if (anchor) out.push(anchor);
+  }
+  return out;
 }
 
 function buildResult(
@@ -351,6 +571,7 @@ function buildResult(
   isochrones: IsochroneLine[],
   steps: number,
   reached: boolean,
+  maxWaypoints: number,
 ): IsoResult {
   const raw: LonLat[] = path.map((p) => [p.lon, p.lat] as LonLat);
   const etaOf = path.map((p) => p.t);
@@ -361,10 +582,11 @@ function buildResult(
 
   const idx = simplifyIndices(raw, 0.1);
   let keep = idx;
-  if (idx.length > MAX_WAYPOINTS) {
-    const stride = (idx.length - 1) / (MAX_WAYPOINTS - 1);
+  const cap = Math.max(2, maxWaypoints);
+  if (idx.length > cap) {
+    const stride = (idx.length - 1) / (cap - 1);
     const thinned: number[] = [];
-    for (let i = 0; i < MAX_WAYPOINTS; i++) thinned.push(idx[Math.round(i * stride)]!);
+    for (let i = 0; i < cap; i++) thinned.push(idx[Math.round(i * stride)]!);
     keep = [...new Set(thinned)].sort((a, b) => a - b);
   }
 

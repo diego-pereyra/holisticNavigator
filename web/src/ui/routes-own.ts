@@ -6,6 +6,7 @@ import type { Map as MlMap, MapMouseEvent } from "maplibre-gl";
 import { signal } from "../core/store.ts";
 import {
   addWaypoint,
+  applyOptimization,
   copyName,
   copyOwnRoute,
   importedToOwn,
@@ -17,10 +18,11 @@ import {
   ownRouteFromPoints,
   ownRouteToGpx,
   removeWaypoint,
-  replaceWaypoints,
   renameRoute,
   renameWaypoint,
+  replaceWaypoints,
   reverseRoute,
+  setMandatory,
   type OwnRoute,
 } from "../core/routes-own.ts";
 import { parseRouteFile } from "../core/gpx.ts";
@@ -147,6 +149,22 @@ export function replaceOwnRoute(
   return updated;
 }
 
+// E12.6 — aplica una optimización tramo a tramo: conserva los waypoints
+// obligatorios, descarta los opcionales que el trazado ya no toca y agrega los
+// puntos optimizados entre obligatorios. Devuelve la ruta previa (deshacer).
+export function applyOptimizationToOwn(
+  ctx: OwnCtx,
+  route: OwnRoute,
+  segments: { lat: number; lon: number }[][],
+): OwnRoute {
+  const updated = applyOptimization(route, segments);
+  ownRoutes.update((list) => list.map((r) => (r.id === updated.id ? updated : r)));
+  if (ownEdit()?.id === updated.id) ownEdit.set(updated);
+  void saveOwnRoute(ctx.store, updated);
+  ctx.redraw();
+  return updated;
+}
+
 // Copia una ruta propia (o una copia) a una nueva ruta propia independiente.
 export function copyOwnRouteToOwn(ctx: OwnCtx, route: OwnRoute): OwnRoute {
   const r = copyOwnRoute(route, newId(), copyName(route.name));
@@ -242,9 +260,18 @@ export function renderOwnFicha(host: HTMLElement, ctx: OwnCtx, base: OwnRoute): 
       if (Number.isFinite(v)) commit(ctx, moveWaypoint(r, i, w.lat, v));
     });
 
+    // E12.6 — obligatorio: el optimizador siempre pasa por este waypoint.
+    const mandLabel = el("label", { class: "hn-own-mand", title: "El optimizador siempre pasa por este waypoint" });
+    const mand = el("input", { type: "checkbox" });
+    mand.checked = w.mandatory;
+    mand.setAttribute("aria-label", `Waypoint ${i + 1} obligatorio`);
+    mand.addEventListener("change", () => commit(ctx, setMandatory(r, i, mand.checked)));
+    mandLabel.append(mand, el("span", {}, "Obligatorio"));
+
     fields.append(
       name,
       el("div", { class: "hn-own-coords" }, lat, lon),
+      mandLabel,
       el("div", { class: "hn-muted hn-own-fmt" }, `${formatLat(w.lat)} ${formatLon(w.lon)}`),
     );
     row.append(fields);
