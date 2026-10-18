@@ -1,0 +1,100 @@
+name: uat
+# UAT de la app en browser real: mide (no valida) los journeys clave a dos
+# viewports y sube capturas + métricas como artefactos. Es la evidencia de la
+# auditoría UX (Nielsen / ISO 9241) y de su re-score. Nunca corta el deploy.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["web/uat/**", ".github/workflows/uat.yml"]
+
+jobs:
+  uat:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+      - name: Deps web + Playwright
+        run: cd web && npm ci && npm i --no-save playwright && npx playwright install --with-deps chromium && cd ..
+      - name: Build
+        run: bash scripts/build-web.sh
+      - name: Teselas de la release (para que la carta de detalle no dé 404)
+        run: |
+          mkdir -p web/dist/tiles/zones
+          curl -fsSL --retry 3 -o web/dist/tiles/world-z6.pmtiles \
+            https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles \
+            || echo "aviso: sin teselas; el UAT sigue con el piso Natural Earth"
+      - name: Servir con HTTP Range (como Pages)
+        run: |
+          mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator
+          cat > /tmp/serve-range.py <<'PY'
+          import http.server, os, re
+          class RangeHandler(http.server.SimpleHTTPRequestHandler):
+              def send_head(self):
+                  path = self.translate_path(self.path)
+                  if os.path.isdir(path):
+                      return super().send_head()
+                  try:
+                      f = open(path, "rb")
+                  except OSError:
+                      self.send_error(404, "File not found")
+                      return None
+                  size = os.path.fstat(f.fileno()).st_size
+                  ctype = self.guess_type(path)
+                  self._remaining = size
+                  rng = self.headers.get("Range")
+                  m = re.match(r"bytes=(\d*)-(\d*)$", rng.strip()) if rng else None
+                  if m and (m.group(1) or m.group(2)):
+                      if m.group(1):
+                          start = int(m.group(1))
+                          end = int(m.group(2)) if m.group(2) else size - 1
+                      else:
+                          start = max(0, size - int(m.group(2)))
+                          end = size - 1
+                      if start >= size:
+                          f.close()
+                          self.send_response(416)
+                          self.send_header("Content-Range", "bytes */%d" % size)
+                          self.end_headers()
+                          return None
+                      end = min(end, size - 1)
+                      self._remaining = end - start + 1
+                      self.send_response(206)
+                      self.send_header("Content-type", ctype)
+                      self.send_header("Content-Range", "bytes %d-%d/%d" % (start, end, size))
+                      self.send_header("Content-Length", str(self._remaining))
+                      self.send_header("Accept-Ranges", "bytes")
+                      self.end_headers()
+                      f.seek(start)
+                      return f
+                  self.send_response(200)
+                  self.send_header("Content-type", ctype)
+                  self.send_header("Content-Length", str(size))
+                  self.send_header("Accept-Ranges", "bytes")
+                  self.end_headers()
+                  return f
+              def copyfile(self, source, output):
+                  remaining = getattr(self, "_remaining", None)
+                  if remaining is None:
+                      return super().copyfile(source, output)
+                  while remaining > 0:
+                      chunk = source.read(min(65536, remaining))
+                      if not chunk:
+                          break
+                      output.write(chunk)
+                      remaining -= len(chunk)
+          http.server.ThreadingHTTPServer(("", 8087), RangeHandler).serve_forever()
+          PY
+          (cd /tmp/site && python3 /tmp/serve-range.py >/dev/null 2>&1 &)
+          sleep 2
+      - name: Correr UAT (mide: no corta el workflow)
+        run: node web/uat/uat.mjs http://localhost:8087/holisticNavigator/ web/uat/out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: uat
+          path: web/uat/out
+          if-no-files-found: warn
