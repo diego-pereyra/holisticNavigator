@@ -168,6 +168,88 @@ test("E12.6 waypoint obligatorio intermedio → el trazado pasa por él", () => 
   );
 });
 
+// E12.7 — tramos robustos, contrato de falla y "Bordo n".
+
+// Supercover de test: ¿el segmento a→b cruza tierra con margen?
+function segmentCrossesLand(land: Landmask, a: LonLat, b: LonLat, marginNm: number): boolean {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) / 0.05));
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const lat = a[1] + (b[1] - a[1]) * f;
+    const lon = a[0] + (b[0] - a[0]) * f;
+    if (land.isLandWithMargin(lat, lon, marginNm)) return true;
+  }
+  return false;
+}
+
+test("E12.7 origen en el puerto (tierra) → arranca y no pisa tierra en el medio", () => {
+  // Puerto en tierra: bloque chico (0,06°) que contiene al origen [0,0].
+  const port = blockLand(-0.03, -0.03, 0.03, 0.03);
+  const res = routeOptimal(base({ from: [0, 0], to: [4, 0], wind: uniform(270, 12), land: port }));
+  assert.equal(res.reached, true, "el origen exento deja arrancar");
+  for (let i = 1; i < res.waypoints.length - 1; i++) {
+    const w = res.waypoints[i]!;
+    assert.ok(!port.isLandWithMargin(w.lat, w.lon, 3), `waypoint intermedio en tierra (${w.lat},${w.lon})`);
+  }
+});
+
+test("E12.7 destino sobre tierra (puerto) → llega y no pisa tierra en el medio", () => {
+  const port = blockLand(3.97, -0.03, 4.03, 0.03);
+  const res = routeOptimal(base({ from: [0, 0], to: [4, 0], wind: uniform(270, 12), land: port }));
+  assert.equal(res.reached, true, "el destino exento admite llegar a un puerto en tierra");
+  for (const w of res.waypoints.slice(0, -1)) {
+    assert.ok(!port.isLandWithMargin(w.lat, w.lon, 3), `waypoint intermedio en tierra (${w.lat},${w.lon})`);
+  }
+});
+
+test("E12.7 isla de 1 celda en el medio de un tramo → el salto de anclaje la rodea", () => {
+  const island = blockLand(2.95, -0.05, 3.05, 0.05);
+  const res = routeMulti({ anchors: [[0, 0], [6, 0]], wind: uniform(270, 12), land: island });
+  assert.equal(res.reached, true, "tiene que llegar rodeando la isla");
+  const coords = multiRouteCoords(res);
+  for (const c of coords) {
+    assert.ok(!island.isLandWithMargin(c[1], c[0], 3), `pisó la isla en (${c[1]},${c[0]})`);
+  }
+  const maxDev = Math.max(...coords.map((c) => Math.abs(c[1])));
+  assert.ok(maxDev > 0.1, `debe rodear la isla (${maxDev.toFixed(2)}°)`);
+});
+
+test("E12.7 la simplificación no recorta una isla", () => {
+  // Isla fina pegada a la recta (lon 0, lat 3): el rodeo es chico y la
+  // simplificación (tol 0,1°) lo recorta de un tirón. La post-verificación
+  // reintroduce puntos crudos para no cruzar la isla.
+  const island = blockLand(0, 2.9, 0.1, 3.1);
+  const res = routeOptimal(base({ from: [0, 0], to: [0, 6], wind: uniform(90, 12), land: island }));
+  assert.equal(res.reached, true);
+  const wps = res.waypoints.map((w) => [w.lon, w.lat] as LonLat);
+  for (let i = 0; i + 1 < wps.length; i++) {
+    assert.ok(
+      !segmentCrossesLand(island, wps[i]!, wps[i + 1]!, 3),
+      `la polilínea recortó la isla entre ${wps[i]} y ${wps[i + 1]}`,
+    );
+  }
+});
+
+test("E12.7 tramo irresoluble → reached:false + motivo y sin recta ancla-a-ancla", () => {
+  // Muro de tierra de polo a polo: no se puede cruzar.
+  const wall = blockLand(2.9, -80, 3.1, 80);
+  const res = routeMulti({ anchors: [[0, 0], [6, 0]], wind: uniform(270, 12), land: wall });
+  assert.equal(res.reached, false);
+  assert.ok(typeof res.reason === "string" && res.reason.length > 0, "hay motivo");
+  assert.equal(res.segments[0]!.reached, false);
+  assert.ok(typeof res.segments[0]!.reason === "string" && res.segments[0]!.reason.length > 0);
+  const coords = multiRouteCoords(res);
+  assert.ok(!coords.some((c) => c[0] === 6 && c[1] === 0), "no hay recta hasta el ancla de llegada");
+});
+
+test("E12.7 los puntos de virada se marcan como bordo", () => {
+  // Viento del norte puro: el rumbo directo (N) cae en el cono muerto → ciñe.
+  const res = routeOptimal(base({ from: [0, 0], to: [0, 6], wind: uniform(0, 14) }));
+  assert.equal(res.reached, true);
+  assert.ok(res.tacks >= 1, `debe virar (${res.tacks})`);
+  assert.ok(res.waypoints.some((w) => w.tack === true), "algún waypoint cae en una virada");
+});
+
 test("E12.6 modos: Confort el más abierto, Crucero intermedio, Regata ETA mínimo", () => {
   // Viento del norte: el rumbo directo (N) cae en el cono muerto → todos ciñen.
   const from: LonLat = [0, 0];

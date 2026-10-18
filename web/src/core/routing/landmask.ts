@@ -13,20 +13,21 @@ export const LANDMASK_BYTES = (LANDMASK_WIDTH * LANDMASK_HEIGHT) / 8; // 810 000
 // Celdas por grado (10, porque la rejilla es de 0,1°).
 const PER_DEG = 1 / LANDMASK_CELL_DEG;
 
-// E12.6 — índice de celda sin off-by-one de coma flotante: se multiplica por 10
-// (en vez de dividir por 0,1, que para 0,1 da 900,99… y cae en la celda 900) y
-// se toma el piso. Se multiplica por `PER_DEG` y no se suma 0,5: sumar media
-// celda correría la costa media celda (0,05°) y desalinearía la máscara (ver
-// BLOCKERS.md).
+// E12.6/E12.7 — índice de celda sin off-by-one de coma flotante: se multiplica
+// por 10 (en vez de dividir por 0,1, que para 0,1 da 900,99… y cae en la celda
+// 900) y se suman 1e-6 para que un valor que cae apenas por debajo del entero
+// (p. ej. -89.9 → 0,9999…) no baje a la celda vecina. No se suma 0,5 (media
+// celda): eso correría la costa 0,05° y desalinearía la máscara (ver BLOCKERS.md).
+const INDEX_EPS = 1e-6;
 function cellIndex(v: number, origin: number, count: number): number {
-  let i = Math.floor((v + origin) * PER_DEG);
+  let i = Math.floor((v + origin) * PER_DEG + INDEX_EPS);
   i = i >= count ? i - count : i < 0 ? i + count : i;
   return i;
 }
 
 // Igual que `cellIndex` pero acotado (no envuelve): para la fila (latitud).
 function rowIndex(lat: number): number {
-  const r = Math.floor((lat + 90) * PER_DEG);
+  const r = Math.floor((lat + 90) * PER_DEG + INDEX_EPS);
   return r < 0 ? 0 : r >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : r;
 }
 

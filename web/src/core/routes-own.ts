@@ -147,30 +147,40 @@ export function mandatoryIndexes(route: OwnRoute): number[] {
   return out;
 }
 
-// E12.6 — aplica el resultado de una optimización tramo a tramo: conserva TODOS
-// los obligatorios (con nombre y posición) y agrega, entre cada par consecutivo,
-// los puntos optimizados (nacen opcionales). Los waypoints opcionales que el
-// trazado ya no toca se descartan. `segments[k]` son los puntos intermedios del
-// tramo entre el obligatorio k y el k+1.
+// E12.6/E12.7 — aplica el resultado de una optimización tramo a tramo: conserva
+// TODOS los obligatorios (con nombre y posición) y agrega, entre cada par
+// consecutivo, los puntos optimizados (nacen opcionales). Los waypoints opcionales
+// que el trazado ya no toca se descartan. `segments[k]` son los puntos intermedios
+// del tramo entre el obligatorio k y el k+1; los que caen en una virada (`tack`)
+// se bautizan "Bordo n" en vez de "WPn".
 export function applyOptimization(
   route: OwnRoute,
-  segments: { lat: number; lon: number }[][],
+  segments: { lat: number; lon: number; tack?: boolean }[][],
   now = Date.now(),
 ): OwnRoute {
   const anchors = route.waypoints.filter((w) => w.mandatory);
   if (anchors.length < 2) return route;
-  const out: OwnWaypoint[] = [];
+  const out: (OwnWaypoint & { tack?: boolean })[] = [];
   for (let k = 0; k < anchors.length; k++) {
     const a = anchors[k]!;
     out.push({ ...a });
     const seg = segments[k];
-    if (seg) for (const p of seg) out.push({ name: "", lat: p.lat, lon: p.lon, mandatory: false });
+    if (seg) {
+      for (const p of seg) out.push({ name: "", lat: p.lat, lon: p.lon, mandatory: false, tack: p.tack });
+    }
   }
   // Los puntos optimizados no traen nombre: se numeran sin pisar los del usuario.
+  let bordo = 0;
   out.forEach((w, i) => {
-    if (w.name === "") w.name = `WP${i + 1}`;
+    if (w.name !== "") return;
+    if (w.tack) {
+      bordo += 1;
+      w.name = `Bordo ${bordo}`;
+    } else {
+      w.name = `WP${i + 1}`;
+    }
   });
-  return normalize({ ...route, updatedAt: now, waypoints: out });
+  return normalize({ ...route, updatedAt: now, waypoints: out.map((w) => ({ ...w })) });
 }
 
 export function renameRoute(route: OwnRoute, name: string): OwnRoute {

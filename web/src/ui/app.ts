@@ -3385,10 +3385,11 @@ function optClearLayers(ui: UiState): void {
 function optApply(ui: UiState, code: string): void {
   const job = optJobs.get(code);
   const route = ownRouteById(code);
-  if (!job?.result || !route) return;
-  // E12.6: conserva los obligatorios y agrega los puntos optimizados de cada
-  // tramo; los opcionales que el trazado ya no toca se descartan.
-  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon })));
+  if (!job?.result || !job.result.reached || !route) return;
+  // E12.6/E12.7: conserva los obligatorios y agrega los puntos optimizados de
+  // cada tramo; los opcionales que el trazado ya no toca se descartan. Los puntos
+  // en virada se bautizan "Bordo n" (tack).
+  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack })));
   const before = route.waypoints.map((w) => ({ ...w }));
   applyOptimizationToOwn(ownCtx(ui), route, segments);
   const dropped = job.dropped;
@@ -3489,19 +3490,28 @@ function optRender(
   }
 
   if (job?.status === "done" && job.result && job.baseline) {
-    panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
-    const stats = el("div", { class: "hn-opt-stats" });
-    stats.append(
-      el("span", {}, `Optimizada: ${duracionTexto(job.result.etaMs / 3600_000)} · ${nm(job.result.nm)}`),
-      el("span", {}, `Ceñidas: ${job.result.tacks} bordos`),
-      el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`),
-    );
-    panel.append(stats);
-    if (job.beyondForecast) {
-      panel.append(el("p", { class: "hn-muted" }, "Pasado el horizonte del pronóstico se usa la climatología del mes."));
+    // E12.7 — contrato de falla: si algún tramo no llegó, no se aplica; se avisa
+    // por qué y solo se puede descartar.
+    const r = job.result;
+    if (!r.reached) {
+      panel.append(
+        el("p", { class: "hn-err" }, `No se pudo trazar la ruta: ${r.reason ?? "tramo sin paso"}.`),
+      );
+    } else {
+      panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
+      const stats = el("div", { class: "hn-opt-stats" });
+      stats.append(
+        el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${nm(r.nm)}`),
+        el("span", {}, `Ceñidas: ${r.tacks} bordos`),
+        el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`),
+      );
+      panel.append(stats);
+      if (job.beyondForecast) {
+        panel.append(el("p", { class: "hn-muted" }, "Pasado el horizonte del pronóstico se usa la climatología del mes."));
+      }
     }
     const acts = el("div", { class: "hn-opt-acts" });
-    if (kind === "own") {
+    if (kind === "own" && r.reached) {
       const dropped = job.dropped;
       const label =
         dropped > 0

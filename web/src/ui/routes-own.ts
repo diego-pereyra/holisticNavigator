@@ -155,7 +155,7 @@ export function replaceOwnRoute(
 export function applyOptimizationToOwn(
   ctx: OwnCtx,
   route: OwnRoute,
-  segments: { lat: number; lon: number }[][],
+  segments: { lat: number; lon: number; tack?: boolean }[][],
 ): OwnRoute {
   const updated = applyOptimization(route, segments);
   ownRoutes.update((list) => list.map((r) => (r.id === updated.id ? updated : r)));

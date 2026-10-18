@@ -129,6 +129,8 @@ export interface IsoWaypoint {
   lon: number;
   lat: number;
   etaMs: number;
+  /** E12.7 — el waypoint cae en una virada (bordo): se numera "Bordo n" al aplicar. */
+  tack?: boolean;
 }
 
 export interface IsoLeg {
@@ -159,6 +161,8 @@ export interface IsoResult {
   legs: IsoLeg[];
   isochrones: IsochroneLine[];
   steps: number;
+  /** E12.7 — si no se llegó, por qué (texto corto). Ausente si `reached`. */
+  reason?: string;
 }
 
 export interface IsoProgress {
@@ -207,6 +211,8 @@ export interface IsoLegSegment {
   /** Puntos optimizados intermedios (sin los extremos obligatorios). */
   points: IsoWaypoint[];
   isochrones: IsochroneLine[];
+  /** E12.7 — por qué no llegó este tramo (texto corto). Ausente si llegó. */
+  reason?: string;
 }
 
 // E12.6 — resultado de la optimización tramo a tramo: la ruta optimizada
@@ -221,6 +227,8 @@ export interface IsoMultiResult {
   segments: IsoLegSegment[];
   isochrones: IsochroneLine[];
   steps: number;
+  /** E12.7 — si algún tramo no llegó, por qué (texto corto). Ausente si `reached`. */
+  reason?: string;
 }
 
 export type IsoWorkerResponse =
@@ -287,9 +295,20 @@ function modeSpeedFactor(cfg: IsoConfig, deadAngle: number, twaAbs: number, tws:
   return f;
 }
 
-// E12.6 — camino libre de tierra en TODO el segmento p→q (no solo en el punto de
-// aterrizaje): recorre con paso ≤ 0,05° ("supercover") para no poder salvar una
-// isla de una sola celda (0,1°) saltándola de borde a borde.
+// E12.7 — un punto está en la "zona exenta" de un ancla (extremo del tramo): se
+// admite tierra en el radio de gracia (un puerto puede estar en tierra/a <3 nm).
+function inExemptZone(lat: number, lon: number, exempt: LonLat[] | undefined, graceDeg: number): boolean {
+  if (!exempt) return false;
+  for (const a of exempt) {
+    if (Math.abs(lat - a[1]) <= graceDeg && Math.abs(lon - a[0]) <= graceDeg) return true;
+  }
+  return false;
+}
+
+// E12.6/E12.7 — camino libre de tierra en TODO el segmento p→q (no solo en el
+// punto de aterrizaje): recorre con paso ≤ 0,05° ("supercover") para no poder
+// salvar una isla de una sola celda (0,1°) saltándola de borde a borde. Los
+// extremos ancla (puerto de salida/llegada) quedan exentos (`exempt`).
 function segmentClear(
   land: Landmask,
   lat0: number,
@@ -297,7 +316,9 @@ function segmentClear(
   lat1: number,
   lon1: number,
   marginNm: number,
+  exempt?: LonLat[],
 ): boolean {
+  const graceDeg = Math.max(marginNm, 6) / 60;
   const dLat = lat1 - lat0;
   const dLon = lon1 - lon0;
   const spanDeg = Math.max(Math.abs(dLat), Math.abs(dLon));
@@ -306,6 +327,7 @@ function segmentClear(
     const f = i / steps;
     const lat = lat0 + dLat * f;
     const lon = normLon(lon0 + dLon * f);
+    if (inExemptZone(lat, lon, exempt, graceDeg)) continue;
     if (land.isLandWithMargin(lat, lon, marginNm)) return false;
   }
   return true;
@@ -356,6 +378,9 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   const { wind, polar, land, ice } = opts;
   const origin = { lat: opts.from[1], lon: opts.from[0] };
   const dest = { lat: opts.to[1], lon: opts.to[0] };
+  // E12.6/E12.7 — extremos exentos: el puerto de salida y la llegada pueden estar
+  // en tierra o a <3 nm de la costa; la costa del medio sigue validada.
+  const exempt: LonLat[] = [opts.from, opts.to];
   const directBearing = initialBearingDeg(origin.lat, origin.lon, dest.lat, dest.lon);
 
   const headings: number[] = [];
@@ -376,6 +401,14 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   let closestNode: Node = frontier[0]!;
   let closestDist = haversineNm(origin.lat, origin.lon, dest.lat, dest.lon);
   let step = 0;
+
+  // E12.7 — el último tramo (salto de anclaje) también se valida: hay que poder
+  // entrar al destino (viento navegable y corredor libre, con extremos exentos).
+  const reachableEnd = (fromLat: number, fromLon: number, tMs: number): boolean => {
+    const wd = wind(dest.lat, dest.lon, tMs);
+    if (!wd || wd.speed > cfg.maxTws) return false;
+    return segmentClear(land, fromLat, fromLon, dest.lat, dest.lon, cfg.coastMarginNm, exempt);
+  };
 
   while (step < cfg.maxSteps && frontier.length > 0 && !reachedNode) {
     const candidates: Node[] = [];
@@ -400,8 +433,8 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         if (speed <= 0) continue;
         const advanceNm = speed * dtH;
         const q = advance(p.lat, p.lon, h, advanceNm);
-        // E12.6: valida TODO el salto, no solo el punto de aterrizaje.
-        if (!segmentClear(land, p.lat, p.lon, q.lat, q.lon, cfg.coastMarginNm)) continue;
+        // E12.6/E12.7: valida TODO el salto, no solo el punto de aterrizaje.
+        if (!segmentClear(land, p.lat, p.lon, q.lat, q.lon, cfg.coastMarginNm, exempt)) continue;
         if (ice) {
           const v = ice(q.lat, q.lon, p.t + dtMs);
           if (v !== null && v >= cfg.iceMax) continue;
@@ -417,7 +450,7 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         candidates.push(node);
 
         const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
-        if (d <= advanceNm * 1.2 || d < 1) {
+        if ((d <= advanceNm * 1.2 || d < 1) && reachableEnd(q.lat, q.lon, node.t)) {
           // Con varios puntos que llegan a la vez, elige el que queda más cerca
           // del destino (evita un último tramo torcido).
           if (!reachedCandidate || d < reachedDist - 0.05 || (Math.abs(d - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
@@ -468,7 +501,18 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   for (let cur: Node | null = end; cur; cur = cur.parent) path.push(cur);
   path.reverse();
 
-  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reachedNode !== null, cfg.maxWaypoints);
+  const reached = reachedNode !== null;
+  let reason: string | undefined;
+  if (!reached) {
+    const tEnd = closestNode?.t ?? opts.startMs;
+    const wd = wind(dest.lat, dest.lon, tEnd);
+    if (!wd) reason = "sin datos de viento en la llegada";
+    else if (wd.speed > cfg.maxTws) reason = `viento fuerte en la llegada (${Math.round(wd.speed)} kn > máximo ${cfg.maxTws} kn)`;
+    else if (!segmentClear(land, origin.lat, origin.lon, dest.lat, dest.lon, cfg.coastMarginNm, exempt)) reason = "bloqueado por tierra";
+    else reason = "no se pudo llegar con el viento y los rumbos disponibles";
+  }
+
+  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reached, cfg.maxWaypoints, reason, land, cfg, exempt);
 }
 
 // E12.6 — optimización tramo a tramo: los `anchors` son los waypoints
@@ -502,6 +546,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
   let steps = 0;
   let reached = true;
   let windMax: number | null = null;
+  let reason: string | undefined;
 
   for (let leg = 0; leg + 1 < anchors.length; leg++) {
     const gen = routeOptimalSteps({
@@ -536,6 +581,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       windMax: r.windMax,
       points,
       isochrones: r.isochrones,
+      ...(r.reached ? {} : { reason: r.reason }),
     });
     for (const iso of r.isochrones) isochrones.push(iso);
     startMs = r.etaMs;
@@ -543,19 +589,25 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     tacks += r.tacks;
     steps += r.steps;
     if (r.windMax !== null) windMax = windMax === null ? r.windMax : Math.max(windMax, r.windMax);
-    if (!r.reached) reached = false;
+    if (!r.reached) {
+      reached = false;
+      if (!reason) reason = r.reason;
+    }
   }
 
-  return { reached, etaMs: startMs, nm, tacks, windMax, anchors, segments, isochrones, steps };
+  return { reached, etaMs: startMs, nm, tacks, windMax, anchors, segments, isochrones, steps, ...(reason ? { reason } : {}) };
 }
 
-// Ruta optimizada completa (anclas + puntos intermedios de cada tramo).
+// Ruta optimizada completa (anclas + puntos intermedios de cada tramo). E12.7: si
+// un tramo no llegó, se corta ahí (nunca se dibuja una recta ancla-a-ancla).
 export function multiRouteCoords(result: IsoMultiResult): LonLat[] {
   const out: LonLat[] = [];
   if (result.anchors.length === 0) return out;
   out.push(result.anchors[0]!);
   for (let i = 0; i < result.segments.length; i++) {
-    for (const p of result.segments[i]!.points) out.push([p.lon, p.lat]);
+    const seg = result.segments[i]!;
+    for (const p of seg.points) out.push([p.lon, p.lat]);
+    if (!seg.reached) break;
     const anchor = result.anchors[i + 1];
     if (anchor) out.push(anchor);
   }
@@ -572,6 +624,10 @@ function buildResult(
   steps: number,
   reached: boolean,
   maxWaypoints: number,
+  reason?: string,
+  land?: Landmask,
+  cfg?: IsoConfig,
+  exempt?: LonLat[],
 ): IsoResult {
   const raw: LonLat[] = path.map((p) => [p.lon, p.lat] as LonLat);
   const etaOf = path.map((p) => p.t);
@@ -590,11 +646,54 @@ function buildResult(
     keep = [...new Set(thinned)].sort((a, b) => a - b);
   }
 
-  const waypoints: IsoWaypoint[] = keep.map((i) => ({
-    lon: raw[i]![0],
-    lat: raw[i]![1],
-    etaMs: etaOf[i] ?? etaOf[etaOf.length - 1] ?? 0,
-  }));
+  // E12.7 — post-verificación de la simplificación: el recorte no puede meter un
+  // tramo que cruce tierra con margen ni que cruce viento > máximo del modo. Si
+  // pasa, se reintroducen puntos crudos (bisección) hasta que el trazado sea válido.
+  if (land && cfg) {
+    const marginNm = cfg.coastMarginNm;
+    const maxTws = cfg.maxTws;
+    const pairOk = (a: number, b: number): boolean => {
+      if (!segmentClear(land, raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0], marginNm, exempt)) return false;
+      const midT = (etaOf[a]! + etaOf[b]!) / 2;
+      const wm = wind((raw[a]![1] + raw[b]![1]) / 2, normLon((raw[a]![0] + raw[b]![0]) / 2), midT);
+      return !(wm && wm.speed > maxTws);
+    };
+    let guard = 0;
+    while (keep.length >= 2 && guard++ < raw.length + 1) {
+      let bad = -1;
+      for (let k = 0; k + 1 < keep.length; k++) {
+        if (!pairOk(keep[k]!, keep[k + 1]!)) { bad = k; break; }
+      }
+      if (bad < 0) break;
+      const a = keep[bad]!;
+      const b = keep[bad + 1]!;
+      if (b - a < 2) {
+        keep = raw.map((_, i) => i);
+        break;
+      }
+      keep = [...keep, Math.floor((a + b) / 2)].sort((x, y) => x - y);
+    }
+  }
+
+  const waypoints: IsoWaypoint[] = keep.map((i) => {
+    const wp: IsoWaypoint = {
+      lon: raw[i]![0],
+      lat: raw[i]![1],
+      etaMs: etaOf[i] ?? etaOf[etaOf.length - 1] ?? 0,
+    };
+    // E12.7 — marca de virada: el rumbo entra por un lado y sale por el otro.
+    if (i > 0 && i < raw.length - 1) {
+      const hIn = initialBearingDeg(raw[i - 1]![1], raw[i - 1]![0], raw[i]![1], raw[i]![0]);
+      const hOut = initialBearingDeg(raw[i]![1], raw[i]![0], raw[i + 1]![1], raw[i + 1]![0]);
+      const w = wind(raw[i]![1], raw[i]![0], wp.etaMs);
+      if (w) {
+        const sIn = Math.sign(relative(hIn, w.dir));
+        const sOut = Math.sign(relative(hOut, w.dir));
+        if (sIn !== 0 && sOut !== 0 && sIn !== sOut) wp.tack = true;
+      }
+    }
+    return wp;
+  });
 
   const legs: IsoLeg[] = [];
   let nm = 0;
@@ -653,6 +752,7 @@ function buildResult(
     windMax: windSeen ? windMax : null,
     waypoints,
     legs,
+    ...(reason ? { reason } : {}),
     isochrones,
     steps,
   };

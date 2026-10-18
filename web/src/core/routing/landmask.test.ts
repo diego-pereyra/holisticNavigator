@@ -31,11 +31,11 @@ test("E12.1 margen de 3 nm sobre la costa de Portugal (Cabo da Roca)", () => {
   assert.ok(!m.isLandWithMargin(lat, lon - nmLon(5), 3), "a 5 nm de la costa debe ser mar");
 });
 
-// E12.6 — índice de celda con multiplicación por 10, para no volver a dividir
-// por 0,1 (que en 0,1 da 900,99… y cae en la celda de abajo).
+// E12.7 — índice de celda con multiplicación por 10 y épsilon (no /0,1): evita
+// que un borde exacto (p. ej. -89.9 → 0,9999…) caiga en la celda vecina.
 function cellIdx(lat: number, lon: number): number {
-  const row = Math.floor((lat + 90) * 10);
-  const col = Math.floor((lon + 180) * 10);
+  const row = Math.floor((lat + 90) * 10 + 1e-6);
+  const col = Math.floor((lon + 180) * 10 + 1e-6);
   return row * 3600 + col;
 }
 
@@ -46,7 +46,7 @@ function oneCell(lat: number, lon: number): Landmask {
   return decodeLandmask(bytes);
 }
 
-test("E12.6 bordes exactos de celda no tienen off-by-one (p. ej. -3.8)", () => {
+test("E12.7 bordes exactos de celda no tienen off-by-one (p. ej. -3.8)", () => {
   // -3.8 es el borde inferior de la celda 862: debe resolver a ESA celda, no a la 863.
   const m = oneCell(-3.8, 0);
   assert.ok(m.isLand(-3.8, 0), "el borde exacto pertenece a su celda (862)");
@@ -55,10 +55,16 @@ test("E12.6 bordes exactos de celda no tienen off-by-one (p. ej. -3.8)", () => {
   assert.ok(!m.isLand(-3.7, 0), "la celda de arriba es otra (863)");
   assert.ok(!m.isLand(-3.9, 0), "la celda de abajo es otra");
 
-  // 0.1: dividir por 0,1 daba 900,99… (celda 900). El borde es la celda 901.
+  // 0.1: dividir por 0,1 da 900,99… (celda 900). El borde es la celda 901.
   const m2 = oneCell(0.1, 0);
   assert.ok(m2.isLand(0.1, 0), "0.1 exacto cae en su celda, no en la de abajo");
   assert.equal(cellIdx(0.1, 0), 901 * 3600 + 1800);
+
+  // -89.9: sin el épsilon, (lat+90)*10 da 0,9999… y caería en la celda 0;
+  // con el épsilon cae en la celda 1 (su borde exacto).
+  const m3 = oneCell(-89.9, 0);
+  assert.ok(m3.isLand(-89.9, 0), "el épsilon evita la celda vecina");
+  assert.equal(cellIdx(-89.9, 0), 1 * 3600 + 1800);
 });
 
 test("E12.1 consulta de 1 000 000 de puntos en < 50 ms", () => {
