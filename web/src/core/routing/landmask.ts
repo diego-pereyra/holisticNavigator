@@ -2,13 +2,21 @@
 //
 // `basemap/land.bits` es una rejilla de bits de 0,1° (3 600 × 1 800), origen
 // (-180, -90), filas de sur a norte y 1 = tierra, generada por
-// `tools/build_landmask.py`. Consulta O(1); el margen costero se obtiene
-// dilatando k celdas.
+// `tools/build_landmask.py`. Consulta O(1); el margen costero (E12.8) sale de una
+// transformada de distancia chamfer calculada una vez al decodificar.
 
 export const LANDMASK_WIDTH = 3600;
 export const LANDMASK_HEIGHT = 1800;
 export const LANDMASK_CELL_DEG = 0.1;
 export const LANDMASK_BYTES = (LANDMASK_WIDTH * LANDMASK_HEIGHT) / 8; // 810 000
+
+// E12.8 — transformada de distancia: distancia en nm de cada celda a la costa
+// más cercana. Se guarda en décimas de nm (enteros) para no ocupar 26 MB.
+const NM_PER_DEG_LAT = 60;
+const DIST_SCALE = 10; // décimas de nm
+const DIST_MAX = 0xffff; // sin tierra cerca (6553,5 nm)
+const HALF_CELL_NM = 3; // 0,05° de latitud: media celda, para medir a la costa
+const V_STEP = Math.round(LANDMASK_CELL_DEG * NM_PER_DEG_LAT * DIST_SCALE); // 60
 
 // Celdas por grado (10, porque la rejilla es de 0,1°).
 const PER_DEG = 1 / LANDMASK_CELL_DEG;
@@ -29,11 +37,6 @@ function cellIndex(v: number, origin: number, count: number): number {
 function rowIndex(lat: number): number {
   const r = Math.floor((lat + 90) * PER_DEG + INDEX_EPS);
   return r < 0 ? 0 : r >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : r;
-}
-
-// Vuelta en la antimeridiana para una columna ya calculada.
-function wrapCol(c: number): number {
-  return c >= LANDMASK_WIDTH ? c - LANDMASK_WIDTH : c < 0 ? c + LANDMASK_WIDTH : c;
 }
 
 export interface Landmask {
@@ -60,23 +63,83 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
     return (bytes[i >> 3]! & (128 >> (i & 7))) !== 0;
   };
 
+  // E12.8 — transformada de distancia (chamfer de dos pasadas, 8 vecinos). El
+  // paso horizontal se pondera por cos(latitud) fila por fila, así el margen es
+  // una distancia real en millas y no una caja de celdas (que bloqueaba canales
+  // de menos de ~12 nm de lado a lado).
+  const dist = new Uint16Array(LANDMASK_WIDTH * LANDMASK_HEIGHT);
+  const W = LANDMASK_WIDTH;
+  const Hh = LANDMASK_HEIGHT;
+  const wgt = new Int32Array(Hh); // paso horizontal (escalado) por fila
+  const diag = new Int32Array(Hh);
+  for (let r = 0; r < Hh; r++) {
+    const lat = r * LANDMASK_CELL_DEG - 90 + LANDMASK_CELL_DEG / 2;
+    const hStep = Math.max(1, Math.round(LANDMASK_CELL_DEG * NM_PER_DEG_LAT * Math.cos((lat * Math.PI) / 180) * DIST_SCALE));
+    wgt[r] = hStep;
+    diag[r] = Math.round(Math.hypot(V_STEP, hStep));
+  }
+  // Pasada forward (arriba-izquierda → abajo-derecha); la siembra (tierra = 0,
+  // mar = DIST_MAX) va acá mismo para no recorrer la rejilla dos veces.
+  for (let r = 0; r < Hh; r++) {
+    const base = r * W;
+    const up = base - W;
+    const hStep = wgt[r]!;
+    const dg = diag[r]!;
+    for (let c = 0; c < W; c++) {
+      const i = base + c;
+      if ((bytes[i >> 3]! & (128 >> (i & 7))) !== 0) {
+        dist[i] = 0;
+        continue;
+      }
+      let d = DIST_MAX;
+      const cl = c > 0 ? c - 1 : W - 1;
+      const cr = c < W - 1 ? c + 1 : 0;
+      if (r > 0) {
+        let t = dist[up + c]! + V_STEP;
+        if (t < d) d = t;
+        t = dist[up + cl]! + dg;
+        if (t < d) d = t;
+        t = dist[up + cr]! + dg;
+        if (t < d) d = t;
+      }
+      const tl = dist[base + cl]! + hStep;
+      if (tl < d) d = tl;
+      dist[i] = d > DIST_MAX ? DIST_MAX : d;
+    }
+  }
+  // Pasada backward (abajo-derecha → arriba-izquierda).
+  for (let r = Hh - 1; r >= 0; r--) {
+    const base = r * W;
+    const down = base + W;
+    const hStep = wgt[r]!;
+    const dg = diag[r]!;
+    for (let c = W - 1; c >= 0; c--) {
+      const i = base + c;
+      let d = dist[i]!;
+      if (d === 0) continue;
+      const cl = c > 0 ? c - 1 : W - 1;
+      const cr = c < W - 1 ? c + 1 : 0;
+      if (r < Hh - 1) {
+        let t = dist[down + c]! + V_STEP;
+        if (t < d) d = t;
+        t = dist[down + cl]! + dg;
+        if (t < d) d = t;
+        t = dist[down + cr]! + dg;
+        if (t < d) d = t;
+      }
+      let t = dist[base + cr]! + hStep;
+      if (t < d) d = t;
+      dist[i] = d > DIST_MAX ? DIST_MAX : d;
+    }
+  }
+
   const isLandWithMargin = (lat: number, lon: number, nm: number): boolean => {
     if (!(nm > 0)) return isLand(lat, lon);
-    const k = Math.max(1, Math.ceil(nm / 6)); // 6 nm ≈ 0,1° de latitud
     const col = cellIndex(lon, 180, LANDMASK_WIDTH);
     const row = rowIndex(lat);
-
-    const r0 = row - k < 0 ? 0 : row - k;
-    const r1 = row + k >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row + k;
-    for (let r = r0; r <= r1; r++) {
-      const base = r * LANDMASK_WIDTH;
-      for (let dc = -k; dc <= k; dc++) {
-        const c = wrapCol(col + dc);
-        const i = base + c;
-        if ((bytes[i >> 3]! & (128 >> (i & 7))) !== 0) return true;
-      }
-    }
-    return false;
+    // Media celda de gracia implícita: la costa es el borde de la celda, no su
+    // centro; así el margen de 3 nm bloquea 3 nm de verdad.
+    return dist[row * LANDMASK_WIDTH + col]! < (nm + HALF_CELL_NM) * DIST_SCALE;
   };
 
   return { width: LANDMASK_WIDTH, height: LANDMASK_HEIGHT, isLand, isLandWithMargin };

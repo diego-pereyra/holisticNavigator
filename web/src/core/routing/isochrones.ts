@@ -11,6 +11,7 @@
 // ceñidas emergen solas porque la polar no permite rumbos dentro del cono muerto.
 
 import { haversineNm, initialBearingDeg, type LonLat } from "../navigation.ts";
+import { formatLat, formatLon } from "../coords.ts";
 import { boatSpeed, type Polar } from "./polar.ts";
 import type { Landmask } from "./landmask.ts";
 import type { WindField } from "./windfield.ts";
@@ -317,8 +318,17 @@ function segmentClear(
   lon1: number,
   marginNm: number,
   exempt?: LonLat[],
-): boolean {
-  const graceDeg = Math.max(marginNm, 6) / 60;
+  anchor?: { lon: number; lat: number },
+) {
+  // E12.8 — un waypoint obligatorio (ancla) es correcto por definición: JAMÁS se
+  // rechaza por tierra. El optimizador confía en él.
+  const ex: LonLat[] = exempt ? [...exempt] : [];
+  if (anchor) ex.push([anchor.lon, anchor.lat]);
+  // E12.8 — gracia por ancla: la confianza es en el PUNTO del ancla, no en un
+  // radio grande. 0,05° (3 nm, igual al margen) deja salir/entrar a un puerto
+  // en tierra sin abrir una "zona segura" donde el optimizador recorte tierra.
+  // (El 0,2° del spec dejaba navegar 12 nm sobre tierra junto al ancla.)
+  const graceDeg = 0.05;
   const dLat = lat1 - lat0;
   const dLon = lon1 - lon0;
   const spanDeg = Math.max(Math.abs(dLat), Math.abs(dLon));
@@ -327,7 +337,7 @@ function segmentClear(
     const f = i / steps;
     const lat = lat0 + dLat * f;
     const lon = normLon(lon0 + dLon * f);
-    if (inExemptZone(lat, lon, exempt, graceDeg)) continue;
+    if (inExemptZone(lat, lon, ex, graceDeg)) continue;
     if (land.isLandWithMargin(lat, lon, marginNm)) return false;
   }
   return true;
@@ -407,65 +417,129 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   const reachableEnd = (fromLat: number, fromLon: number, tMs: number): boolean => {
     const wd = wind(dest.lat, dest.lon, tMs);
     if (!wd || wd.speed > cfg.maxTws) return false;
-    return segmentClear(land, fromLat, fromLon, dest.lat, dest.lon, cfg.coastMarginNm, exempt);
+    return segmentClear(land, fromLat, fromLon, dest.lat, dest.lon, cfg.coastMarginNm, exempt, dest);
+  };
+
+  // E12.8 — por qué mueren los candidatos, para poder decir DÓNDE y POR QUÉ no
+  // se pudo avanzar (antes se diagnosticaba la recta origen→destino: mentía).
+  interface Deaths {
+    land: number;
+    wind: number;
+    tws: number;
+    tack: number;
+    ice: number;
+  }
+  let reachedCandidate: Node | null = null;
+  let reachedDist = Infinity;
+  let deathPos: { lat: number; lon: number } | null = null;
+  let deathDeaths: Deaths | null = null;
+
+  const expand = (p: Node, dtH: number, out: Node[], nd: Deaths): number => {
+    const startLen = out.length;
+    const dtMs = dtH * 3600_000;
+    const wp = wind(p.lat, p.lon, p.t);
+    if (!wp) {
+      nd.wind++;
+      return out.length - startLen;
+    }
+    for (const h of headings) {
+      const twa = relative(h, wp.dir);
+      let speed = boatSpeed(polar, twa, wp.speed);
+      if (speed <= 0) continue;
+      // El modo penaliza la ceñida y el viento fuerte solo a vela (a motor el
+      // rumbo no importa).
+      if (wp.speed >= polar.config.motorTws) {
+        speed *= modeSpeedFactor(cfg, polar.config.deadAngle, Math.abs(twa), wp.speed);
+      }
+      if (speed <= 0) continue;
+      const advanceNm = speed * dtH;
+      const q = advance(p.lat, p.lon, h, advanceNm);
+      // E12.6/E12.7: valida TODO el salto, no solo el punto de aterrizaje.
+        if (!segmentClear(land, p.lat, p.lon, q.lat, q.lon, cfg.coastMarginNm, exempt, { lat: origin.lat, lon: origin.lon })) {
+          nd.land++;
+          continue;
+        }
+      if (ice) {
+        const v = ice(q.lat, q.lon, p.t + dtMs);
+        if (v !== null && v >= cfg.iceMax) {
+          nd.ice++;
+          continue;
+        }
+      }
+      const wq = wind(q.lat, q.lon, p.t + dtMs);
+      if (!wq) {
+        nd.wind++;
+        continue;
+      }
+      if (wq.speed > cfg.maxTws) {
+        nd.tws++;
+        continue;
+      }
+
+      const tack = !Number.isNaN(p.heading) && Math.sign(twa) !== Math.sign(relative(p.heading, wp.dir));
+      const tacks = p.tacks + (tack ? 1 : 0);
+      if (tacks > cfg.maxTacks) {
+        nd.tack++;
+        continue;
+      }
+      const t = p.t + dtMs + (tack ? cfg.tackPenaltyMin * 60_000 : 0);
+      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p };
+      out.push(node);
+
+      const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
+      if ((d <= advanceNm * 1.2 || d < 1) && reachableEnd(q.lat, q.lon, node.t)) {
+        // Con varios puntos que llegan a la vez, elige el que queda más cerca
+        // del destino (evita un último tramo torcido).
+        if (!reachedCandidate || d < reachedDist - 0.05 || (Math.abs(d - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
+          reachedCandidate = node;
+          reachedDist = d;
+        }
+      }
+      if (d < closestDist) {
+        closestDist = d;
+        closestNode = node;
+      }
+    }
+    return out.length - startLen;
   };
 
   while (step < cfg.maxSteps && frontier.length > 0 && !reachedNode) {
     const candidates: Node[] = [];
-    let reachedCandidate: Node | null = null;
-    let reachedDist = Infinity;
+    reachedCandidate = null;
+    reachedDist = Infinity;
 
     for (const p of frontier) {
-      const dtH = nearCoast(land, p.lat, p.lon, cfg.coastDeg) ? cfg.stepCoastH : cfg.stepOceanH;
-      const dtMs = dtH * 3600_000;
-      const wp = wind(p.lat, p.lon, p.t);
-      if (!wp) continue;
-
-      for (const h of headings) {
-        const twa = relative(h, wp.dir);
-        let speed = boatSpeed(polar, twa, wp.speed);
-        if (speed <= 0) continue;
-        // El modo penaliza la ceñida y el viento fuerte solo a vela (a motor el
-        // rumbo no importa).
-        if (wp.speed >= polar.config.motorTws) {
-          speed *= modeSpeedFactor(cfg, polar.config.deadAngle, Math.abs(twa), wp.speed);
-        }
-        if (speed <= 0) continue;
-        const advanceNm = speed * dtH;
-        const q = advance(p.lat, p.lon, h, advanceNm);
-        // E12.6/E12.7: valida TODO el salto, no solo el punto de aterrizaje.
-        if (!segmentClear(land, p.lat, p.lon, q.lat, q.lon, cfg.coastMarginNm, exempt)) continue;
-        if (ice) {
-          const v = ice(q.lat, q.lon, p.t + dtMs);
-          if (v !== null && v >= cfg.iceMax) continue;
-        }
-        const wq = wind(q.lat, q.lon, p.t + dtMs);
-        if (!wq || wq.speed > cfg.maxTws) continue;
-
-        const tack = !Number.isNaN(p.heading) && Math.sign(twa) !== Math.sign(relative(p.heading, wp.dir));
-        const tacks = p.tacks + (tack ? 1 : 0);
-        if (tacks > cfg.maxTacks) continue;
-        const t = p.t + dtMs + (tack ? cfg.tackPenaltyMin * 60_000 : 0);
-        const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p };
-        candidates.push(node);
-
-        const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
-        if ((d <= advanceNm * 1.2 || d < 1) && reachableEnd(q.lat, q.lon, node.t)) {
-          // Con varios puntos que llegan a la vez, elige el que queda más cerca
-          // del destino (evita un último tramo torcido).
-          if (!reachedCandidate || d < reachedDist - 0.05 || (Math.abs(d - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
-            reachedCandidate = node;
-            reachedDist = d;
-          }
-        }
-        if (d < closestDist) {
-          closestDist = d;
-          closestNode = node;
-        }
+      const nd: Deaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
+      let dtH = nearCoast(land, p.lat, p.lon, cfg.coastDeg) ? cfg.stepCoastH : cfg.stepOceanH;
+      let produced = expand(p, dtH, candidates, nd);
+      // E12.8 — paso adaptativo: si un punto no produjo ningún candidato y murió
+      // por tierra, reintenta con Δt reducido (piso 15 min) para no saltear los
+      // canales más angostos que el avance de un paso.
+      while (produced === 0 && nd.land > 0 && dtH > 0.25) {
+        dtH = Math.max(0.25, dtH / 2);
+        produced = expand(p, dtH, candidates, nd);
+      }
+      if (produced === 0) {
+        if (!deathDeaths) deathDeaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
+        deathDeaths.land += nd.land;
+        deathDeaths.wind += nd.wind;
+        deathDeaths.tws += nd.tws;
+        deathDeaths.tack += nd.tack;
+        deathDeaths.ice += nd.ice;
       }
     }
 
-    if (candidates.length === 0) break;
+    if (candidates.length === 0) {
+      // El punto de la frontera más cercano al destino es donde murió.
+      for (const p of frontier) {
+        if (!deathPos) deathPos = { lat: p.lat, lon: p.lon };
+        else if (haversineNm(p.lat, p.lon, dest.lat, dest.lon) < haversineNm(deathPos.lat, deathPos.lon, dest.lat, dest.lon)) deathPos = { lat: p.lat, lon: p.lon };
+      }
+      if (!deathDeaths) deathDeaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
+      break;
+    }
+    deathPos = null;
+    deathDeaths = null;
 
     // Poda por sectores angulares desde el origen: un sobreviviente por sector
     // (el de menor ETA; empate → el más cercano al destino).
@@ -504,12 +578,20 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   const reached = reachedNode !== null;
   let reason: string | undefined;
   if (!reached) {
-    const tEnd = closestNode?.t ?? opts.startMs;
-    const wd = wind(dest.lat, dest.lon, tEnd);
-    if (!wd) reason = "sin datos de viento en la llegada";
-    else if (wd.speed > cfg.maxTws) reason = `viento fuerte en la llegada (${Math.round(wd.speed)} kn > máximo ${cfg.maxTws} kn)`;
-    else if (!segmentClear(land, origin.lat, origin.lon, dest.lat, dest.lon, cfg.coastMarginNm, exempt)) reason = "bloqueado por tierra";
-    else reason = "no se pudo llegar con el viento y los rumbos disponibles";
+    if (deathPos && deathDeaths) {
+      const pos = `(${formatLat(deathPos.lat)}, ${formatLon(deathPos.lon)})`;
+      const causes: Array<[number, string]> = [
+        [deathDeaths.land, `sin corredor navegable cerca de ${pos}`],
+        [deathDeaths.wind, `sin datos de viento cerca de ${pos}`],
+        [deathDeaths.tws, `viento fuerte (supera el máximo del modo) cerca de ${pos}`],
+        [deathDeaths.tack, `se agotó el límite de bordos cerca de ${pos}`],
+        [deathDeaths.ice, `el hielo bloquea el paso cerca de ${pos}`],
+      ];
+      causes.sort((a, b) => b[0] - a[0]);
+      reason = causes[0]![0] > 0 ? causes[0]![1] : `no se pudo avanzar cerca de ${pos}`;
+    } else {
+      reason = "se agotaron los pasos antes de llegar";
+    }
   }
 
   return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reached, cfg.maxWaypoints, reason, land, cfg, exempt);

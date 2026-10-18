@@ -229,3 +229,20 @@ propuesta es la misma ruta, en trámite. Quedan incorporados también los ids au
 E13.6/E13.7 (`wx-arrows-head`, `wx-current-head`, `wx-waves-head`) y `wx-isobar-labels`.
 
 
+
+## E12.8 · gracia por ancla: el 0,2° del spec deja navegar sobre tierra — desvío
+
+**Qué falla (en la spec).** El paso 2 de E12.8 pide subir la gracia por ancla a ±0,2° (~12 nm).
+Con ese radio el optimizador **ignora la tierra en un disco de 12 nm alrededor de cada ancla**:
+cualquier rumbo que pase por tierra dentro de ese radio queda "exento" y el trazado recorta la
+isla. Reproducido con el canal del propio test (a) del spec: el origen cae a <12 nm del muro
+del canal y el trazado se va a lon 0,2° (adentro de la tierra) en vez de seguir el canal.
+
+**Qué hice.** Gracia de **0,05° (3 nm, igual al margen)**: confía en el PUNTO del ancla (un
+puerto en tierra hasta ~3 nm adentro sale/entra sin rechazo) sin abrir una zona navegable
+sobre tierra. Los cuatro tests de anclas de E12.7 (puerto de salida/llegada, isla en el medio,
+"Bordo n") siguen verdes, y el canal del test (a) se atraviesa limpio.
+
+**Decisión pendiente:** si se quiere un puerto a más de ~3 nm adentro habría que ampliar la
+gracia, pero con un radio grande el optimizador vuelve a recortar tierra junto al ancla —
+habría que eximir solo los extremos del segmento (no un radio) y eso es otro cambio.

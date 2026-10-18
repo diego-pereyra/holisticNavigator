@@ -275,3 +275,75 @@ test("E12.6 modos: Confort el más abierto, Crucero intermedio, Regata ETA míni
   assert.ok(conf.nm > cru.nm, `Confort recorre más millas que Crucero (${conf.nm} > ${cru.nm})`);
   assert.ok(cru.nm > reg.nm, `Crucero recorre más millas que Regata (${cru.nm} > ${reg.nm})`);
 });
+
+// E12.8 — margen real, corredores, anclas de confianza y motivo honesto.
+
+// Máscara de test con margen REAL (distancia en nm al rectángulo), como la
+// transformada de distancia del landmask real. Tupla [w, s, e, n] en grados.
+function fineLand(blocks: Array<[number, number, number, number]>): Landmask {
+  const inside = (lat: number, lon: number, b: [number, number, number, number]): boolean =>
+    lat >= b[1] && lat <= b[3] && lon >= b[0] && lon <= b[2];
+  const distNm = (lat: number, lon: number, b: [number, number, number, number]): number => {
+    const dLat = Math.max(0, b[1] - lat, lat - b[3]);
+    const dLon = Math.max(0, b[0] - lon, lon - b[2]);
+    return Math.hypot(dLat * 60, dLon * 60 * Math.cos((lat * Math.PI) / 180));
+  };
+  return {
+    width: 3600,
+    height: 1800,
+    isLand: (lat, lon) => blocks.some((b) => inside(lat, lon, b)),
+    isLandWithMargin: (lat, lon, nm) => blocks.some((b) => inside(lat, lon, b) || distNm(lat, lon, b) < nm),
+  };
+}
+
+test("E12.8 canal de 0,2° (12 nm) → el trazado lo atraviesa", () => {
+  // Dos masas de tierra a lon ≤ -0,1 y lon ≥ 0,1, unidas por un canal de 12 nm.
+  const land = fineLand([
+    [-4, -2, -0.1, 2],
+    [0.1, -2, 4, 2],
+  ]);
+  const res = routeOptimal(base({ from: [0, -1], to: [0, 1], wind: uniform(180, 12), land }));
+  assert.equal(res.reached, true, "tiene que atravesar el canal");
+  for (const w of res.waypoints) {
+    assert.ok(!land.isLandWithMargin(w.lat, w.lon, 3), `pisó tierra en (${w.lat},${w.lon})`);
+  }
+  const maxLon = Math.max(...res.waypoints.map((w) => Math.abs(w.lon)));
+  assert.ok(maxLon < 0.15, `tiene que mantenerse dentro del canal (${maxLon.toFixed(3)}°)`);
+});
+
+test("E12.8 paso grueso en un canal angosto → el reintento con Δt reducido lo atraviesa", () => {
+  // Canal de 0,2° (12 nm) con la costa al este. Con paso grueso (2 h ≈ 12 nm)
+  // el avance saltea el corredor; el reintento con Δt a la mitad encuentra rumbo
+  // que aterriza adentro. (Sin reintento, este mismo caso no llega.)
+  const land = fineLand([
+    [-4, -2, -0.1, 2],
+    [0.1, -2, 4, 2],
+  ]);
+  const res = routeOptimal(base({ from: [0, -1], to: [0, 1], wind: uniform(180, 12), land, config: { stepCoastH: 2, stepOceanH: 2 } }));
+  assert.equal(res.reached, true, "el paso reducido tiene que encontrar el corredor");
+  for (const w of res.waypoints) {
+    assert.ok(!land.isLandWithMargin(w.lat, w.lon, 3), `pisó tierra en (${w.lat},${w.lon})`);
+  }
+});
+
+test("E12.8 motivo honesto: muere lejos del obstáculo → no dice 'bloqueado por tierra'", () => {
+  // Isla en lat 2..2,1 entre origen y destino (la recta la cruza) y viento que
+  // solo existe en lat ≥ 1: la frontera muere por falta de viento en el origen,
+  // no por la isla. El diagnóstico viejo (recta origen→destino) diría
+  // "bloqueado por tierra" porque la recta cruza la isla.
+  const island = fineLand([[-1, 2, 1, 2.1]]);
+  const wind: WindField = (lat) => (lat >= 1 ? { dir: 180, speed: 12 } : null);
+  const res = routeOptimal(base({ from: [0, 0], to: [0, 5], wind, land: island }));
+  assert.equal(res.reached, false);
+  assert.match(res.reason ?? "", /viento/i, `motivo: ${res.reason}`);
+  assert.ok(!/tierra/i.test(res.reason ?? ""), `no debe culpar a la tierra: ${res.reason}`);
+  assert.ok(/\(\d/.test(res.reason ?? ""), `debe decir dónde murió: ${res.reason}`);
+});
+
+test("E12.8 ancla a 1 nm de la costa → el tramo parte y llega sin rechazo", () => {
+  const land = fineLand([[0.5, -2, 4, 2]]);
+  const res = routeOptimal(base({ from: [0.45, 0], to: [-1, 0], wind: uniform(270, 12), land }));
+  assert.equal(res.reached, true, "el ancla pegado a la costa es correcto por definición");
+  const last = res.waypoints[res.waypoints.length - 1]!;
+  assert.ok(last.lon < 0.5, `llega sin pisar tierra (${last.lon})`);
+});

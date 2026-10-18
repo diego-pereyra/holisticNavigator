@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import { decodeLandmask, LANDMASK_BYTES, type Landmask } from "./landmask.ts";
+import { decodeLandmask, LANDMASK_BYTES, LANDMASK_CELL_DEG, LANDMASK_HEIGHT, LANDMASK_WIDTH, type Landmask } from "./landmask.ts";
 
 function mask(): Landmask {
   const bytes = readFileSync(new URL("../../../../data/land/land.bits", import.meta.url));
@@ -86,4 +86,27 @@ test("E12.1 consulta de 1 000 000 de puntos en < 50 ms", () => {
     best = Math.min(best, performance.now() - t0);
   }
   assert.ok(best < 50, `${best.toFixed(1)} ms para 1 000 000 de consultas`);
+});
+
+test("E12.8 margen real: una celda de canal con 3 nm de holgura no queda bloqueada a 3 nm", () => {
+  // Tierra en todas las filas salvo la de lat 0..0,1 (una celda de canal). Esa
+  // celda queda a 6 nm del centro de tierra vecino → 3 nm de holgura real. Con
+  // margen 3 nm el eje del canal sigue libre; con la caja vieja (k=1 celda ≈
+  // 6 nm por lado) el canal entero quedaba bloqueado.
+  const bytes = new Uint8Array(LANDMASK_BYTES);
+  for (let row = 0; row < LANDMASK_HEIGHT; row++) {
+    const lat = row * LANDMASK_CELL_DEG - 90 + LANDMASK_CELL_DEG / 2; // centro de celda
+    const isCanal = lat >= 0.05 && lat < 0.15; // única celda de mar (lat 0..0,1)
+    if (!isCanal) {
+      for (let col = 0; col < LANDMASK_WIDTH; col++) {
+        const i = row * LANDMASK_WIDTH + col;
+        bytes[i >> 3]! |= 128 >> (i & 7);
+      }
+    }
+  }
+  const m = decodeLandmask(bytes);
+  assert.ok(m.isLand(0.15, 0), "la celda de tierra del norte");
+  assert.ok(!m.isLand(0.05, 0), "el eje del canal es mar");
+  assert.ok(!m.isLandWithMargin(0.05, 0, 3), "a 3 nm el eje del canal sigue libre");
+  assert.ok(m.isLandWithMargin(0.05, 0, 4), "a 4 nm ya bloquea la celda de 3 nm de holgura");
 });
