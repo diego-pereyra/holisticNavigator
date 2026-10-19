@@ -86,3 +86,45 @@ test("unidades persistidas: basura cae a defaults náuticos", () => {
   const u = applyUnits({ speed: "mph", distance: 42, depth: "brazas" });
   assert.deepEqual(u, DU);
 });
+
+import { measureLegs } from "./format.ts";
+
+test("medir: suma tramos y total; rumbo inicial correcto", () => {
+  const r = measureLegs([
+    { lat: 0, lon: 0 },
+    { lat: 0, lon: 1 },
+    { lat: 0, lon: 2 },
+  ]);
+  assert.equal(r.legs.length, 2);
+  // 1° de longitud en el ecuador ≈ 60 nm (haversine).
+  assert.ok(Math.abs(r.legs[0]!.distanceNm - 60) < 0.2);
+  assert.ok(Math.abs(r.legs[1]!.distanceNm - 60) < 0.2);
+  assert.ok(Math.abs(r.totalNm - 120) < 0.4);
+  // Hacia el este: 090°.
+  assert.ok(Math.abs(r.legs[0]!.bearingDeg - 90) < 0.5);
+  assert.ok(Math.abs(r.legs[1]!.bearingDeg - 90) < 0.5);
+});
+
+test("medir: un solo punto no tiene tramos", () => {
+  const r = measureLegs([{ lat: 10, lon: 20 }]);
+  assert.equal(r.legs.length, 0);
+  assert.equal(r.totalNm, 0);
+});
+
+test("medir: rumbo hacia el norte y hacia el oeste", () => {
+  const north = measureLegs([{ lat: 0, lon: 0 }, { lat: 1, lon: 0 }]);
+  assert.ok(Math.abs(north.legs[0]!.bearingDeg - 0) < 0.5);
+  const west = measureLegs([{ lat: 0, lon: 0 }, { lat: 0, lon: -1 }]);
+  assert.ok(Math.abs(west.legs[0]!.bearingDeg - 270) < 0.5);
+});
+
+import { navToWpLine } from "./format.ts";
+
+test("nav-to-wp: solo con ruta activa, posición y destino", () => {
+  const pos = { lat: 10, lon: 20 };
+  const next = { lat: 11, lon: 21 };
+  assert.deepEqual(navToWpLine(true, pos, next), [[20, 10], [21, 11]]);
+  assert.equal(navToWpLine(false, pos, next), null, "sin ruta activa");
+  assert.equal(navToWpLine(true, null, next), null, "sin posición");
+  assert.equal(navToWpLine(true, pos, null), null, "sin waypoint destino");
+});

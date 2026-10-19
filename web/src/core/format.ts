@@ -1,3 +1,5 @@
+import { haversineNm, initialBearingDeg } from "./navigation.ts";
+
 // Formateo con unidades (UX-N.4). Por defecto náutico: velocidad kn,
 // distancia nm, profundidad m. Soporta km/h, km, ft.
 
@@ -101,4 +103,57 @@ export function applyUnits(v: unknown): Units {
 // El MOB activo manda: aunque el interruptor esté apagado, se ve.
 export function mobButtonVisible(vis: Visibility, hasPosition: boolean, mobActive: boolean): boolean {
   return mobActive || (vis.mob && hasPosition);
+}
+
+// --- UX-N.5 T11.3: Medir (distancias y rumbos por tramo) ---------------------
+
+export interface MeasurePoint {
+  lat: number;
+  lon: number;
+}
+
+export interface MeasureLeg {
+  from: MeasurePoint;
+  to: MeasurePoint;
+  distanceNm: number;
+  bearingDeg: number;
+}
+
+export interface MeasureResult {
+  legs: MeasureLeg[];
+  totalNm: number;
+}
+
+export function measureLegs(points: MeasurePoint[]): MeasureResult {
+  const legs: MeasureLeg[] = [];
+  let totalNm = 0;
+  for (let i = 0; i + 1 < points.length; i++) {
+    const from = points[i]!;
+    const to = points[i + 1]!;
+    const distanceNm = haversineNm(from.lat, from.lon, to.lat, to.lon);
+    legs.push({ from, to, distanceNm, bearingDeg: initialBearingDeg(from.lat, from.lon, to.lat, to.lon) });
+    totalNm += distanceNm;
+  }
+  return { legs, totalNm };
+}
+
+// --- UX-N.5 T9.1: nav-to-wp (posición → próximo waypoint) --------------------
+
+export interface LatLon {
+  lat: number;
+  lon: number;
+}
+
+// Coordenadas [lon, lat] de la línea nav-to-wp, o null si no corresponde
+// dibujarla: hace falta ruta activa, posición y un waypoint destino.
+export function navToWpLine(
+  hasActiveRoute: boolean,
+  pos: LatLon | null,
+  next: LatLon | null,
+): [number, number][] | null {
+  if (!hasActiveRoute || !pos || !next) return null;
+  return [
+    [pos.lon, pos.lat],
+    [next.lon, next.lat],
+  ];
 }

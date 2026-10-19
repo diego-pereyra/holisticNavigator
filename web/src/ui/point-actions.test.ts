@@ -4,14 +4,14 @@ import assert from "node:assert/strict";
 import { POINT_ACTIONS, forecastCoversPoint } from "./point-actions.ts";
 import type { ForecastPackage } from "../core/forecast.ts";
 
-test("UX-N.1 la hoja lista exactamente las 4 acciones de N.1", () => {
+test("UX-N.1/N.5 la hoja lista las acciones del pin (con Medir)", () => {
   assert.deepEqual(
     POINT_ACTIONS.map((a) => a.id),
-    ["clima", "optimizar", "posicion", "waypoint"],
+    ["clima", "medir", "optimizar", "posicion", "waypoint"],
   );
   assert.deepEqual(
     POINT_ACTIONS.map((a) => a.label),
-    ["Clima acá", "Optimizar desde acá", "Fijar posición acá", "Waypoint acá"],
+    ["Clima acá", "Medir desde acá", "Optimizar desde acá", "Fijar posición acá", "Waypoint acá"],
   );
 });
 

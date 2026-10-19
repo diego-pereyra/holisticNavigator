@@ -4,9 +4,9 @@
 import { forecastHorizon } from "../core/routing/windfield.ts";
 import type { ForecastPackage } from "../core/forecast.ts";
 
-// En N.1 van estas cuatro ("Medir desde acá" llega en UX-N.5).
 export const POINT_ACTIONS = [
   { id: "clima", label: "Clima acá" },
+  { id: "medir", label: "Medir desde acá" },
   { id: "optimizar", label: "Optimizar desde acá" },
   { id: "posicion", label: "Fijar posición acá" },
   { id: "waypoint", label: "Waypoint acá" },

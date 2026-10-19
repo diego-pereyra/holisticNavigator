@@ -2215,3 +2215,50 @@ html[data-theme="red"] {
 .hn-unit-select {
   width: 100%;
 }
+
+/* T11.3: banda de Medir. Fija arriba de la hoja, con el tramo y el total. */
+.hn-measure {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: var(--hn-sheet-h, 96px);
+  z-index: 36;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--hn-panel);
+  color: var(--hn-text);
+  border-top: 2px solid #FF8A65;
+  box-shadow: 0 -6px 20px var(--hn-shadow);
+}
+.hn-measure-text {
+  font-size: 15px;
+  font-weight: 600;
+}
+.hn-measure-sum {
+  font-size: 13px;
+  color: var(--hn-muted);
+}
+.hn-measure-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: flex-end;
+}
+@media (min-width: 700px) {
+  .hn-measure {
+    left: 400px;
+    right: auto;
+    min-width: 320px;
+    bottom: auto;
+    top: 62px;
+    border-radius: 0 0 12px 12px;
+    border-top: none;
+    border-bottom: 2px solid #FF8A65;
+  }
+}
+@media (min-width: 1100px) {
+  .hn-measure { left: 320px; }
+  body.hn-has-ficha .hn-measure { left: 760px; }
+}

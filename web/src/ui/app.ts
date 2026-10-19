@@ -152,7 +152,9 @@ import {
   formatDepth,
   applyUnits,
   applyVisibility,
+  measureLegs,
   mobButtonVisible,
+  navToWpLine,
   FT_PER_M,
   DEFAULT_UNITS,
   DEFAULT_VISIBILITY,
@@ -256,6 +258,16 @@ let pointOptCancel: (() => void) | null = null;
 let pointOptCode: string | null = null;
 let pointOptOnUpdate: (() => void) | null = null;
 let pointOutsideRemove: (() => void) | null = null;
+
+// UX-N.5 T11.3: herramienta Medir. Arranca desde la hoja del pin; cada toque
+// agrega un punto. La banda lleva "Limpiar" y "✕"; ESC termina.
+interface MeasureState {
+  ui: UiState;
+  points: { lat: number; lon: number }[];
+  band: HTMLElement;
+  onMap: (e: MapMouseEvent) => void;
+}
+let measure: MeasureState | null = null;
 
 // Fichas ya cargadas: permiten volver a armarlas al cambiar de variante sin
 // mostrar "Cargando…" otra vez (W4.5).
@@ -638,6 +650,20 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   effect(() => drawAnchor(ui));
   effect(() => drawMob(ui));
 
+  // UX-N.5 T9.1: nav-to-wp = posición → próximo waypoint, punteada verde.
+  // Solo con ruta activa y posición (la capa ya existe; acá se llena la fuente).
+  effect(() => {
+    const navigating = ui.mode() === "navegar" && ui.active() !== null;
+    const nav = activeNav(ui);
+    const p = ui.position();
+    const coords = navToWpLine(navigating, p, nav ? { lat: nav.fix.nextLat, lon: nav.fix.nextLon } : null);
+    setSource(
+      ui.map,
+      "navline",
+      coords ? featureCollection([lineFeature(coords)]) : featureCollection([]),
+    );
+  });
+
   // E9.3: pantalla encendida mientras haya ruta activa, fondeo o MOB.
   effect(() => {
     const on = ui.active() !== null || ui.anchor().active || ui.mob() !== null;
@@ -924,7 +950,7 @@ function installBaseLayers(map: MlMap): void {
     paint: { "line-color": "#80CBC4", "line-opacity": 0.45, "line-width": 1 },
   });
 
-  for (const id of ["selected", "active", "imported", "voyage", "me", "navline", "sel-wp", "anchor", "mob", "optroute"]) {
+  for (const id of ["selected", "active", "imported", "voyage", "measure-line", "me", "navline", "sel-wp", "anchor", "mob", "optroute"]) {
     map.addSource(id, { type: "geojson", data: empty });
   }
 
@@ -939,6 +965,13 @@ function installBaseLayers(map: MlMap): void {
     type: "line",
     source: "voyage",
     paint: { "line-color": "#FFD54F", "line-width": 2.5 },
+  });
+  // T11.3: la línea de Medir, punteada y por encima de la bitácora (id fijo).
+  map.addLayer({
+    id: "measure-line",
+    type: "line",
+    source: "measure-line",
+    paint: { "line-color": "#FF8A65", "line-width": 2, "line-dasharray": [2, 1.5] },
   });
   map.addLayer({
     id: "route-active",
@@ -1086,7 +1119,7 @@ function addBasinLayers(ui: UiState, basins: Record<string, Basin>): void {
     "imported-lines",
   );
   map.on("click", "basin-label", (e) => {
-    if (fixOnMapArmed || ownArmActive() || pointDestArmed) return;
+    if (fixOnMapArmed || ownArmActive() || pointDestArmed || measure) return;
     const name = e.features?.[0]?.properties?.["name"];
     if (typeof name === "string") {
       ui.region.set(name);
@@ -1111,7 +1144,7 @@ function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
     before,
   );
   map.on("click", "catalog-lines", (e) => {
-    if (wpHitHandled || fixOnMapArmed || ownArmActive() || pointDestArmed) return;
+    if (wpHitHandled || fixOnMapArmed || ownArmActive() || pointDestArmed || measure) return;
     const code = e.features?.[0]?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
@@ -1692,7 +1725,7 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
 
     const when = el("button", { class: "hn-ctx-when" });
     when.append(el("span", { class: "hn-ctx-label" }, "Cuándo"), el("span", { class: "hn-ctx-value" }, MONTH_ABBR[month - 1] ?? ""));
-    when.addEventListener("click", () => goTo(ui, "aqui"));
+    when.addEventListener("click", () => openMonthPicker(ui));
 
     const chip = el("button", { class: "hn-ctx-pos" });
     chip.append(el("span", { class: `hn-dot hn-dot-${status}` }), el("span", {}, positionLabel(ui)));
@@ -2217,11 +2250,11 @@ function themeCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
 function helpCard(ui: UiState): HTMLElement {
   const card = el("div", { class: "hn-card hn-help" });
   const lines: [string, string][] = [
-    ["📍", "Tu posición manda"],
-    ["▸", "Elegí una ruta"],
-    ["⚑", "Tocá Seguir"],
-    ["🆘", "Mantené apretado MOB si alguien cae al agua"],
-    ["📤", "Enviá cualquier ruta a Navionics con el botón Enviar a plotter."],
+    ["📍", "Tu posición: usá GPS o fijala tocando el mapa."],
+    ["🗓", "El mes de planificación se elige en Cuándo, arriba."],
+    ["🌦", "Tocá el mar para ver el clima y pedir acciones sobre ese punto."],
+    ["👆", "Mantené pulsado el mar para abrir esas acciones."],
+    ["⚙", "Unidades, visibilidad y alarmas en Ajustes."],
   ];
   for (const [icon, text] of lines) {
     card.append(
@@ -2288,6 +2321,82 @@ function armFixOnMap(ui: UiState): void {
   cancel.addEventListener("click", done);
   ui.map.getCanvas().style.cursor = "crosshair";
   ui.map.on("click", onMap);
+}
+
+// UX-N.5 T11.3 — Medir: cada toque agrega un punto; muestra el tramo y el total
+// (formateados con las unidades del usuario) y se dibuja en `measure-line`.
+function drawMeasure(ui: UiState): void {
+  const m = measure;
+  if (!m || m.points.length === 0) {
+    setSource(ui.map, "measure-line", featureCollection([]));
+    return;
+  }
+  const features: object[] = m.points.map((p) => pointFeature(p.lon, p.lat));
+  if (m.points.length >= 2) {
+    features.push(lineFeature(m.points.map((p) => [p.lon, p.lat] as [number, number])));
+  }
+  setSource(ui.map, "measure-line", featureCollection(features));
+}
+
+function updateMeasure(): void {
+  const m = measure;
+  if (!m) return;
+  const text = m.band.querySelector(".hn-measure-text");
+  const sum = m.band.querySelector(".hn-measure-sum");
+  const r = measureLegs(m.points);
+  if (r.legs.length === 0) {
+    if (text) text.textContent = "Tocá el mapa para agregar puntos.";
+    if (sum) sum.textContent = "";
+  } else {
+    const last = r.legs[r.legs.length - 1]!;
+    if (text) text.textContent = `Tramo ${dst(m.ui, last.distanceNm)} · rumbo ${Math.round(last.bearingDeg)}°`;
+    if (sum) sum.textContent = `Total ${dst(m.ui, r.totalNm)}`;
+  }
+  drawMeasure(m.ui);
+}
+
+function startMeasure(ui: UiState, lat: number, lon: number): void {
+  endMeasure();
+  closePointSheet(ui);
+  const band = el("div", { class: "hn-measure" });
+  const text = el("div", { class: "hn-measure-text" }, "");
+  const sum = el("div", { class: "hn-measure-sum" }, "");
+  const limpiar = el("button", { class: "hn-btn hn-measure-clear", type: "button" }, "Limpiar");
+  const terminar = el("button", {
+    class: "hn-alarm-btn hn-measure-end",
+    type: "button",
+    "aria-label": "Terminar medición",
+  }, "✕");
+  const actions = el("div", { class: "hn-measure-actions" }, limpiar, terminar);
+  band.append(text, sum, actions);
+  band.addEventListener("click", (ev) => ev.stopPropagation());
+  document.body.append(band);
+
+  const onMap = (e: MapMouseEvent): void => {
+    if (!measure) return;
+    measure.points.push({ lat: e.lngLat.lat, lon: e.lngLat.lng });
+    updateMeasure();
+  };
+  measure = { ui, points: [{ lat, lon }], band, onMap };
+  ui.map.on("click", onMap);
+  ui.map.getCanvas().style.cursor = "crosshair";
+  limpiar.addEventListener("click", () => {
+    if (!measure) return;
+    measure.points = [];
+    updateMeasure();
+  });
+  terminar.addEventListener("click", () => endMeasure());
+  updateMeasure();
+}
+
+function endMeasure(): void {
+  const m = measure;
+  if (!m) return;
+  m.ui.map.off("click", m.onMap);
+  m.ui.map.getCanvas().style.cursor = "";
+  m.band.remove();
+  measure = null;
+  drawMeasure(m.ui);
 }
 
 // Ajustes de alarmas (E9.2): dos umbrales numéricos, persistidos en hn.settings.
@@ -3388,6 +3497,11 @@ function wireKeyboard(ui: UiState): void {
       (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
 
     if (ev.key === "Escape") {
+      if (measure) {
+        endMeasure();
+        ev.preventDefault();
+        return;
+      }
       if (pointSheetEl) {
         closePointSheet(ui);
         ev.preventDefault();
@@ -4688,7 +4802,7 @@ function buildPointSheet(ui: UiState, bodyBuilder: (host: HTMLElement) => void):
 function openPointActions(ui: UiState, lat: number, lon: number): void {
   // Los modos de un toque (fijar posición, editar ruta, destino de
   // optimización) tienen prioridad sobre la hoja.
-  if (fixOnMapArmed || ownArmActive() || pointDestArmed) return;
+  if (fixOnMapArmed || ownArmActive() || pointDestArmed || measure) return;
   pointLat = lat;
   pointLon = lon;
   if (pointOptCode) {
@@ -4708,6 +4822,7 @@ function openPointActions(ui: UiState, lat: number, lon: number): void {
 
 function runPointAction(ui: UiState, id: PointActionId, body: HTMLElement): void {
   if (id === "clima") togglePointWx(ui, body);
+  else if (id === "medir") startMeasure(ui, pointLat, pointLon);
   else if (id === "optimizar") armPointOpt(ui);
   else if (id === "posicion") fixPointPosition(ui);
   else if (id === "waypoint") waypointPoint(ui);
