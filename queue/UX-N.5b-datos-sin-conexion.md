@@ -27,11 +27,13 @@ vínculo, +test), web/public/app.css.
    - "Pilot charts (12 meses) · 1,8 MB · ✓ guardado"
    - "Carta detallada · Caribe · 24 MB · [Borrar]"
    "Pronóstico de la travesía" genérico muere (app.ts:2557).
-3. **La RUTA ACTIVA manda (regla de Diego: atado a la ruta):** con ruta activa, el modo
-   Pronóstico, el panel de optimización y la ficha usan y ROTULAN el paquete de ESA ruta —
-   "Pronóstico de AN12 · hace 4 h" — con su [Actualizar] ahí mismo. La ficha de la ruta y el
-   panel "Clima acá" muestran EL paquete de su dueño; la descarga y la actualización viajan
-   con él. El usuario nunca ve "un pronóstico" suelto: ve EL pronóstico de SU ruta.
+3. **EN LA FICHA DE LA RUTA (regla de Diego: ahí vive el pronóstico):** la ficha de cada
+   ruta tiene un bloque propio de pronóstico — "Pronóstico de esta ruta · hace 4 h ·
+   [Actualizar]" o "Sin pronóstico · [Descargar]" — junto al bloque de viento, visible sin
+   scrollear. Con ruta activa, el modo Pronóstico y el panel de optimización usan y rotulan
+   el MISMO paquete ("Pronóstico de AN12 · hace 4 h"). La descarga y la actualización se
+   hacen desde la ficha; el usuario nunca ve "un pronóstico" suelto: lo ve y lo toca EN la
+   ficha de su ruta.
 4. Tests (node:test): el nombre del vínculo por tipo de id (ruta → código; punto-<hash> →
    "Clima acá · coords"; vista → "Vista") con función pura formateable; Ajustes sin la
    sección de datos.
