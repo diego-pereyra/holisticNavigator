@@ -1,52 +1,25 @@
 ADELANTE
 
-TAREA ÚNICA: UX-N.5b — "Sin conexión" son datos con dueño, no ajustes: cada paquete va con su
-ruta, punto o vista. (Corrección de Diego a la spec de UX-N.4/4b: "los pronósticos están
-atados a las rutas, no a la configuración — no podés dejarlo en la comunicación de forma
-genérica".)
+TAREA ÚNICA: UX-N.6 — Tablet apaisada de primera: dock persistente, mapa dominante, pulgar
+cómodo. (docs/07-rediseño-usabilidad.md, §4 UX-N.6. El layout de escritorio existe
+(≥1100 px, dos columnas — app.css:1454-1470): verificarlo, no reinventarlo.)
 
-Diagnóstico (no buscar más):
-- web/src/ui/app.ts:2557 — la fila sigue diciendo "Pronóstico de la travesía", genérico, con
-  el id tomado del contexto (app.ts:2561-2562: ruta activa/seleccionada, si no "vista"): el
-  usuario nunca sabe a CUÁL paquete apunta.
-- Con UX-N.2 puede haber VARIOS paquetes (ruta/punto/vista) — platform/forecast.ts:51 ya
-  lista todos (listForecasts) y removeForecast borra por id. Falta la comunicación.
+Archivos: web/public/app.css (principalmente), web/src/ui/app.ts (offsets de bandas/paneles).
 
-Archivos: web/src/ui/app.ts, web/src/core/format.ts (solo si hace falta el formateo del
-vínculo, +test), web/public/app.css.
-
-1. **Ajustes queda solo preferencias:** unidades, visibilidad, tema, umbrales de alarma y
-   ayuda — más un ENLACE claro a "Datos sin conexión". Cero datos mezclados con
-   interruptores.
-2. **"Datos sin conexión" = sección propia** (entrada destacada junto a Ajustes, mismo
-   panel distinto marco): filas de datos, no settings. CADA paquete nombrado por su vínculo
-   con listForecasts:
-   - "Pronóstico · AN12 (ruta) · 0,6 MB · hace 4 h · [Actualizar] [Borrar]"
-   - "Pronóstico · Clima acá · 15 N 60 W · hace 2 h · [Actualizar] [Borrar]"
-   - "Pronóstico · Vista · hace 1 h · [Actualizar] [Borrar]"
-   - "Pilot charts (12 meses) · 1,8 MB · ✓ guardado"
-   - "Carta detallada · Caribe · 24 MB · [Borrar]"
-   "Pronóstico de la travesía" genérico muere (app.ts:2557).
-3. **EN LA FICHA DE LA RUTA (regla de Diego: ahí vive el pronóstico):** la ficha de cada
-   ruta tiene un bloque propio de pronóstico — "Pronóstico de esta ruta · hace 4 h ·
-   [Actualizar]" o "Sin pronóstico · [Descargar]" — junto al bloque de viento, visible sin
-   scrollear. Con ruta activa, el modo Pronóstico y el panel de optimización usan y rotulan
-   el MISMO paquete ("Pronóstico de AN12 · hace 4 h"). La descarga y la actualización se
-   hacen desde la ficha; el usuario nunca ve "un pronóstico" suelto: lo ve y lo toca EN la
-   ficha de su ruta.
-4. Tests (node:test): el nombre del vínculo por tipo de id (ruta → código; punto-<hash> →
-   "Clima acá · coords"; vista → "Vista") con función pura formateable; Ajustes sin la
-   sección de datos.
-5. Aceptación: cada paquete identificado por su dueño; la ficha muestra el estado de SU
-   paquete con su [Actualizar]; en Ajustes no hay filas de datos.
-6. Prueba de Diego: descargás el pronóstico con una ruta activa → en la ficha, en el modo
-   Pronóstico y en Optimizar dice "Pronóstico de {código} · hace X h" y el [Actualizar]
-   actualiza EL de esa ruta; las cajas de punto y vista aparecen nombradas aparte, cada una
-   con su dueño y su edad.
-7. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.5b: datos sin conexión con
-   dueño (ruta, punto o vista)", push. Al terminar escribí "Status: DONE" como última línea
-   de este archivo.
+1. **En ≥ 820 px de ancho (tablet apaisada):** panel de lista (320 px) + ficha en dock
+   persistente a la derecha cuando hay selección — el mapa NUNCA queda tapado por la hoja;
+   la ficha no desaparece al tocar el mapa. Reutilizar el layout ≥1100: el objetivo es que
+   1180×820 se comporte como escritorio, no como celular grande.
+2. **Targets de tablet:** ≥ 48 px para botones/filas en ≥ 820 px (44 en celular se mantiene);
+   la barra de contexto y la tira crecen un escalón tipográfico (12/13 sp).
+3. **Paneles flotantes:** el stack del clima (capas + leyenda + deslizador) se ordena en
+   columna sobre el borde izquierdo del mapa sin tapar el panel; en tablet la leyenda puede
+   ser horizontal.
+4. **Offsets verificados:** banda de alarma, deshacer, fix-band, pin y hoja de acciones,
+   MOB, FAB — todos respetan el dock de ficha (no quedan debajo ni se cortan).
+5. Aceptación (UAT tablet-1180): la ficha abierta no tapa el mapa; Optimizar y Seguir a un
+   toque del borde; cero "no se encontró" en tablet; capturas del UAT revisadas por Diego.
+6. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.6: tablet apaisada de
+   primera", push. Al terminar escribí "Status:done" al final de este archivo.
 
 Status: ready
-
-Status:done
