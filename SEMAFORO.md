@@ -59,3 +59,5 @@ web/src/ui/app.ts (solo el texto del resumen).
    este archivo.
 
 Status: ready
+
+Status:done
