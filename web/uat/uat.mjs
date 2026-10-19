@@ -106,10 +106,32 @@ async function jArranque(page, t) {
 async function jClimaEnUnPunto(page, t) {
   await sleep(1200);
   const { width, height } = page.viewportSize();
-  await page.mouse.move(width / 2, height / 2);
-  await page.mouse.down();
-  await sleep(900);
-  await page.mouse.up();
+  // El gesto real es táctil: `installMapHold` ignora `pointerType === "mouse"`
+  // (el mouse usa click derecho), así que un mouse down/up no dispara nada.
+  const x = width / 2;
+  const y = height / 2;
+  const pointer = (type) =>
+    page.evaluate(
+      ({ x, y, type }) => {
+        const c = document.querySelector("#map canvas");
+        if (!c) return;
+        c.dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            cancelable: true,
+            clientX: x,
+            clientY: y,
+            pointerId: 1,
+            pointerType: "touch",
+            isPrimary: true,
+          }),
+        );
+      },
+      { x, y, type },
+    );
+  await pointer("pointerdown");
+  await sleep(800);
+  await pointer("pointerup");
   const hoja = page.getByText("Clima acá", { exact: false });
   const hayHoja = await hoja.first().waitFor({ state: "visible", timeout: 2500 }).then(() => true, () => false);
   t.note("long-press abre la hoja de acciones", hayHoja);
@@ -166,9 +188,9 @@ async function jOptimizar(page, t) {
     const listo = await page
       .getByText(/vs |Aplicar|Descartar|Calculando/i)
       .first()
-      .waitFor({ state: "visible", timeout: 150_000 })
+      .waitFor({ state: "visible", timeout: 200_000 })
       .catch(() => null);
-    t.note("el cálculo termina (≤ 150 s)", listo !== null);
+    t.note("el cálculo termina (≤ 200 s)", listo !== null);
     await sleep(1000);
     await t.shot("optimizada");
     await t.tap("Descartar", page.getByText("Descartar"));
@@ -178,8 +200,9 @@ async function jOptimizar(page, t) {
 
 // J4 — MOB (seguridad: presión larga sobre el botón)
 async function jMob(page, t) {
-  const gps = page.getByText("Usar GPS", { exact: false });
-  await t.tap("Usar GPS", gps);
+  // Sin posición, el chip de posición arranca el GPS de una (no abre el menú,
+  // así que "Usar GPS" no existe todavía): es la afordancia correcta.
+  await t.tap("Usar GPS (chip de posición)", page.locator(".hn-ctx-pos"));
   await sleep(2500);
   const mob = page.locator(".hn-mob");
   const hayBoton = await t.exists("botón MOB visible", mob);
