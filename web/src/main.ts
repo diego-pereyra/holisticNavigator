@@ -11,6 +11,7 @@ import { Protocol, PMTiles, FileSource } from "pmtiles";
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import { mountApp, type AppHandle } from "./ui/app.ts";
+import { installMapHold } from "./ui/point-hold.ts";
 import { applyTheme, mapPalette, type ThemeName } from "./ui/theme.ts";
 import { loadBasins, loadIndex, loadRoutesGeoJson } from "./platform/catalog.ts";
 import { openStore, type KeyValueStore } from "./platform/store.ts";
@@ -483,6 +484,9 @@ function start(): void {
   map.on("move", updateScaleNote);
   map.on("zoom", updateScaleNote);
   updateScaleNote();
+  // UX-N.1: mantener pulsado (táctil) o click derecho (escritorio) pone un
+  // pin y abre la hoja de acciones sobre ese punto del mapa.
+  installMapHold(map, (lat, lon) => app.openPointActions(lat, lon));
   window.hnRetryCatalog = () => void loadCatalog(app);
   void loadDeferredBase();
   void loadCatalog(app);

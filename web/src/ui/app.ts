@@ -26,7 +26,7 @@ const bootParams = readUrlParams();
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
-import type { Map as MlMap, GeoJSONSource, FilterSpecification, MapMouseEvent } from "maplibre-gl";
+import { Marker, type Map as MlMap, type GeoJSONSource, type FilterSpecification, type MapMouseEvent } from "maplibre-gl";
 import { signal, computed, effect, untracked, type Signal } from "../core/store.ts";
 import {
   filterEntries,
@@ -42,7 +42,7 @@ import {
   type Basin,
   type VariantGeometry,
 } from "../core/context.ts";
-import { loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
+import { getCell, loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
 import {
   bboxOfBounds,
   bboxOfTrack,
@@ -71,8 +71,9 @@ import {
 } from "./routes-own.ts";
 import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix, type LonLat } from "../core/navigation.ts";
 import type { OwnRoute } from "../core/routes-own.ts";
+import { addWaypoint } from "../core/routes-own.ts";
 import { genericPolar } from "../core/routing/polar.ts";
-import { forecastHorizon } from "../core/routing/windfield.ts";
+import { forecastHorizon, forecastWindField } from "../core/routing/windfield.ts";
 import {
   DEFAULT_ROUTING_MODE,
   ROUTING_MODES,
@@ -128,6 +129,7 @@ import {
   rangeNm,
 } from "./format.ts";
 import { resolveTheme, THEME_LABEL, THEME_ORDER, themeIcon, type ThemeChoice, type ThemeName } from "./theme.ts";
+import { POINT_ACTIONS, forecastCoversPoint, type PointActionId } from "./point-actions.ts";
 import {
   clearWeather,
   hourLabel,
@@ -204,6 +206,19 @@ let wpHitHandled = false;
 // posición y los otros handlers de clic no deben reaccionar.
 let fixOnMapArmed = false;
 
+// UX-N.1 — hoja de acciones sobre un punto del mapa (mantener pulsado o click
+// derecho). El pin vive hasta que la hoja se cierra; "Optimizar desde acá"
+// deja el pin como origen y arma el próximo toque como destino.
+let pointSheetEl: HTMLElement | null = null;
+let pointPin: Marker | null = null;
+let pointLat = 0;
+let pointLon = 0;
+let pointDestArmed = false;
+let pointOptCancel: (() => void) | null = null;
+let pointOptCode: string | null = null;
+let pointOptOnUpdate: (() => void) | null = null;
+let pointOutsideRemove: (() => void) | null = null;
+
 // Fichas ya cargadas: permiten volver a armarlas al cambiar de variante sin
 // mostrar "Cargando…" otra vez (W4.5).
 const fichaCache = new Map<string, RouteDetail>();
@@ -276,6 +291,9 @@ export interface AppHandle {
   catalogFailed(): void;
   routesFailed(): void;
   setScaleNote(text: string | null): void;
+  // UX-N.1: mantener pulsado el mapa (o click derecho) abre la hoja de
+  // acciones sobre ese punto.
+  openPointActions(lat: number, lon: number): void;
 }
 
 const EMPTY_INDEX: CatalogIndex = { chapters: [], routes: [] };
@@ -624,6 +642,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
       if (scaleNote.textContent !== text) scaleNote.textContent = text;
       scaleNote.hidden = false;
     },
+    openPointActions(lat, lon) {
+      openPointActions(ui, lat, lon);
+    },
   };
 }
 
@@ -957,7 +978,7 @@ function addBasinLayers(ui: UiState, basins: Record<string, Basin>): void {
     "imported-lines",
   );
   map.on("click", "basin-label", (e) => {
-    if (fixOnMapArmed || ownArmActive()) return;
+    if (fixOnMapArmed || ownArmActive() || pointDestArmed) return;
     const name = e.features?.[0]?.properties?.["name"];
     if (typeof name === "string") {
       ui.region.set(name);
@@ -982,7 +1003,7 @@ function addCatalogLayers(ui: UiState, routesGeoJson: string): void {
     before,
   );
   map.on("click", "catalog-lines", (e) => {
-    if (wpHitHandled || fixOnMapArmed || ownArmActive()) return;
+    if (wpHitHandled || fixOnMapArmed || ownArmActive() || pointDestArmed) return;
     const code = e.features?.[0]?.properties?.["code"];
     if (typeof code === "string") openRoute(ui, code);
   });
@@ -3126,7 +3147,7 @@ function selectWpByIndex(index: number): void {
 
 function wireSelectedWp(ui: UiState): void {
   ui.map.on("click", "route-wps-selected", (e) => {
-    if (fixOnMapArmed || ownArmActive()) return;
+    if (fixOnMapArmed || ownArmActive() || pointDestArmed) return;
     wpHitHandled = true;
     window.setTimeout(() => {
       wpHitHandled = false;
@@ -3149,6 +3170,11 @@ function wireKeyboard(ui: UiState): void {
       (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable);
 
     if (ev.key === "Escape") {
+      if (pointSheetEl) {
+        closePointSheet(ui);
+        ev.preventDefault();
+        return;
+      }
       if (ui.selected()) {
         closeFicha(ui);
         ev.preventDefault();
@@ -3290,6 +3316,8 @@ function optHandle(ui: UiState, msg: IsoWorkerResponse): void {
   }
   optRefreshPanel(ui);
   optDraw(ui, code);
+  // UX-N.1: la hoja de "Optimizar desde acá" se repinta con el mismo job.
+  pointOptOnUpdate?.();
 }
 
 // E12.6 — extremos de los tramos a optimizar: en una ruta propia son sus
@@ -4380,4 +4408,347 @@ function getLeftPadding(ui: UiState): number {
 function getBottomPadding(_ui: UiState): number {
   if (typeof window === "undefined") return 260;
   return window.innerWidth >= 700 ? 20 : 260;
+}
+
+// ------------------------------------------- UX-N.1 · acciones sobre un punto
+// Mantener pulsado el mapa (o click derecho en escritorio) deja un pin 📍 y
+// abre la hoja de acciones sobre ese punto (patrón Google Maps, D1). El toque
+// corto no toca nada de lo que ya existía.
+
+const POINT_CARDINALS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSO", "SO", "OSO", "O", "ONO", "NO", "NNO"];
+
+// Dirección "de la que viene" el viento, en rumbos de 16, a partir de u/v
+// (hacia dónde sopla).
+function rumboDe(u: number, v: number): string {
+  const deg = ((Math.atan2(-u, -v) * 180) / Math.PI + 360) % 360;
+  return POINT_CARDINALS[Math.round(deg / 22.5) % 16] ?? "—";
+}
+
+function closePointSheet(ui: UiState): void {
+  pointOutsideRemove?.();
+  pointOutsideRemove = null;
+  pointSheetEl?.remove();
+  pointSheetEl = null;
+  pointPin?.remove();
+  pointPin = null;
+  if (pointOptCode) {
+    pointOptOnUpdate = null;
+    pointOptCode = null;
+    optClearLayers(ui);
+  }
+  if (pointOptCancel) {
+    pointOptCancel();
+    pointOptCancel = null;
+  }
+}
+
+// Chrome común de la hoja: coords del punto + ✕ + pin. Devuelve el cuerpo
+// donde la acción concreta monta su contenido.
+function buildPointSheet(ui: UiState, bodyBuilder: (host: HTMLElement) => void): HTMLElement {
+  pointSheetEl?.remove();
+  pointSheetEl = null;
+  pointPin?.remove();
+  pointPin = new Marker({ element: el("span", { class: "hn-pin" }, "📍"), anchor: "bottom" })
+    .setLngLat([pointLon, pointLat])
+    .addTo(ui.map);
+  const sheet = el("div", { class: "hn-point-actions" });
+  const head = el("div", { class: "hn-point-head" });
+  head.append(el("span", { class: "hn-point-coords" }, `${formatLat(pointLat)} · ${formatLon(pointLon)}`));
+  const close = el("button", { class: "hn-alarm-btn hn-point-close", type: "button", "aria-label": "Cerrar" }, "✕");
+  head.append(close);
+  sheet.append(head);
+  const body = el("div", { class: "hn-point-body" });
+  bodyBuilder(body);
+  sheet.append(body);
+  document.body.append(sheet);
+  pointSheetEl = sheet;
+  close.addEventListener("click", () => closePointSheet(ui));
+  const outside = (ev: Event): void => {
+    if (!sheet.contains(ev.target as Node)) closePointSheet(ui);
+  };
+  setTimeout(() => document.addEventListener("click", outside), 0);
+  pointOutsideRemove = () => document.removeEventListener("click", outside);
+  return body;
+}
+
+function openPointActions(ui: UiState, lat: number, lon: number): void {
+  // Los modos de un toque (fijar posición, editar ruta, destino de
+  // optimización) tienen prioridad sobre la hoja.
+  if (fixOnMapArmed || ownArmActive() || pointDestArmed) return;
+  pointLat = lat;
+  pointLon = lon;
+  if (pointOptCode) {
+    // Una optimización quedó huérfana: sus capas se limpiaron al cerrar.
+    pointOptOnUpdate = null;
+    pointOptCode = null;
+    optClearLayers(ui);
+  }
+  buildPointSheet(ui, (body) => {
+    for (const a of POINT_ACTIONS) {
+      const btn = el("button", { class: "hn-point-act", type: "button" }, a.label);
+      btn.addEventListener("click", () => runPointAction(ui, a.id, body));
+      body.append(btn);
+    }
+  });
+}
+
+function runPointAction(ui: UiState, id: PointActionId, body: HTMLElement): void {
+  if (id === "clima") togglePointWx(ui, body);
+  else if (id === "optimizar") armPointOpt(ui);
+  else if (id === "posicion") fixPointPosition(ui);
+  else if (id === "waypoint") waypointPoint(ui);
+}
+
+// ---- Clima acá: pilot chart del mes de planificación + pronóstico si cubre.
+
+function togglePointWx(ui: UiState, body: HTMLElement): void {
+  const host = body.querySelector(".hn-point-wx") as HTMLElement | null;
+  if (host) {
+    host.remove();
+    return;
+  }
+  const wx = el("div", { class: "hn-point-wx" });
+  wx.append(el("p", { class: "hn-muted" }, "Cargando clima del mes…"));
+  body.append(wx);
+  const month = ui.month();
+  const cached = ui.clim.get(month);
+  const p: Promise<ClimMonth | null> = cached ? Promise.resolve(cached) : ensureClim(ui, month);
+  void p.then((clim) => {
+    if (!wx.isConnected) return; // la hoja se cerró mientras cargaba
+    clear(wx);
+    if (!clim) {
+      wx.append(el("p", { class: "hn-err" }, "No hay datos de clima para este mes."));
+      return;
+    }
+    appendPointWx(ui, wx, clim, pointLat, pointLon);
+  });
+}
+
+function appendPointWx(ui: UiState, wx: HTMLElement, clim: ClimMonth, lat: number, lon: number): void {
+  const cell = getCell(clim, lat, lon);
+  if (!cell) {
+    wx.append(el("p", { class: "hn-err" }, "Ese punto está en tierra."));
+  } else {
+    wx.append(el("p", {}, `Viento medio ${cell.ws.toFixed(0)} kn del ${rumboDe(cell.wu, cell.wv)}`));
+    wx.append(el("p", {}, `Constancia ${cell.cu.toFixed(0)} % · Ola ${cell.hs.toFixed(1)} m`));
+    const curKn = Math.hypot(cell.cu, cell.cv);
+    if (curKn > 0.05) wx.append(el("p", {}, `Corriente ${curKn.toFixed(1)} kn hacia ${rumboDe(-cell.cu, -cell.cv)}`));
+    if (cell.tc > 0) wx.append(el("p", {}, `Ciclones: ${cell.tc.toFixed(0)} por década`));
+    if (cell.ice > 0) wx.append(el("p", {}, `Hielo: riesgo ${cell.ice.toFixed(0)}`));
+  }
+  wx.append(el("p", { class: "hn-muted" }, `Pilot chart · ${MONTH_NAME[ui.month()] ?? ""}`));
+  const pkg = ui.forecast();
+  if (!pkg) return;
+  const t = slotTime(pkg, ui.forecastHour());
+  if (!forecastCoversPoint(pkg, lat, lon, t)) return;
+  const w = forecastWindField(pkg, null)(lat, lon, t);
+  if (w) wx.append(el("p", {}, `Pronóstico ${hourLabel(t)}: viento ${w.speed.toFixed(0)} kn del ${POINT_CARDINALS[Math.round(w.dir / 22.5) % 16] ?? "—"}`));
+}
+
+// ---- Optimizar desde acá: el pin es el origen, el próximo toque el destino.
+
+function armPointOpt(ui: UiState): void {
+  if (pointDestArmed) return;
+  pointDestArmed = true;
+  const fromLat = pointLat;
+  const fromLon = pointLon;
+  // La hoja se cierra; el pin se queda como origen de la ruta.
+  pointOutsideRemove?.();
+  pointOutsideRemove = null;
+  pointSheetEl?.remove();
+  pointSheetEl = null;
+  const band = el("div", { class: "hn-fixband" });
+  band.append(el("span", {}, "Tocá el mapa para elegir el destino"));
+  const cancel = el("button", { class: "hn-alarm-btn", type: "button" }, "Cancelar");
+  band.append(cancel);
+  document.body.append(band);
+  const done = (): void => {
+    band.remove();
+    ui.map.off("click", onDest);
+    ui.map.getCanvas().style.cursor = "";
+    pointOptCancel = null;
+    // Se limpia recién en el próximo tick: los handlers de capa del mismo
+    // clic todavía deben verlo armado.
+    window.setTimeout(() => {
+      pointDestArmed = false;
+    }, 0);
+  };
+  const onDest = (e: MapMouseEvent): void => {
+    done();
+    void runPointOpt(ui, [fromLon, fromLat], [e.lngLat.lng, e.lngLat.lat]);
+  };
+  cancel.addEventListener("click", () => {
+    done();
+    pointPin?.remove();
+    pointPin = null;
+  });
+  ui.map.getCanvas().style.cursor = "crosshair";
+  ui.map.on("click", onDest);
+  pointOptCancel = () => {
+    done();
+    pointPin?.remove();
+    pointPin = null;
+  };
+}
+
+async function runPointOpt(ui: UiState, from: LonLat, to: LonLat): Promise<void> {
+  const id = ++optJobSeq;
+  const code = `PT${id}`;
+  const coords: LonLat[] = [from, to];
+  const names = ["Origen", "Destino"];
+  const pkg = ui.forecast();
+  const month = ui.month();
+  let clim = ui.clim.get(month) ?? null;
+  if (!clim) clim = await ensureClim(ui, month);
+  if (!clim && !pkg) {
+    openPointOptSheet(ui, code, "no hay datos de viento");
+    optJobs.set(code, {
+      code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
+      climateOnly: true, beyondForecast: false, dropped: 0, error: "no hay datos de viento",
+    });
+    return;
+  }
+  let bytes: Uint8Array;
+  try {
+    bytes = await optLandBytesLoad();
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    openPointOptSheet(ui, code, msg);
+    optJobs.set(code, {
+      code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
+      climateOnly: !pkg, beyondForecast: false, dropped: 0, error: msg,
+    });
+    return;
+  }
+  const job: OptJob = {
+    code, kind: "own", coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
+    climateOnly: !pkg, beyondForecast: false, dropped: 0,
+  };
+  optJobs.set(code, job);
+  optJobCode.set(id, code);
+  job.workerId = id;
+  const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
+  optWorkerGet(ui).postMessage({
+    type: "run",
+    id,
+    startMs: Date.now(),
+    anchors: coords,
+    original: coords,
+    pkg,
+    clim,
+    polar: genericPolar(),
+    landBytes: bytes,
+    climateOnly: !pkg,
+    config: routingModeConfig(mode),
+  });
+  openPointOptSheet(ui, code, null);
+}
+
+// Hoja de resultado (mismo chrome que la de acciones): comparación de E12.5,
+// isócronas y línea punteada en el mapa, y "Aplicar" que crea la ruta propia.
+function openPointOptSheet(ui: UiState, code: string, bootError: string | null): void {
+  pointOptCode = code;
+  const body = buildPointSheet(ui, (host) => renderPointOptBody(ui, host, code, bootError));
+  pointOptOnUpdate = () => {
+    if (!pointSheetEl) return;
+    renderPointOptBody(ui, body, code, null);
+  };
+}
+
+function renderPointOptBody(ui: UiState, host: HTMLElement, code: string, bootError: string | null): void {
+  clear(host);
+  const job = optJobs.get(code);
+  if (bootError || !job) {
+    host.append(el("p", { class: "hn-err" }, `No se pudo trazar la ruta: ${bootError ?? "error desconocido"}`));
+    host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
+    return;
+  }
+  if (job.status === "running") {
+    host.append(el("p", {}, job.ratio > 0 ? `Calculando… ${(job.ratio * 100).toFixed(0)} %` : "Calculando la ruta optimizada…"));
+    return;
+  }
+  if (job.status === "error" || !job.result) {
+    host.append(el("p", { class: "hn-err" }, `No se pudo trazar la ruta: ${job.error ?? "error"}`));
+    host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
+    return;
+  }
+  const r = job.result;
+  if (!r.reached) {
+    host.append(el("p", { class: "hn-err" }, `No se pudo trazar la ruta: ${r.reason ?? "sin motivo"}`));
+    host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
+    return;
+  }
+  // Mismas capas de E12.5: isócronas + trazado punteado de comparación.
+  const isos = r.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
+  setSource(ui.map, "wx-isochrones", featureCollection(isos));
+  setSource(ui.map, "optroute", featureCollection([lineFeature(multiRouteCoords(r) as [number, number][])]));
+  if (job.baseline) host.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
+  const stats = el("div", { class: "hn-opt-stats" });
+  stats.append(
+    el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${nm(r.nm)}`),
+    el("span", {}, `Ceñidas: ${r.tacks} bordos`),
+  );
+  if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`));
+  host.append(stats);
+  host.append(pointOptBtn("Aplicar", () => pointOptApply(ui, code)));
+  host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
+}
+
+function pointOptBtn(label: string, onClick: () => void): HTMLElement {
+  const b = el("button", { class: "hn-point-act", type: "button" }, label);
+  b.addEventListener("click", onClick);
+  return b;
+}
+
+function pointOptDiscard(ui: UiState, code: string): void {
+  optJobs.delete(code);
+  optClearLayers(ui);
+  closePointSheet(ui);
+}
+
+// "Aplicar": crea una ruta propia nueva en Mis rutas (el catálogo jamás se
+// toca) con el trazado optimizado; nada se guarda solo.
+function pointOptApply(ui: UiState, code: string): void {
+  const job = optJobs.get(code);
+  if (!job?.result?.reached) return;
+  const ctx = ownCtx(ui);
+  goTo(ui, "rutas");
+  const route = copyToOwn(ctx, "Optimizada desde el punto", job.coords, job.names);
+  const before = route.waypoints.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon }));
+  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack })));
+  applyOptimizationToOwn(ctx, route, segments);
+  showUndoBand("Ruta optimizada creada en Mis rutas", () => {
+    const cur = ownRouteById(route.id);
+    if (cur) replaceOwnRoute(ctx, cur, before);
+  });
+  pointOptDiscard(ui, code);
+}
+
+// ---- Fijar posición acá: la posición manual en el pin (UX-2, no pisa el GPS).
+
+function fixPointPosition(ui: UiState): void {
+  const pos: Position = { lat: pointLat, lon: pointLon, accuracyM: 0, source: "manual", t: Date.now() };
+  stopGps(ui);
+  ui.position.set(pos);
+  ui.gpsStatus.set("off");
+  persist(ui, KEYS.position, JSON.stringify(pos));
+  setSource(ui.map, "me", featureCollection([pointFeature(pos.lon, pos.lat)]));
+  pushFix(ui, pos);
+  closePointSheet(ui);
+}
+
+// ---- Waypoint acá: a la ruta en edición, o el primer punto de una nueva.
+
+function waypointPoint(ui: UiState): void {
+  const ctx = ownCtx(ui);
+  const editing = ownEdit();
+  if (editing) {
+    const next = addWaypoint(editing, pointLat, pointLon);
+    replaceOwnRoute(ctx, next, next.waypoints.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon })));
+    closePointSheet(ui);
+    return;
+  }
+  goTo(ui, "rutas");
+  copyToOwn(ctx, `Ruta ${ownRoutes().length + 1}`, [[pointLon, pointLat]], ["WP1"]);
+  closePointSheet(ui);
 }

@@ -38,3 +38,5 @@ acciones), web/public/app.css. Sin cambios en core ni en el worker.
    ningún cambio en el catálogo; el toque corto no dispara la hoja.
 6. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.1: long-press, pin y hoja de
    acciones", push, PARÁ.
+
+Status: DONE
