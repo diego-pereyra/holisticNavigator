@@ -4,11 +4,7 @@
     {
       "journey": "arranque",
       "taps": 0,
-      "pasosFallidos": [
-        "existe: barra de contexto",
-        "existe: FAB ◉",
-        "diagnóstico de arranque: \"Holistic Navigator\\ncarta base … · catálogo … · rutas …\\nbuild 354d5bc\""
-      ],
+      "pasosFallidos": [],
       "steps": [
         {
           "label": "arranca en < 15 s",
@@ -18,24 +14,18 @@
         },
         {
           "label": "existe: barra de contexto",
-          "found": false,
+          "found": true,
           "extra": "",
           "taps": 0
         },
         {
           "label": "existe: FAB ◉",
-          "found": false,
-          "extra": "",
-          "taps": 0
-        },
-        {
-          "label": "diagnóstico de arranque: \"Holistic Navigator\\ncarta base … · catálogo … · rutas …\\nbuild 354d5bc\"",
-          "found": false,
+          "found": true,
           "extra": "",
           "taps": 0
         }
       ],
-      "ms": 13382
+      "ms": 1831
     },
     {
       "journey": "j1-clima-en-un-punto",
@@ -51,95 +41,98 @@
           "taps": 0
         }
       ],
-      "ms": 4623
+      "ms": 4674
     },
     {
       "journey": "j2-seguir-ruta",
       "taps": 4,
-      "pasosFallidos": [
-        "tab Rutas",
-        "la lista de rutas carga",
-        "primera ruta de la lista",
-        "Seguir",
-        "la tira de navegación aparece al seguir",
-        "Dejar de seguir"
-      ],
+      "pasosFallidos": [],
       "steps": [
         {
           "label": "tab Rutas",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 1
         },
         {
           "label": "la lista de rutas carga",
-          "found": false,
-          "extra": "sin .hn-row a los 10 s",
+          "found": true,
+          "extra": "",
           "taps": 1
         },
         {
           "label": "primera ruta de la lista",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 2
         },
         {
           "label": "Seguir",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 3
         },
         {
           "label": "la tira de navegación aparece al seguir",
-          "found": false,
+          "found": true,
           "extra": "",
           "taps": 3
         },
         {
           "label": "Dejar de seguir",
+          "found": true,
+          "extra": "",
+          "taps": 4
+        }
+      ],
+      "ms": 3327
+    },
+    {
+      "journey": "j3-optimizar",
+      "taps": 4,
+      "pasosFallidos": [
+        "el cálculo termina (≤ 150 s)",
+        "Descartar"
+      ],
+      "steps": [
+        {
+          "label": "tab Rutas",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "abrir una ruta",
+          "found": true,
+          "extra": "",
+          "taps": 2
+        },
+        {
+          "label": "Optimizar",
+          "found": true,
+          "extra": "",
+          "taps": 3
+        },
+        {
+          "label": "el cálculo termina (≤ 150 s)",
+          "found": false,
+          "extra": "",
+          "taps": 3
+        },
+        {
+          "label": "Descartar",
           "found": false,
           "extra": "no se encontró",
           "taps": 4
         }
       ],
-      "ms": 31350
-    },
-    {
-      "journey": "j3-optimizar",
-      "taps": 3,
-      "pasosFallidos": [
-        "tab Rutas",
-        "abrir una ruta",
-        "Optimizar"
-      ],
-      "steps": [
-        {
-          "label": "tab Rutas",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 1
-        },
-        {
-          "label": "abrir una ruta",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 2
-        },
-        {
-          "label": "Optimizar",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 3
-        }
-      ],
-      "ms": 26022
+      "ms": 156039
     },
     {
       "journey": "j4-mob",
-      "taps": 1,
+      "taps": 2,
       "pasosFallidos": [
-        "Usar GPS",
-        "existe: botón MOB visible"
+        "Usar GPS"
       ],
       "steps": [
         {
@@ -150,83 +143,119 @@
         },
         {
           "label": "existe: botón MOB visible",
-          "found": false,
+          "found": true,
           "extra": "",
           "taps": 1
+        },
+        {
+          "label": "presión larga marca MOB",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "Terminar MOB",
+          "found": true,
+          "extra": "",
+          "taps": 2
         }
       ],
-      "ms": 9017
+      "ms": 8745
     },
     {
       "journey": "j5-clima-y-mes",
-      "taps": 4,
-      "pasosFallidos": [
-        "Tiempo → pilot chart",
-        "existe: panel de capas del clima",
-        "apagar capa Olas",
-        "Tiempo (apagar)",
-        "chip Cuándo"
-      ],
+      "taps": 5,
+      "pasosFallidos": [],
       "steps": [
         {
           "label": "Tiempo → pilot chart",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 1
         },
         {
           "label": "existe: panel de capas del clima",
-          "found": false,
+          "found": true,
           "extra": "",
           "taps": 1
         },
         {
           "label": "apagar capa Olas",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 2
         },
         {
           "label": "Tiempo (apagar)",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 3
         },
         {
           "label": "chip Cuándo",
-          "found": false,
-          "extra": "no se encontró",
+          "found": true,
+          "extra": "",
           "taps": 4
+        },
+        {
+          "label": "Cuándo abre el selector de mes",
+          "found": true,
+          "extra": "",
+          "taps": 4
+        },
+        {
+          "label": "elegir marzo",
+          "found": true,
+          "extra": "",
+          "taps": 5
         }
       ],
-      "ms": 19317
+      "ms": 1968
     },
     {
       "journey": "j6-ajustes",
-      "taps": 1,
+      "taps": 2,
       "pasosFallidos": [
-        "⚙ Ajustes"
+        "interruptor MOB"
       ],
       "steps": [
         {
           "label": "⚙ Ajustes",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "espera: Unidades",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "espera: Visibilidad",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "espera: Tema",
+          "found": true,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "interruptor MOB",
           "found": false,
           "extra": "no se encontró",
-          "taps": 1
+          "taps": 2
         }
       ],
-      "ms": 4001
+      "ms": 4956
     }
   ],
-  "erroresConsola": [
-    "Failed to load resource: net::ERR_EMPTY_RESPONSE",
-    "Failed to load resource: net::ERR_EMPTY_RESPONSE"
-  ],
+  "erroresConsola": [],
   "erroresPagina": [],
   "http": [],
-  "recursosFallidos": [
-    "http://localhost:8087/holisticNavigator/app.css · net::ERR_EMPTY_RESPONSE",
-    "http://localhost:8087/holisticNavigator/main.js · net::ERR_EMPTY_RESPONSE"
-  ],
+  "recursosFallidos": [],
   "capturasFallidas": []
 }
