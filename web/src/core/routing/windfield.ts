@@ -39,16 +39,44 @@ function toWind(u: number, v: number): WindPoint {
   return { dir: dirFromUV(u, v), speed: Math.hypot(u, v) };
 }
 
+// E12.9 — anillo de búsqueda de la celda de agua más cercana cuando la celda
+// consultada no tiene viento (tierra en la máscara o en la climatología). Radio
+// ~0,5°: el viento de un punto tocado en el mapa está garantizado.
+const RING_STEP_DEG = 0.1;
+const RING_MAX_DEG = 0.5;
+const RING_DIRS = 8;
+
+function ringWind(at: (lat: number, lon: number) => WindPoint | null, lat: number, lon: number): WindPoint | null {
+  const direct = at(lat, lon);
+  if (direct) return direct;
+  const cosLat = Math.max(0.01, Math.cos((lat * Math.PI) / 180));
+  for (let r = RING_STEP_DEG; r <= RING_MAX_DEG + 1e-9; r += RING_STEP_DEG) {
+    for (let k = 0; k < RING_DIRS; k++) {
+      const a = (k * 2 * Math.PI) / RING_DIRS;
+      const w = at(lat + r * Math.cos(a), lon + (r * Math.sin(a)) / cosLat);
+      if (w) return w;
+    }
+  }
+  return null;
+}
+
 // Climatología del mes: `wu`/`wv` son componentes u/v; si el vector es nulo se
 // usa `ws` como intensidad sin dirección (el motor la trata como calma).
+function climateWind(clim: ClimMonth, lat: number, lon: number): WindPoint | null {
+  // E12.9 — `getCell` es (lat, lon); con los argumentos invertidos Canarias
+  // consultaba África y devolvía "sin datos de viento" en pleno océano.
+  const cell = getCell(clim, lat, normLon(lon));
+  if (!cell) return null;
+  const mag = Math.hypot(cell.wu, cell.wv);
+  if (mag < 0.05) return { dir: 0, speed: Math.max(0, cell.ws) };
+  return toWind(cell.wu, cell.wv);
+}
+
+// E12.9 — un ancla es VERDAD: si la celda consultada no tiene viento, se toma el
+// de la celda de agua más cercana en vez de anular el punto. Sin esto el motor
+// no arranca desde un puerto (la celda del ancla es tierra).
 export function climateWindField(clim: ClimMonth): WindField {
-  return (lat, lon) => {
-    const cell = getCell(clim, normLon(lon), lat);
-    if (!cell) return null;
-    const mag = Math.hypot(cell.wu, cell.wv);
-    if (mag < 0.05) return { dir: 0, speed: Math.max(0, cell.ws) };
-    return toWind(cell.wu, cell.wv);
-  };
+  return (lat, lon) => ringWind((la, lo) => climateWind(clim, la, lo), lat, lon);
 }
 
 function cellUV(pkg: ForecastPackage, c: number, r: number, ti: number): { u: number; v: number } | null {
@@ -116,11 +144,28 @@ export function forecastWindField(pkg: ForecastPackage, clim: ClimMonth | null):
   const stepMs = pkg.stepHours * 3600_000;
   const last = forecastHorizon(pkg);
   const climField = clim ? climateWindField(clim) : null;
+  const { bbox } = pkg;
+  const inBox = (lat: number, lon: number): boolean => {
+    const x = normLon(lon);
+    return x >= bbox[0] && x <= bbox[2] && lat >= bbox[1] && lat <= bbox[3];
+  };
   return (lat, lon, tMs) => {
     if (tMs > last && climField) return climField(lat, lon, tMs);
     const tf = stepMs > 0 ? (tMs - base) / stepMs : 0;
-    const uv = sampleUV(pkg, lat, lon, Math.max(0, Math.min(pkg.times.length - 1, tf)));
+    const ti = Math.max(0, Math.min(pkg.times.length - 1, tf));
+    const uv = sampleUV(pkg, lat, lon, ti);
     if (uv) return toWind(uv.u, uv.v);
+    // E12.9 — bordes de la caja: si la celda consultada no tiene dato (celdas
+    // del borde sin pareja para la interpolación) se busca en un anillo dentro
+    // de la caja antes de caer a la climatología.
+    if (inBox(lat, lon)) {
+      const w = ringWind((la, lo) => {
+        if (!inBox(la, lo)) return null;
+        const p = sampleUV(pkg, la, lo, ti);
+        return p ? toWind(p.u, p.v) : null;
+      }, lat, lon);
+      if (w) return w;
+    }
     return climField ? climField(lat, lon, tMs) : null;
   };
 }

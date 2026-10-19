@@ -48,7 +48,7 @@ async function run(msg: Extract<IsoWorkerRequest, { type: "run" }>): Promise<voi
           : () => null;
     const ice = clim
       ? (lat: number, lon: number): number | null => {
-          const c = getCell(clim, lon, lat);
+          const c = getCell(clim, lat, lon);
           return c ? c.ice : null;
         }
       : undefined;

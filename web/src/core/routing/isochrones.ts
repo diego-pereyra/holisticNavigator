@@ -245,6 +245,10 @@ interface Node {
   heading: number;
   tacks: number;
   parent: Node | null;
+  /** E12.9 — salió de un reintento con Δt reducido (paso de tortuga). */
+  retry?: boolean;
+  /** E12.9 — forma parte de la caminata de escape de un puerto. */
+  esc?: boolean;
 }
 
 function normLon(lon: number): number {
@@ -302,6 +306,76 @@ function inExemptZone(lat: number, lon: number, exempt: LonLat[] | undefined, gr
   if (!exempt) return false;
   for (const a of exempt) {
     if (Math.abs(lat - a[1]) <= graceDeg && Math.abs(lon - a[0]) <= graceDeg) return true;
+  }
+  return false;
+}
+
+// E12.9 — escape de puerto: caminata por celdas de AGUA desde un punto que queda
+// en la zona bloqueada (agua a menos del margen de la costa, o tierra del propio
+// ancla) hasta agua despejada, dentro de una gracia de ~0,5°. Devuelve la cadena
+// [origen, …, despejado] o null si el punto ya está despejado o no hay salida.
+// Solo se transita agua: las únicas celdas de tierra que se cruzan son las del
+// propio ancla, que es verdad por definición.
+function escapeWalk(
+  land: Landmask,
+  lat0: number,
+  lon0: number,
+  marginNm: number,
+  anchor: LonLat,
+  maxDeg = 0.5,
+): Array<{ lat: number; lon: number }> | null {
+  if (!land.isLandWithMargin(lat0, lon0, marginNm)) return null;
+  const step = 0.05;
+  const cosLat = Math.max(0.01, Math.cos((lat0 * Math.PI) / 180));
+  const clear = (la: number, lo: number): boolean => !land.isLandWithMargin(la, lo, marginNm);
+  // La gracia del ancla acá es la misma del radio de búsqueda (~0,5°): la
+  // celda costera de la máscara mide 0,1° (≈6 nm) y hay que atravesarla para
+  // llegar al agua; con la gracia de 0,05° de `segmentClear` el primer paso
+  // cae en tierra excedida y el escape nunca arranca.
+  const passable = (la: number, lo: number): boolean => !land.isLand(la, lo) || inExemptZone(la, lo, [anchor], maxDeg);
+  const maxNm = maxDeg * 60;
+  const key = (la: number, lo: number): string => `${Math.round(la / step)}:${Math.round(lo / step)}`;
+  const seen = new Set<string>([key(lat0, lon0)]);
+  const parent = new Map<string, { lat: number; lon: number }>();
+  const queue: Array<{ lat: number; lon: number }> = [{ lat: lat0, lon: lon0 }];
+  let found: { lat: number; lon: number } | null = null;
+  while (queue.length > 0 && found === null) {
+    const cur = queue.shift()!;
+    for (let k = 0; k < 4; k++) {
+      const la = cur.lat + (k === 0 ? step : k === 1 ? -step : 0);
+      const lo = cur.lon + (k === 2 ? step / cosLat : k === 3 ? -step / cosLat : 0);
+      if (Math.abs(la) > 89.5 || haversineNm(lat0, lon0, la, lo) > maxNm) continue;
+      const kk = key(la, lo);
+      if (seen.has(kk) || !passable(la, lo)) continue;
+      seen.add(kk);
+      parent.set(kk, cur);
+      if (clear(la, lo)) {
+        found = { lat: la, lon: lo };
+        break;
+      }
+      queue.push({ lat: la, lon: lo });
+    }
+  }
+  if (found === null) return null;
+  const chain: Array<{ lat: number; lon: number }> = [found];
+  let c = found;
+  for (;;) {
+    const p = parent.get(key(c.lat, c.lon));
+    if (!p) break;
+    chain.push(p);
+    c = p;
+  }
+  chain.reverse();
+  return chain;
+}
+
+// E12.9 — ¿el segmento cruza tierra pura? (Sin margen: la caminata de escape ya
+// se recorrió celda por celda buscando agua, así que solo importa la tierra.)
+function crossesPureLand(land: Landmask, a: LonLat, b: LonLat): boolean {
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(b[0] - a[0]), Math.abs(b[1] - a[1])) / 0.05));
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    if (land.isLand(a[1] + (b[1] - a[1]) * f, normLon(a[0] + (b[0] - a[0]) * f))) return true;
   }
   return false;
 }
@@ -403,21 +477,66 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   // agregarlo evita un zigzag espurio con viento uniforme.
   headings.push(directBearing);
 
+  // E12.9 — velocidad de la maniobra de escape (salida/entrada a puerto): a
+  // través con el viento que haya, nunca por debajo de la de motor.
+  const escapeKn = (lat: number, lon: number, tMs: number): number => {
+    const w = wind(lat, lon, tMs);
+    const sail = w ? boatSpeed(polar, 90, w.speed) : 0;
+    return Math.max(polar.config.motorKn, sail);
+  };
+  const walkMs = (walk: Array<{ lat: number; lon: number }>, t0: number): number => {
+    let t = t0;
+    for (let i = 1; i < walk.length; i++) {
+      const a = walk[i - 1]!;
+      const b = walk[i]!;
+      t += (haversineNm(a.lat, a.lon, b.lat, b.lon) / escapeKn(b.lat, b.lon, t0)) * 3_600_000;
+    }
+    return t - t0;
+  };
+
+  // E12.9 — escape de puerto: si el origen queda en la zona bloqueada, la
+  // frontera arranca desde el agua despejada (la maniobra suma su tiempo al ETA)
+  // y jamás "lucha" contra la costa del puerto de salida. Para la llegada se
+  // apunta al agua despejada del destino y la entrada se acota al final.
+  const originEscape = escapeWalk(land, origin.lat, origin.lon, cfg.coastMarginNm, [origin.lon, origin.lat]);
+  const destEscape = escapeWalk(land, dest.lat, dest.lon, cfg.coastMarginNm, [dest.lon, dest.lat]);
+  const approach = destEscape ? destEscape[destEscape.length - 1]! : dest;
+  const arrivalMs = destEscape ? walkMs(destEscape, opts.startMs) : 0;
+
   const isochrones: IsochroneLine[] = [];
-  let frontier: Node[] = [
-    { lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, parent: null },
-  ];
+  let frontier: Node[];
+  if (originEscape) {
+    let t = opts.startMs;
+    let cur: Node | null = null;
+    for (const p of originEscape) {
+      if (cur) t += (haversineNm(cur.lat, cur.lon, p.lat, p.lon) / escapeKn(p.lat, p.lon, t)) * 3_600_000;
+      cur = {
+        lat: p.lat,
+        lon: p.lon,
+        t,
+        heading: cur ? initialBearingDeg(cur.lat, cur.lon, p.lat, p.lon) : NaN,
+        tacks: 0,
+        parent: cur,
+        esc: true,
+      };
+    }
+    frontier = [cur!];
+  } else {
+    frontier = [{ lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, parent: null }];
+  }
   let reachedNode: Node | null = null;
   let closestNode: Node = frontier[0]!;
-  let closestDist = haversineNm(origin.lat, origin.lon, dest.lat, dest.lon);
+  let closestDist = haversineNm(frontier[0]!.lat, frontier[0]!.lon, dest.lat, dest.lon);
   let step = 0;
 
   // E12.7 — el último tramo (salto de anclaje) también se valida: hay que poder
   // entrar al destino (viento navegable y corredor libre, con extremos exentos).
+  // E12.9 — si el destino está en la zona bloqueada se apunta al agua despejada
+  // (`approach`); la entrada al puerto se resuelve con la caminata final.
   const reachableEnd = (fromLat: number, fromLon: number, tMs: number): boolean => {
-    const wd = wind(dest.lat, dest.lon, tMs);
+    const wd = wind(approach.lat, approach.lon, tMs);
     if (!wd || wd.speed > cfg.maxTws) return false;
-    return segmentClear(land, fromLat, fromLon, dest.lat, dest.lon, cfg.coastMarginNm, exempt, dest);
+    return segmentClear(land, fromLat, fromLon, approach.lat, approach.lon, cfg.coastMarginNm, exempt, dest);
   };
 
   // E12.8 — por qué mueren los candidatos, para poder decir DÓNDE y POR QUÉ no
@@ -434,7 +553,7 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   let deathPos: { lat: number; lon: number } | null = null;
   let deathDeaths: Deaths | null = null;
 
-  const expand = (p: Node, dtH: number, out: Node[], nd: Deaths): number => {
+  const expand = (p: Node, dtH: number, out: Node[], nd: Deaths, isRetry: boolean): number => {
     const startLen = out.length;
     const dtMs = dtH * 3600_000;
     const wp = wind(p.lat, p.lon, p.t);
@@ -483,16 +602,20 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         continue;
       }
       const t = p.t + dtMs + (tack ? cfg.tackPenaltyMin * 60_000 : 0);
-      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p };
+      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p, ...(isRetry ? { retry: true } : {}) };
       out.push(node);
 
       const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
-      if ((d <= advanceNm * 1.2 || d < 1) && reachableEnd(q.lat, q.lon, node.t)) {
+      // E12.9 — la llegada se mide contra el punto de agua del destino (si el
+      // destino está bloqueado, contra `approach`); `d` sigue siendo la
+      // distancia real al destino para informar progreso.
+      const dEnd = approach === dest ? d : haversineNm(q.lat, q.lon, approach.lat, approach.lon);
+      if ((dEnd <= advanceNm * 1.2 || dEnd < 1) && reachableEnd(q.lat, q.lon, node.t)) {
         // Con varios puntos que llegan a la vez, elige el que queda más cerca
         // del destino (evita un último tramo torcido).
-        if (!reachedCandidate || d < reachedDist - 0.05 || (Math.abs(d - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
+        if (!reachedCandidate || dEnd < reachedDist - 0.05 || (Math.abs(dEnd - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
           reachedCandidate = node;
-          reachedDist = d;
+          reachedDist = dEnd;
         }
       }
       if (d < closestDist) {
@@ -511,13 +634,14 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     for (const p of frontier) {
       const nd: Deaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
       let dtH = nearCoast(land, p.lat, p.lon, cfg.coastDeg) ? cfg.stepCoastH : cfg.stepOceanH;
-      let produced = expand(p, dtH, candidates, nd);
+      let produced = expand(p, dtH, candidates, nd, false);
       // E12.8 — paso adaptativo: si un punto no produjo ningún candidato y murió
-      // por tierra, reintenta con Δt reducido (piso 15 min) para no saltear los
-      // canales más angostos que el avance de un paso.
+      // por tierra, reintenta con Δt reducido (piso 15 min) para no saltar los
+      // canales más angostos que el avance de un paso. E12.9 — esos micro-pasos
+      // quedan marcados (`retry`) para no competir por ETA cruda en la poda.
       while (produced === 0 && nd.land > 0 && dtH > 0.25) {
         dtH = Math.max(0.25, dtH / 2);
-        produced = expand(p, dtH, candidates, nd);
+        produced = expand(p, dtH, candidates, nd, true);
       }
       if (produced === 0) {
         if (!deathDeaths) deathDeaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
@@ -541,19 +665,56 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     deathPos = null;
     deathDeaths = null;
 
-    // Poda por sectores angulares desde el origen: un sobreviviente por sector
-    // (el de menor ETA; empate → el más cercano al destino).
+    // Poda por sectores angulares desde el origen. E12.9 — dos reglas para no
+    // envenenar la frontera:
+    //  1. Los micro-pasos del reintento adaptativo (Δt 0,25 h) NO compiten por
+    //     ETA cruda: como su `t` es chico ganaban el sector aunque avanzaran a
+    //     paso de tortuga. Solo entran en sectores sin normales, y ahí por
+    //     PROGRESO hacia el destino.
+    //  2. Entre los normales conserva además al de mayor progreso (no dominado).
+    //     Justificación: los nodos costeros caminan con `stepCoastH` (1 h) y los
+    //     oceánicos con `stepOceanH` (3 h); un descendiente costero de la misma
+    //     edad en un sector radial tenía ~2 h menos de `t` que la rama que ya
+    //     salió a alta mar, la mataba y la frontera se reiniciaba sin avanzar
+    //     nunca (por eso un viaje Canarias→Barbados se quedaba orbitando la
+    //     isla los 700 pasos). Conservar el no dominado impide ese reinicio.
     const sectors = Math.max(1, Math.round(360 / cfg.sectorDeg));
-    const best = new Map<number, Node>();
+    const distToDest = (n: Node): number => haversineNm(n.lat, n.lon, dest.lat, dest.lon);
+    const bySector = new Map<number, Node[]>();
     for (const c of candidates) {
       const brg = initialBearingDeg(origin.lat, origin.lon, c.lat, c.lon);
       const key = Math.round(brg / cfg.sectorDeg) % sectors;
-      const prev = best.get(key);
-      if (!prev || c.t < prev.t - 1 || (Math.abs(c.t - prev.t) <= 1 && haversineNm(c.lat, c.lon, dest.lat, dest.lon) < haversineNm(prev.lat, prev.lon, dest.lat, dest.lon))) {
-        best.set(key, c);
-      }
+      const list = bySector.get(key);
+      if (list) list.push(c);
+      else bySector.set(key, [c]);
     }
-    frontier = [...best.values()];
+    const nextFrontier: Node[] = [];
+    for (const list of bySector.values()) {
+      const normals = list.filter((n) => n.retry !== true);
+      if (normals.length === 0) {
+        // Solo micro-pasos: por progreso, desempate por ETA.
+        let bestRetry = list[0]!;
+        for (const n of list) {
+          const nd = distToDest(n);
+          const bd = distToDest(bestRetry);
+          if (nd < bd - 0.5 || (Math.abs(nd - bd) <= 0.5 && n.t < bestRetry.t)) bestRetry = n;
+        }
+        nextFrontier.push(bestRetry);
+        continue;
+      }
+      let bestT = normals[0]!;
+      let bestD = normals[0]!;
+      for (const n of normals) {
+        const nd = distToDest(n);
+        const td = distToDest(bestT);
+        if (n.t < bestT.t - 1 || (Math.abs(n.t - bestT.t) <= 1 && nd < td)) bestT = n;
+        const dd = distToDest(bestD);
+        if (nd < dd - 0.5 || (Math.abs(nd - dd) <= 0.5 && n.t < bestD.t)) bestD = n;
+      }
+      nextFrontier.push(bestT);
+      if (bestD !== bestT) nextFrontier.push(bestD);
+    }
+    frontier = nextFrontier;
 
     isochrones.push({
       t: opts.startMs + (step + 1) * cfg.stepOceanH * 3600_000,
@@ -575,6 +736,14 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   for (let cur: Node | null = end; cur; cur = cur.parent) path.push(cur);
   path.reverse();
 
+  if (reachedNode) {
+    if (arrivalMs > 0) {
+      (reachedNode as Node).t += arrivalMs;
+      for (const n of path) {
+        if (n === reachedNode) n.t += arrivalMs;
+      }
+    }
+  }
   const reached = reachedNode !== null;
   let reason: string | undefined;
   if (!reached) {
@@ -594,7 +763,8 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     }
   }
 
-  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reached, cfg.maxWaypoints, reason, land, cfg, exempt);
+  // E12.9 — qué pata de `path` es caminata de escape (salida/entrada a puerto).
+  return buildResult(path, dest, opts.startMs, polar, wind, isochrones, step, reached, cfg.maxWaypoints, reason, land, cfg, exempt, path.map((p) => p.esc === true));
 }
 
 // E12.6 — optimización tramo a tramo: los `anchors` son los waypoints
@@ -710,6 +880,7 @@ function buildResult(
   land?: Landmask,
   cfg?: IsoConfig,
   exempt?: LonLat[],
+  escFlags: boolean[] = [],
 ): IsoResult {
   const raw: LonLat[] = path.map((p) => [p.lon, p.lat] as LonLat);
   const etaOf = path.map((p) => p.t);
@@ -735,7 +906,15 @@ function buildResult(
     const marginNm = cfg.coastMarginNm;
     const maxTws = cfg.maxTws;
     const pairOk = (a: number, b: number): boolean => {
-      if (!segmentClear(land, raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0], marginNm, exempt)) return false;
+      // E12.9 — una pata de la caminata de escape (salida a puerto) ya se recorrió
+      // celda por celda buscando agua: solo importa que no cruce tierra pura. El
+      // margen costero no aplica dentro de la maniobra, y así la simplificación
+      // no se anula entera en una ruta que sale de un puerto.
+      if (escFlags[a] === true && escFlags[b] === true) {
+        if (crossesPureLand(land, raw[a]!, raw[b]!)) return false;
+      } else if (!segmentClear(land, raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0], marginNm, exempt)) {
+        return false;
+      }
       const midT = (etaOf[a]! + etaOf[b]!) / 2;
       const wm = wind((raw[a]![1] + raw[b]![1]) / 2, normLon((raw[a]![0] + raw[b]![0]) / 2), midT);
       return !(wm && wm.speed > maxTws);
