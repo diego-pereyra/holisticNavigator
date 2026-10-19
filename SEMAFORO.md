@@ -1,31 +1,32 @@
 ADELANTE
 
-TAREA ÚNICA: UX-N.4b — Completar el Ajustes: el núcleo de unidades ya está (format.ts, 178
-tests verdes); falta TODA la interfaz que el DONE de UX-N.4 dejó afuera (revisión del
-arquitecto: formatSpeed/formatDistance se usan 0 veces en la UI; no existe el panel).
+TAREA ÚNICA: UX-N.5 — Consistencia: "Cuándo" abre el selector, la ayuda deja de mentir,
+Medir existe y el pin lo usa, nav-to-wp se dibuja.
+(docs/07-rediseño-usabilidad.md, decisión D5 + hallazgos del inventario.)
 
-Archivos: web/src/ui/app.ts, web/public/app.css. core/format.ts ya está hecho — usalo.
+Archivos: web/src/ui/app.ts, web/src/main.ts (capa measure-line), web/src/core/format.ts
+(distancias de Medir), web/public/app.css.
 
-1. **Entrada fija:** botón ⚙ en la barra de contexto → panel Ajustes (hoja completa en móvil,
-   columna en escritorio). Todo setting a ≤ 3 toques del mapa.
-2. **Visibilidad** (hn.settings.visibilidad, todos visibles por defecto): MOB · FAB ◉ ·
-   nota de escala · retícula · balizas OSM online. Ocultar el MOB quita el botón y su
-   pulsación larga; un MOB ACTIVO nunca se oculta (hombre al agua siempre visible).
-3. **Unidades conectadas de verdad** (hn.settings.unidades, defaults kn/nm/m): los
-   selectores de Ajustes y TODOS los textos de velocidad/distancia/profundidad de la UI
-   pasan por formatSpeed/formatDistance/formatDepth: tira de navegación, ficha (millas),
-   comparación de optimización, clima del pin, fondeo (radio en m/ft). Cero números
-   crudos: si cambiás a km/h y km, el nav strip y la ficha cambian.
-4. **Absorbe en Ajustes:** la tarjeta de Alarmas (umbrales desvío/llegada), el Tema (chips +
-   "De noche usar Rojo") y el panel "Sin conexión" completo. En Aquí queda solo lo operativo
-   del momento: posición, ruta en curso, fondeo activo, rutas cercanas.
-5. Tests (node:test): visibilidad persistida y aplicada al montar (MOB/FAB ocultos de
-   arranque tras recargar); unidades kn/nm/m y km/h/km/ft en los formatters ya cubiertos —
-   sumá un test de la configuración aplicada (hn.settings.unidades sobrevive recarga).
-6. Aceptación: el MOB se oculta y aparece; cambiar a km/h cambia la tira Y la ficha;
-   cualquier setting a ≤ 3 toques del mapa; el UAT encuentra "Ajustes".
-7. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.4b: ajustes central
-   completo (UI de visibilidad y unidades)", push. Al terminar escribí "Status: DONE"
-   como última línea de este archivo.
+1. **"Cuándo" abre el selector de mes** (app.ts:1566 hoy manda a Aquí): el chip de la barra
+   abre hn-month-menu, igual que "Salgo en {mes}".
+2. **Ayuda veraz:** reescribir la primera ayuda con lo que existe hoy (posiciones, mes,
+   rutas, clima con el pin, ajustes) — cero referencias a botones que no existen ("Enviar a
+   plotter" fuera). Mencionar el long-press: "mantené pulsado el mar para pedir acciones
+   sobre ese punto".
+3. **Herramienta Medir:** "Medir desde acá" en la hoja del pin arranca la medición: cada
+   toque agrega punto; muestra distancia por tramo y total y rumbo de cada tramo (format.ts);
+   se dibuja en la capa `measure-line` (id ya fijo en Nombres fijos); banda con "Limpiar".
+   ESC o ✕ termina.
+4. **nav-to-wp dibujado:** en modo Navegar, la línea punteada verde posición → próximo
+   waypoint se alimenta (la capa existe, la fuente navline nunca se llena — app.ts:823):
+   visible solo con ruta activa y posición.
+5. **Botón "Descargar pronóstico de la vista"** en el panel Tiempo (si UX-N.2 no lo puso
+   todavía) y el resumen del clima del pin con su edad visible.
+6. Tests (node:test): medir suma tramos y rumbos correctos; el selector de mes abre desde
+   "Cuándo"; nav-to-wp solo con ruta activa.
+7. Aceptación: el UAT no registra ningún "no se encontró" en los journeys; la ayuda cabe en
+   390×844 sin scroll.
+8. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.5: consistencia, Medir y
+   nav-to-wp", push. Al terminar escribí "Status:done" al final de este archivo.
 
-Status: done
+Status: ready
