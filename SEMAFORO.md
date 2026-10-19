@@ -29,4 +29,4 @@ Archivos: web/src/ui/app.ts, web/src/main.ts (capa measure-line), web/src/core/f
 8. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.5: consistencia, Medir y
    nav-to-wp", push. Al terminar escribí "Status:done" al final de este archivo.
 
-Status: ready
+Status:done
