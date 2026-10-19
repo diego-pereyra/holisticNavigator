@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Holistic Navigator — Rutas oceánicas con 30 años de clima y el viento de la semana</title>
+<meta name="description" content="Planificá y navegá crossings oceánicos con la climatología ERA5 1991-2020, el pronóstico de 16 días y el enrutado de isócronas sobre las 400 rutas de World Cruising Routes. Sin cuenta, sin servidor, funciona offline.">
+<style>
+:root{
+  --bg:#0b1626;--panel:#12233a;--line:#2a3b4a;--text:#e8eef4;--muted:#9FB0C0;
+  --accent:#4FC3F7;--red:#FF1744;--ok:#2E7D32;--warn:#C62828;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--text);font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:0 20px 80px}
+a{color:var(--accent)}
+header.hero{padding:72px 20px 48px;text-align:center;background:linear-gradient(180deg,#0e1c30 0%,var(--bg) 100%)}
+header.hero h1{font-size:clamp(30px,5vw,46px);margin:0 0 10px;letter-spacing:.5px}
+header.hero p.tag{font-size:clamp(17px,2.6vw,22px);color:var(--muted);max-width:640px;margin:0 auto 28px}
+.cta{display:inline-block;background:var(--accent);color:#062033;font-weight:700;text-decoration:none;padding:14px 30px;border-radius:10px;font-size:18px}
+.cta:hover{filter:brightness(1.1)}
+.kicker{display:inline-block;font-size:12px;letter-spacing:2px;text-transform:uppercase;color:var(--accent);border:1px solid var(--line);border-radius:999px;padding:4px 12px;margin-bottom:18px}
+h2{font-size:clamp(22px,3.4vw,30px);margin:56px 0 6px}
+h2 + p.lead{color:var(--muted);margin-top:0}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-top:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px}
+.card h3{margin:0 0 6px;font-size:17px;color:var(--accent)}
+.card p{margin:0;color:var(--muted);font-size:14.5px}
+.card .big{font-size:22px;font-weight:700;color:var(--text)}
+ul.checks{list-style:none;padding:0;margin:14px 0 0}
+ul.checks li{padding-left:28px;position:relative;margin:9px 0;color:var(--muted)}
+ul.checks li::before{content:"✓";position:absolute;left:2px;color:var(--accent);font-weight:700}
+ol.steps{counter-reset:paso;list-style:none;padding:0;margin:20px 0 0}
+ol.steps li{counter-increment:paso;position:relative;padding:0 0 22px 54px}
+ol.steps li::before{content:counter(paso);position:absolute;left:0;top:0;width:36px;height:36px;border-radius:50%;background:var(--panel);border:1px solid var(--accent);color:var(--accent);font-weight:700;display:flex;align-items:center;justify-content:center}
+ol.steps b{color:var(--text)}
+ol.steps p{margin:4px 0 0;color:var(--muted);font-size:15px}
+table.polar{width:100%;border-collapse:collapse;margin-top:18px;font-size:14px;background:var(--panel);border-radius:12px;overflow:hidden}
+table.polar th,table.polar td{padding:8px 10px;text-align:center;border-bottom:1px solid var(--line)}
+table.polar thead th{background:#0e1c30;color:var(--muted);font-weight:600}
+table.polar td:first-child{text-align:left;white-space:nowrap;color:var(--muted)}
+table.polar td:first-child b{color:var(--text)}
+table.polar .dead td{opacity:.38;text-decoration:line-through}
+table.polar .best td{color:var(--text)}
+table.polar .best td:first-child{text-decoration:none}
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:16px}
+.rule{background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:12px 14px;font-size:14.5px;color:var(--muted)}
+.rule b{color:var(--text)}
+.colores{display:flex;gap:26px;flex-wrap:wrap;margin-top:18px}
+.muestra{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:15px}
+.linea{width:52px;height:0;border-top:3px dashed var(--accent)}
+.linea.roja{border-top-color:var(--red)}
+footer{border-top:1px solid var(--line);margin-top:64px;padding:26px 0 0;color:var(--muted);font-size:13.5px}
+footer p{margin:6px 0}
+.aviso{background:#1c1420;border:1px solid var(--warn);border-radius:10px;padding:14px 16px;margin-top:22px;font-size:14px}
+@media(max-width:560px){ol.steps li{padding-left:44px}ol.steps li::before{width:30px;height:30px;font-size:14px}}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <span class="kicker">Navegación oceánica · planificar y navegar</span>
+  <h1>Holistic Navigator</h1>
+  <p class="tag">Rutas oceánicas planificadas con <b>30 años de clima real</b> y navegadas con el <b>viento de esta semana</b>. Todo en tu navegador, también sin conexión.</p>
+  <a class="cta" href="./">Abrir la app</a>
+</header>
+
+<main>
+
+<h2>Los datos que hacen el trabajo</h2>
+<p class="lead">Nada de estimaciones a ojo: cada línea de la app sale de fuentes públicas y verificables.</p>
+<div class="grid">
+  <div class="card"><h3>400 rutas oceánicas</h3><span class="big">World Cruising Routes</span><p>Las rutas de Jimmy & Doina Cornell (8.ª edición) con sus 779 variantes, consejos de cada capítulo, cartas y guías de referencia, y la mejor época de salida mes por mes.</p></div>
+  <div class="card"><h3>Pilot charts mensuales</h3><span class="big">ERA5 · 1991–2020</span><p>Viento medio, constancia, olas e hielo por celda y por mes (Copernicus/ECMWF). Corrientes de superficie OSCAR (NASA, 1993–2022) y ciclones IBTrACS (NOAA, 1991–2020): tormentas por década a menos de 150 nm.</p></div>
+  <div class="card"><h3>Pronóstico en vivo</h3><span class="big">16 días · 3 h</span><p>Viento, ráfagas, presión, olas y corrientes de los modelos GFS/ECMWF/ICON vía Open-Meteo, descargados por caja de travesía (~0,3–1 MB) y guardados para navegar offline con su edad a la vista.</p></div>
+  <div class="card"><h3>Cartas en el barco</h3><span class="big">Offline por zonas</span><p>Mapa base con batimetría (Natural Earth), carta de detalle descargable por cuenca (OpenStreetMap/Protomaps) y balizas con sus luces (OpenSeaMap). Todo el paquete de clima y cartas queda en el teléfono.</p></div>
+</div>
+
+<h2>Cómo elige la ruta</h2>
+<p class="lead">El mismo método que usan los routers de regata (Expedition, qtVlm, el plugin de OpenCPN), corriendo entero en tu navegador.</p>
+<ul class="checks">
+  <li><b>Isócronas (Hagiwara, 1989):</b> la frontera de posibles del barco avanza por pasos de 1–3 h en 48 rumbos, con el viento real de cada punto y hora. Las ceñidas en zigzag y los rodeos de mal tiempo salen solos.</li>
+  <li><b>Tu barco manda:</b> la velocidad de cada avance sale de la polar del barco (la genérica de crucero de 40 pies viene incluida; podés importar la tuya en formato Maxsea/Adrena/qtVlm).</li>
+  <li><b>Nunca toca tierra:</b> máscara de costa de alta resolución con margen real de 3 millas — no puede cruzar islas, bajo ni puntas, ni saltarse un canal por un paso largo.</li>
+  <li><b>Maniobras contadas:</b> las viradas de ceñida y las trasluchadas de empopada tienen coste en tiempo, así que el trazado vira cuando conviene y no más.</li>
+  <li><b>Tres filosféras del optimizador:</b> <b>Confort</b> (vira lo menos posible, viento suave), <b>Crucero</b> (equilibrio, el default) y <b>Regata</b> (ETA mínimo con la polar cruda).</li>
+  <li><b>Waypoints obligatorios ⚓:</b> si sabés que a Noronha se entra por el norte, marcás el waypoint y el trazado pasa por ahí sí o sí. El resto es libre.</li>
+  <li><b>Corre en tu teléfono:</b> todo el cálculo es local (Web Worker), sin servidor, sin cuenta, y funciona sin conexión.</li>
+</ul>
+
+<h2>La polar del barco</h2>
+<p class="lead">El corazón del enrutado: cuánto anda el barco para cada ángulo y fuerza de viento. Esta es la polar genérica de crucero de 40 pies que va incluida (velocidad en nudos):</p>
+<table class="polar">
+  <thead><tr><th>Ángulo al viento</th><th>4 kn</th><th>6</th><th>8</th><th>10</th><th>12</th><th>14</th><th>16</th><th>20</th><th>25</th></tr></thead>
+  <tbody>
+    <tr class="dead"><td><b>0°</b> proa al viento</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td><td>0</td></tr>
+    <tr><td><b>42°</b> ceñida</td><td>0</td><td>2,6</td><td>3,6</td><td>4,3</td><td>4,9</td><td>5,2</td><td>5,4</td><td>5,4</td><td>5,1</td></tr>
+    <tr><td><b>60°</b> ceñida larga</td><td>0</td><td>3,3</td><td>4,5</td><td>5,5</td><td>6,3</td><td>6,8</td><td>7,1</td><td>7,2</td><td>6,7</td></tr>
+    <tr class="best"><td><b>90°</b> través</td><td>0</td><td>3,6</td><td>5,0</td><td>6,1</td><td>7,0</td><td>7,6</td><td>8,0</td><td>8,2</td><td>7,6</td></tr>
+    <tr class="best"><td><b>110°</b> largo</td><td>0</td><td>3,6</td><td>4,9</td><td>6,1</td><td>7,1</td><td>7,8</td><td>8,2</td><td>8,4</td><td>7,8</td></tr>
+    <tr><td><b>135°</b> aleta</td><td>0</td><td>3,4</td><td>4,7</td><td>5,8</td><td>6,8</td><td>7,5</td><td>7,9</td><td>8,2</td><td>7,7</td></tr>
+    <tr><td><b>165°</b> empopada</td><td>0</td><td>2,9</td><td>4,0</td><td>5,0</td><td>5,9</td><td>6,6</td><td>7,1</td><td>7,5</td><td>7,2</td></tr>
+    <tr class="dead"><td><b>180°</b> empopada muerta</td><td>0</td><td>2,7</td><td>3,7</td><td>4,6</td><td>5,5</td><td>6,2</td><td>6,7</td><td>7,2</td><td>7,0</td></tr>
+  </tbody>
+</table>
+<div class="rules">
+  <div class="rule"><b>Cono muerto:</b> a menos de <b>42°</b> del viento el barco no avanza — el motor corta esas casillas (filas tachadas). El enrutado vira en zigzag en lugar de atravesarlo.</div>
+  <div class="rule"><b>Empopada:</b> más allá de <b>165°</b> tampoco se navega a vela; en popa cerrada el trazado traslucha entre 135° y 165°.</div>
+  <div class="rule"><b>Motor:</b> con menos de <b>6 kn</b> de viento el barco va a motor a <b>4 kn</b> en cualquier rumbo — por eso las calmas nunca tragan el trazado.</div>
+  <div class="rule"><b>Tu polar real:</b> si tu barco anda distinto, importás su polar (formato tabulado Maxsea/Adrena/qtVlm) y todo el enrutado pasa a medir TU barco.</div>
+</div>
+
+<h2>Cómo planificar un crossing</h2>
+<ol class="steps">
+  <li><b>Fijá tu posición</b><p>GPS, un toque en el mapa o coordenadas escritas. Con eso, la app te dice en qué cuenca estás, qué rutas te pasan cerca y qué tormentas te pueden tocar.</p></li>
+  <li><b>Elegí el mes de salida</b><p>El mes manda sobre todo: cada ruta se puntúa (✔ ideal · ✔ con cuidado · posible · ⚠ evitar) según su mejor época y su temporada de ciclones.</p></li>
+  <li><b>Mirá el clima del mes</b><p>Encendé las pilot charts: flechas de viento (el color es la fuerza, la firmeza es la constancia), corrientes en azul, ciclones rayados en rojo e hielo en blanco. Es la pilot chart clásica, viva sobre el mapa.</p></li>
+  <li><b>Elegí la ruta y copiala</b><p>Las del libro son de solo lectura: tocás <b>Copiar ruta</b> y queda tuya en Mis rutas, editable. Ahí marcás con ⚓ los waypoints obligatorios (entradas, pasos, lauros).</p></li>
+  <li><b>Bajá el pronóstico de la travesía</b><p>Desde la ficha de tu ruta: el paquete de 16 días para la caja del trazado, con progreso y su edad siempre visible.</p></li>
+  <li><b>Optimizá con el viento</b><p>Elegí el modo y dejá que las isócronas busquen el trazado. Vas a ver las viradas y trasluchadas numeradas, el viento máximo previsto y la comparación contra la ruta original (“−12 h · +310 nm”).</p></li>
+  <li><b>El aviso del horizonte</b><p>El trazado va con el pronóstico real hasta donde llega y después sigue con las pilot charts del mes — y te lo dice: la línea cambia de color y el panel dice “Pronóstico real: N días · el resto, clima medio”.</p></li>
+  <li><b>Al plotter</b><p>Exportá el GPX con los waypoints nombrados y mandalo a Navionics/OpenCPN. O simulá el recorrido desde la ficha para ver el clima del camino.</p></li>
+</ol>
+
+<h2>Cómo navegar con ella</h2>
+<ol class="steps">
+  <li><b>Tocá “Seguir”</b><p>La tira de navegación te da el próximo waypoint, rumbo, distancia, desvío y ETA, siempre en pantalla aunque la hoja esté plegada.</p></li>
+  <li><b>Planificar y Navegar son modos</b><p>Las alarmas de desvío, llegada y fondeo suenan cuando navegas de verdad — nunca mientras planeás en el sillón.</p></li>
+  <li><b>MOB a un toque largo</b><p>El botón rojo marca hombre al agua con posición y hora, te da rumbo de vuelta y distancia — y queda por encima de todo lo demás.</p></li>
+  <li><b>Bitácora que no se pierde</b><p>Grabación del track, notas con posición, parte diario con millas y velocidad media, exportación GPX del viaje.</p></li>
+  <li><b>Sin conexión, sin sorpresas</b><p>Rutas, clima, pronóstico descargado y cartas de zona quedan en el teléfono. En modo avión sigue funcionando todo.</p></li>
+</ol>
+
+<h2>Los dos colores del trazado optimizado</h2>
+<div class="colores">
+  <div class="muestra"><span class="linea"></span> pronóstico real (lo que va a soplar)</div>
+  <div class="muestra"><span class="linea roja"></span> pilot charts (el clima medio del mes)</div>
+</div>
+<p class="lead" style="margin-top:14px">Donde termina el pronóstico descargado, el trazado sigue con el clima medio del mes — y el color te lo marca en la carta y en el panel.</p>
+
+<div class="aviso"><b>Aviso honesto:</b> Holistic Navigator es una herramienta de planificación y ayuda a la navegación. No reemplaza las cartas náuticas oficiales, los avisos a los navegantes ni tu criterio a bordo. La calidad del enrutado depende de la polar: cargá la de tu barco.</div>
+
+<footer>
+  <p><b>Rutas:</b> World Cruising Routes, 8.ª ed. — Jimmy & Doina Cornell (uso personal; los trazados del libro son de solo lectura y citan su fuente).</p>
+  <p><b>Clima:</b> ERA5 monthly means © ECMWF/Copernicus (1991–2020) · OSCAR © NASA PO.DAAC (1993–2022) · IBTrACS © NOAA NCEI (1991–2020) · Pronóstico: Open-Meteo (CC BY 4.0).</p>
+  <p><b>Cartas:</b> Natural Earth (dominio público) · © OpenStreetMap contributors · Protomaps · © OpenSeaMap (CC BY-SA).</p>
+  <p><a href="./">Abrir la app</a> · funciona instalada en la pantalla de inicio, offline incluido.</p>
+</footer>
+
+</main>
+</body>
+</html>
