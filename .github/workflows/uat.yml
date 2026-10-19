@@ -27,10 +27,18 @@ jobs:
         run: bash scripts/build-web.sh
       - name: Teselas de la release (para que la carta de detalle no dé 404)
         run: |
+          # Misma robustez que el deploy: durante el reemplazo de la release
+          # `tiles-latest` el asset puede dar 404/parcial por un instante y una
+          # PMTiles truncada deja el mapa sin disparar `load` (la UI no monta).
+          RETRY=(--retry 6 --retry-delay 10 --retry-all-errors)
           mkdir -p web/dist/tiles/zones
-          curl -fsSL --retry 3 -o web/dist/tiles/world-z6.pmtiles \
+          curl -fsSL "${RETRY[@]}" -o web/dist/tiles/tiles.json \
+            https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/tiles.json \
+            || echo "aviso: sin tiles.json; el UAT sigue"
+          curl -fsSL "${RETRY[@]}" -o web/dist/tiles/world-z6.pmtiles \
             https://github.com/diego-pereyra/holisticNavigator/releases/download/tiles-latest/world-z6.pmtiles \
             || echo "aviso: sin teselas; el UAT sigue con el piso Natural Earth"
+          ls -l web/dist/tiles/world-z6.pmtiles || true
       - name: Servir con HTTP Range (como Pages)
         run: |
           mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator

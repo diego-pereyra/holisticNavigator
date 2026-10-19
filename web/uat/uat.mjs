@@ -8,7 +8,7 @@
 // Uso:   node web/uat/uat.mjs http://localhost:8087/holisticNavigator/ web/uat/out
 // Salida: <out>/<viewport>/*.png + <out>/uat-<viewport>.json
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync, readdirSync, existsSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 const BASE = process.argv[2] ?? "http://localhost:8087/holisticNavigator/";
@@ -142,7 +142,7 @@ async function jSeguirRuta(page, t) {
   await t.tap("Seguir", page.getByText("Seguir", { exact: true }));
   await sleep(1500);
   const nav = await page
-    .locator(".hn-nav, #hn-navstrip, .hn-strip")
+    .locator(".hn-navstrip, #hn-navstrip, .hn-nav")
     .first()
     .waitFor({ state: "visible", timeout: 3000 })
     .then(() => true, () => false);
@@ -323,7 +323,8 @@ let pngs = 0;
 if (existsSync(OUT)) {
   for (const vp of readdirSync(OUT)) {
     const d = join(OUT, vp);
-    if (existsSync(d)) {
+    // Solo las subcarpetas por viewport; en OUT también viven los JSON.
+    if (existsSync(d) && statSync(d).isDirectory()) {
       for (const f of readdirSync(d)) if (f.endsWith(".png")) pngs++;
     }
   }
