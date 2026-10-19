@@ -31,4 +31,4 @@ web/public/app.css.
 8. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.2: pronóstico por caja",
    push. Al terminar escribí "Status: DONE" como última línea de este archivo.
 
-Status: ready
+Status: DONE
