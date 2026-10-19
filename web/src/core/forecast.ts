@@ -123,6 +123,59 @@ export function bboxOfBounds(bounds: {
   return [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()];
 }
 
+// --- UX-N.2 (D2): las tres cajas de primera clase --------------------------
+// Cada paquete se identifica por una caja con id propio: la del punto
+// (`punto-<hash>`), la de la vista (`vista`) o la de una ruta (`<código>`).
+
+export type ForecastKind = "punto" | "vista" | "ruta";
+
+// Hash estable de las coordenadas redondeadas a ~1 nm: el mismo punto reusa su
+// paquete en vez de acumular cajas gemelas. FNV-1a, en base 36.
+export function forecastIdPoint(lat: number, lon: number): string {
+  const s = `${lat.toFixed(2)},${lon.toFixed(2)}`;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return `punto-${(h >>> 0).toString(36)}`;
+}
+
+export function forecastIdView(): string {
+  return "vista";
+}
+
+// El id de una ruta es su propio código (canal, variante, ruta propia…).
+export function forecastKind(id: string): ForecastKind {
+  if (id.startsWith("punto-")) return "punto";
+  if (id === "vista") return "vista";
+  return "ruta";
+}
+
+// Caja del punto: el punto más 300 nm de margen (misma regla que la travesía).
+export function pointBbox(lat: number, lon: number, marginNm = FORECAST_MARGIN_NM): BBox {
+  return expandBbox([lon, lat, lon, lat], marginNm);
+}
+
+// Caja combinada de un trazado (p. ej. pin→destino) más el margen.
+export function marginBbox(coords: [number, number][], marginNm = FORECAST_MARGIN_NM): BBox | null {
+  const bb = bboxOfTrack(coords);
+  return bb ? expandBbox(bb, marginNm) : null;
+}
+
+// ¿La caja contiene el punto? Normaliza la longitud (soporta el antimeridano).
+export function bboxCovers(box: BBox, lat: number, lon: number): boolean {
+  const [w, s, e, n] = box;
+  if (lat < s || lat > n) return false;
+  const x = ((((lon + 180) % 360) + 360) % 360) - 180;
+  return w <= e ? x >= w && x <= e : x >= w || x <= e;
+}
+
+// Centro de la caja (para nombrar una caja de punto/vista en la lista offline).
+export function bboxCenter(box: BBox): { lat: number; lon: number } {
+  return { lat: (box[1] + box[3]) / 2, lon: normalizeLon((box[0] + box[2]) / 2) };
+}
+
 // Grilla regular sobre la caja. Bordes incluidos: cols = ancho/res + 1.
 export function forecastGrid(bbox: BBox, res: number): { cols: number; rows: number; points: ForecastPoint[] } {
   const [w, s, e, n] = bbox;
@@ -292,14 +345,18 @@ export async function fetchForecast(
 }
 
 // Edad visible siempre (regla 7 de §6 ter).
-export function getForecastAge(pkg: ForecastPackage, now = Date.now()): string {
-  const min = Math.max(0, Math.floor((now - pkg.fetchedAt) / 60000));
+export function ageText(fetchedAt: number, now = Date.now()): string {
+  const min = Math.max(0, Math.floor((now - fetchedAt) / 60000));
   if (min < 2) return "recién actualizado";
   if (min < 60) return `hace ${min} min`;
   const h = Math.floor(min / 60);
   if (h < 48) return `hace ${h} h`;
   const d = Math.floor(h / 24);
   return `hace ${d} días`;
+}
+
+export function getForecastAge(pkg: ForecastPackage, now = Date.now()): string {
+  return ageText(pkg.fetchedAt, now);
 }
 
 export function forecastLastTime(pkg: ForecastPackage): number {

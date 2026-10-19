@@ -1224,6 +1224,12 @@ html[data-theme="red"] {
 .hn-wx-sw { height: 8px; }
 .hn-wx-kn { margin-top: 1px; text-align: center; font-size: 9px; opacity: 0.75; }
 .hn-wx-note { opacity: 0.85; }
+.hn-wx-dl {
+  display: block;
+  width: 100%;
+  margin-top: 6px;
+  justify-content: center;
+}
 .hn-wx-src { margin-top: 3px; font-size: 10px; opacity: 0.6; }
 
 /* E13.2: deslizador de hora del pronóstico, pegado abajo de la barra. */
@@ -1870,6 +1876,22 @@ html[data-theme="red"] {
   flex-direction: column;
 }
 
+/* UX-N.2 (D2): cajas de pronóstico guardadas (punto · vista · ruta). */
+.hn-forecast-list {
+  display: flex;
+  flex-direction: column;
+}
+.hn-forecast-title {
+  margin-top: 10px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hn-muted);
+}
+.hn-forecast-entry .hn-offline-name {
+  font-variant-numeric: tabular-nums;
+}
+
 /* Rutas propias (E11.4): lista "Mis rutas" y editor de waypoints. */
 .hn-own-head {
   display: flex;
@@ -2134,6 +2156,9 @@ html[data-theme="red"] {
 }
 .hn-point-act:active {
   background: var(--hn-hover);
+}
+.hn-point-fc {
+  margin-top: 8px;
 }
 .hn-point-wx p {
   margin: 6px 10px;

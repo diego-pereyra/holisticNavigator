@@ -2,20 +2,32 @@ import test from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  bboxCovers,
   bboxOfTrack,
   decodeForecast,
   empalmeConClimatología,
   encodeForecast,
   expandBbox,
   fetchForecast,
+  forecastBytes,
+  forecastIdPoint,
+  forecastIdView,
+  forecastKind,
   forecastResolution,
   getForecastAge,
+  marginBbox,
   packForecast,
+  pointBbox,
   unpackForecast,
   type BBox,
   type ForecastPackage,
 } from "./forecast.ts";
-import { loadForecast, removeForecast, storeForecast } from "../platform/forecast.ts";
+import {
+  listForecasts,
+  loadForecast,
+  removeForecast,
+  storeForecast,
+} from "../platform/forecast.ts";
 import type { KeyValueStore } from "../platform/store.ts";
 
 // Canarias (16-28N, 13-18W) a Caribe (12-22N, 59-64W): la caja de la travesía.
@@ -41,26 +53,29 @@ function fakeFetch(url: string): Promise<unknown> {
 }
 
 function memStore(): KeyValueStore {
-  const map = new Map<string, Blob>();
+  const strings = new Map<string, string>();
+  const blobs = new Map<string, Blob>();
   return {
-    get(_k: string): Promise<string | null> {
-      return Promise.resolve(null);
+    get(k: string): Promise<string | null> {
+      return Promise.resolve(strings.get(k) ?? null);
     },
-    put(_k: string, _v: string): Promise<void> {
+    put(k: string, v: string): Promise<void> {
+      strings.set(k, v);
       return Promise.resolve();
     },
-    remove(_k: string): Promise<void> {
+    remove(k: string): Promise<void> {
+      strings.delete(k);
       return Promise.resolve();
     },
     putBlob(k: string, b: Blob): Promise<void> {
-      map.set(k, b);
+      blobs.set(k, b);
       return Promise.resolve();
     },
     getBlob(k: string): Promise<Blob | null> {
-      return Promise.resolve(map.get(k) ?? null);
+      return Promise.resolve(blobs.get(k) ?? null);
     },
     removeBlob(k: string): Promise<void> {
-      map.delete(k);
+      blobs.delete(k);
       return Promise.resolve();
     },
   };
@@ -170,6 +185,66 @@ test("E13.1 empalme con climatología más allá del horizonte", async () => {
   assert.equal(empalmeConClimatología(pkg, last), false);
   assert.equal(empalmeConClimatología(pkg, last + 1), true);
   assert.equal(empalmeConClimatología(pkg, pkg.times[0]!), false);
+});
+
+test("UX-N.2 ids de caja: punto, vista y ruta", () => {
+  const id = forecastIdPoint(12.34, -45.67);
+  assert.match(id, /^punto-[0-9a-z]+$/);
+  assert.equal(forecastIdPoint(12.34, -45.67), id, "el mismo punto reusa su id");
+  assert.notEqual(forecastIdPoint(12.34, -45.68), id, "un punto distinto no comparte caja");
+  assert.equal(forecastIdView(), "vista");
+  assert.equal(forecastKind(id), "punto");
+  assert.equal(forecastKind("vista"), "vista");
+  assert.equal(forecastKind("CANAL-01"), "ruta");
+});
+
+test("UX-N.2 la caja del punto lleva 300 nm de margen", () => {
+  const lat = 12.5;
+  const lon = -45.25;
+  const box = pointBbox(lat, lon);
+  assert.ok(bboxCovers(box, lat, lon));
+  // 300 nm = 5° de latitud hacia cada lado.
+  assert.ok(Math.abs(box[3]! - (lat + 5)) < 1e-6, `norte ${box[3]}`);
+  assert.ok(Math.abs(box[1]! - (lat - 5)) < 1e-6, `sur ${box[1]}`);
+  assert.ok(box[0]! < lon && box[2]! > lon);
+  // Un punto justo afuera de la caja no queda cubierto.
+  assert.equal(bboxCovers(box, lat + 6, lon), false);
+
+  // La caja combinada pin→destino cubre los dos extremos.
+  const combo = marginBbox([
+    [lon, lat],
+    [lon - 10, lat + 8],
+  ]);
+  assert.ok(combo);
+  assert.ok(bboxCovers(combo, lat, lon));
+  assert.ok(bboxCovers(combo, lat + 8, lon - 10));
+  assert.equal(marginBbox([]), null);
+});
+
+test("UX-N.2 borrar saca la caja del almacén y no reaparece", async () => {
+  const store = memStore();
+  const pkg = await fetchForecast([-20, 20, -18, 22], 3, 7, {
+    id: forecastIdView(),
+    marginNm: 0,
+    now: () => START * 1000,
+    fetchJson: fakeFetch,
+  });
+  await storeForecast(store, pkg);
+  let list = await listForecasts(store);
+  assert.equal(list.length, 1);
+  assert.equal(list[0]!.id, "vista");
+  assert.equal(list[0]!.kind, "vista");
+  assert.equal(list[0]!.bytes, forecastBytes(pkg));
+  assert.equal(list[0]!.savedAt, pkg.fetchedAt);
+
+  // Re-guardar la misma caja la actualiza, no la duplica.
+  await storeForecast(store, pkg);
+  list = await listForecasts(store);
+  assert.equal(list.length, 1);
+
+  await removeForecast(store, forecastIdView());
+  assert.deepEqual(await listForecasts(store), []);
+  assert.equal(await loadForecast(store, forecastIdView()), null);
 });
 
 test("E13.1 empaquetado binario sobrevive el viaje", async () => {

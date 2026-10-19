@@ -27,17 +27,6 @@ const PER_DEG = 1 / LANDMASK_CELL_DEG;
 // (p. ej. -89.9 → 0,9999…) no baje a la celda vecina. No se suma 0,5 (media
 // celda): eso correría la costa 0,05° y desalinearía la máscara (ver BLOCKERS.md).
 const INDEX_EPS = 1e-6;
-function cellIndex(v: number, origin: number, count: number): number {
-  let i = Math.floor((v + origin) * PER_DEG + INDEX_EPS);
-  i = i >= count ? i - count : i < 0 ? i + count : i;
-  return i;
-}
-
-// Igual que `cellIndex` pero acotado (no envuelve): para la fila (latitud).
-function rowIndex(lat: number): number {
-  const r = Math.floor((lat + 90) * PER_DEG + INDEX_EPS);
-  return r < 0 ? 0 : r >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : r;
-}
 
 export interface Landmask {
   readonly width: number;
@@ -55,10 +44,16 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
 
   // Índice de celda de una posición normalizada: fila = (lat+90)·10 (clamp),
   // columna = (lon+180)·10 (con vuelta en la antimeridiana). Rápido a
-  // propósito: es el camino de la consulta O(1).
+  // propósito: es el camino de la consulta O(1). (lat+90) y (lon+180) son
+  // siempre ≥ 0, así que el truncado `| 0` equivale a Math.floor y evita la
+  // llamada; el índice va inline (sin cellIndex/rowIndex) porque este es el
+  // camino de 1 000 000 de consultas.
   const isLand = (lat: number, lon: number): boolean => {
-    const col = cellIndex(lon, 180, LANDMASK_WIDTH);
-    const row = rowIndex(lat);
+    let col = ((lon + 180) * PER_DEG + INDEX_EPS) | 0;
+    if (col >= LANDMASK_WIDTH) col -= LANDMASK_WIDTH;
+    else if (col < 0) col += LANDMASK_WIDTH;
+    let row = ((lat + 90) * PER_DEG + INDEX_EPS) | 0;
+    row = row < 0 ? 0 : row >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row;
     const i = row * LANDMASK_WIDTH + col;
     return (bytes[i >> 3]! & (128 >> (i & 7))) !== 0;
   };
@@ -135,8 +130,11 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
 
   const isLandWithMargin = (lat: number, lon: number, nm: number): boolean => {
     if (!(nm > 0)) return isLand(lat, lon);
-    const col = cellIndex(lon, 180, LANDMASK_WIDTH);
-    const row = rowIndex(lat);
+    let col = ((lon + 180) * PER_DEG + INDEX_EPS) | 0;
+    if (col >= LANDMASK_WIDTH) col -= LANDMASK_WIDTH;
+    else if (col < 0) col += LANDMASK_WIDTH;
+    let row = ((lat + 90) * PER_DEG + INDEX_EPS) | 0;
+    row = row < 0 ? 0 : row >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row;
     // Media celda de gracia implícita: la costa es el borde de la celda, no su
     // centro; así el margen de 3 nm bloquea 3 nm de verdad.
     return dist[row * LANDMASK_WIDTH + col]! < (nm + HALF_CELL_NM) * DIST_SCALE;

@@ -55,10 +55,15 @@ import {
 } from "../core/context.ts";
 import { getCell, loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
 import {
+  ageText,
+  bboxCenter,
+  bboxCovers,
   bboxOfBounds,
   bboxOfTrack,
   empalmeConClimatología,
   forecastBytes,
+  forecastIdPoint,
+  forecastIdView,
   getForecastAge,
   type BBox,
   type ForecastPackage,
@@ -118,7 +123,13 @@ import { sunTimes } from "../core/sun.ts";
 import { loadFact } from "../platform/catalog.ts";
 import { beep } from "../platform/sound.ts";
 import { KEYS, type KeyValueStore } from "../platform/store.ts";
-import { downloadForecast, loadForecast } from "../platform/forecast.ts";
+import {
+  downloadForecast,
+  listForecasts,
+  loadForecast,
+  removeForecast,
+  type ForecastEntry,
+} from "../platform/forecast.ts";
 import {
   deleteZone,
   downloadZone,
@@ -480,7 +491,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   root.append(wxStack);
   effect(() => renderWxLayers(wxPanel, ui, ui.weather(), ui.wxLayers()));
   effect(() =>
-    renderWeatherLegend(wxLegend, ui.weather(), ui.month(), ui.forecast(), ui.forecastHour(), ui.wxLayers()),
+    renderWeatherLegend(wxLegend, ui, ui.weather(), ui.month(), ui.forecast(), ui.forecastHour(), ui.wxLayers()),
   );
 
   // E13.3: encender/apagar cada capa wx-* según los interruptores.
@@ -1780,6 +1791,7 @@ function wxRamp(stops: number[], colors: string[]): HTMLElement {
 // escala de hPa y el pilot chart la rampa de nudos con "flechas tenues".
 function renderWeatherLegend(
   host: HTMLElement,
+  ui: UiState,
   mode: WeatherMode,
   month: number,
   pkg: ForecastPackage | null,
@@ -1794,11 +1806,34 @@ function renderWeatherLegend(
   host.hidden = false;
 
   if (mode === "forecast") {
-    if (!pkg) {
-      host.append(
-        el("div", { class: "hn-wx-title" }, "Pronóstico"),
-        el("div", { class: "hn-wx-note" }, "Todavía no hay un paquete descargado. Se baja desde el panel «Sin conexión»."),
-      );
+    // UX-N.2 (D2): la vista es una caja de primera clase. Cuando ningún paquete
+    // cubre el centro del mapa, se ofrece bajar la caja de la vista acá mismo.
+    const center = ui.map.getCenter();
+    if (!pkg || !bboxCovers(pkg.bbox, center.lat, center.lng)) {
+      host.append(el("div", { class: "hn-wx-title" }, "Pronóstico"));
+      const note = el("div", { class: "hn-wx-note" }, "La vista no está cubierta por ningún paquete.");
+      const status = el("div", { class: "hn-wx-note" });
+      const btn = el("button", { class: "hn-btn hn-wx-dl", type: "button" }, "Descargar pronóstico de la vista");
+      btn.addEventListener("click", () => {
+        if (btn.disabled) return;
+        btn.disabled = true;
+        btn.textContent = "Bajando…";
+        status.textContent = "0 %";
+        const box = bboxOfBounds(ui.map.getBounds());
+        void downloadForecast(ui.store, forecastIdView(), box, (r) => {
+          status.textContent = `${Math.round(r * 100)} %`;
+        })
+          .then((p) => {
+            ui.forecast.set(p);
+            ui.forecastHour.set(nearestSlot(p, Date.now()));
+          })
+          .catch(() => {
+            btn.disabled = false;
+            btn.textContent = "Reintentar";
+            status.textContent = "error · sin conexión";
+          });
+      });
+      host.append(note, btn, status);
       return;
     }
     const time = slotTime(pkg, hour);
@@ -2295,8 +2330,11 @@ function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   card.append(offlineRow("Carta base · 0,2 MB", "siempre"));
   // Pilot charts (12 meses) · 1,8 MB · [Guardar]
   card.append(pilotChartsRow(ui));
-  // Pronóstico de la travesía · 0,6 MB · hace X h · [Actualizar] (si hay paquete)
-  card.append(forecastRow(ui, cleanup));
+  // UX-N.2 (D2): las cajas son de primera clase. Una fila para bajar/actualizar
+  // la caja del contexto (ruta activa o vista) y la lista de TODAS las
+  // guardadas (punto, vista, ruta), con edad y borrar por fila.
+  const list = forecastListHost(ui, cleanup);
+  card.append(forecastRow(ui, cleanup, list.reload), list.host);
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
   card.append(onlineSeamarkRow(ui));
 
@@ -2317,6 +2355,57 @@ function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
 function offlineRow(name: string, info: string): HTMLElement {
   const row = el("div", { class: "hn-offline-row" });
   row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info));
+  return row;
+}
+
+// UX-N.2 (D2): lista de TODAS las cajas guardadas —punto, vista o ruta— con
+// edad visible y borrar por fila. El índice vive en `platform/forecast.ts`.
+function forecastListHost(
+  ui: UiState,
+  cleanup: (() => void)[],
+): { host: HTMLElement; reload: () => void } {
+  const host = el("div", { class: "hn-forecast-list" });
+  const reload = (): void => {
+    void listForecasts(ui.store)
+      .catch(() => [] as ForecastEntry[])
+      .then((entries) => {
+        clear(host);
+        host.append(el("div", { class: "hn-forecast-title" }, "Paquetes guardados"));
+        if (entries.length === 0) {
+          host.append(el("p", { class: "hn-muted" }, "Todavía no hay paquetes de pronóstico."));
+          return;
+        }
+        for (const entry of entries) host.append(forecastEntryRow(ui, entry, reload));
+      });
+  };
+  reload();
+  // La edad se refresca sola mientras el panel está abierto.
+  const timer = setInterval(reload, 60_000);
+  cleanup.push(() => clearInterval(timer));
+  return { host, reload };
+}
+
+function forecastEntryRow(ui: UiState, entry: ForecastEntry, reload: () => void): HTMLElement {
+  const row = el("div", { class: "hn-offline-row hn-forecast-entry" });
+  const center = bboxCenter(entry.bbox);
+  const name =
+    entry.kind === "punto"
+      ? `Punto ${formatLat(center.lat)} · ${formatLon(center.lon)}`
+      : entry.kind === "vista"
+        ? "Vista del mapa"
+        : `Ruta ${entry.id}`;
+  const info = `${entry.kind} · ${fmtMb1(entry.bytes)} · ${ageText(entry.savedAt)}`;
+  const action = el("span", { class: "hn-offline-action" });
+  const del = el("button", { class: "hn-btn", type: "button", "aria-label": `Borrar ${name}` }, "Borrar");
+  del.addEventListener("click", () => {
+    if (del.disabled) return;
+    del.disabled = true;
+    // Si era el paquete cargado en el mapa, se suelta: no quedan datos viejos.
+    if (ui.forecast()?.id === entry.id) ui.forecast.set(null);
+    void removeForecast(ui.store, entry.id).then(reload);
+  });
+  action.append(del);
+  row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info), action);
   return row;
 }
 
@@ -2405,7 +2494,7 @@ function pilotChartsRow(_ui: UiState): HTMLElement {
 // Pronóstico de la travesía (E13.1): baja el paquete Open-Meteo de la caja de
 // la ruta (o de la vista) + 300 nm, lo guarda en IndexedDB con la edad visible
 // y lo reemplaza con "Actualizar".
-function forecastRow(ui: UiState, cleanup: (() => void)[]): HTMLElement {
+function forecastRow(ui: UiState, cleanup: (() => void)[], onChange?: () => void): HTMLElement {
   const row = el("div", { class: "hn-offline-row" });
   const info = el("span", { class: "hn-offline-info" }, "…");
   const action = el("span", { class: "hn-offline-action" });
@@ -2470,6 +2559,7 @@ function forecastRow(ui: UiState, cleanup: (() => void)[]): HTMLElement {
         busy = false;
         pkg = p;
         showIdle();
+        onChange?.();
       })
       .catch(() => {
         busy = false;
@@ -4589,12 +4679,65 @@ function appendPointWx(ui: UiState, wx: HTMLElement, clim: ClimMonth, lat: numbe
     if (cell.ice > 0) wx.append(el("p", {}, `Hielo: riesgo ${cell.ice.toFixed(0)}`));
   }
   wx.append(el("p", { class: "hn-muted" }, `Pilot chart · ${MONTH_NAME[ui.month()] ?? ""}`));
-  const pkg = ui.forecast();
-  if (!pkg) return;
-  const t = slotTime(pkg, ui.forecastHour());
-  if (!forecastCoversPoint(pkg, lat, lon, t)) return;
-  const w = forecastWindField(pkg, null)(lat, lon, t);
-  if (w) wx.append(el("p", {}, `Pronóstico ${hourLabel(t)}: viento ${w.speed.toFixed(0)} kn del ${POINT_CARDINALS[Math.round(w.dir / 22.5) % 16] ?? "—"}`));
+  appendPointForecast(ui, wx, lat, lon);
+}
+
+// UX-N.2 (D2): la caja del punto (pin + 300 nm) se baja desde acá, sin exigir
+// ninguna ruta seleccionada. Con el paquete se muestran los datos de la hora
+// del deslizador (o de "ahora" si el pronóstico no está abierto).
+function appendPointForecast(ui: UiState, wx: HTMLElement, lat: number, lon: number): void {
+  const host = el("div", { class: "hn-point-fc" });
+  wx.append(host);
+  const id = forecastIdPoint(lat, lon);
+
+  const render = (): void => {
+    void loadForecast(ui.store, id).then((own) => {
+      if (!host.isConnected) return;
+      clear(host);
+      const ctx = ui.forecast();
+      const useCtx = ctx !== null && (ctx.id === id || bboxCovers(ctx.bbox, lat, lon));
+      const used = own ?? (useCtx ? ctx : null);
+      if (!used) {
+        const btn = el("button", { class: "hn-point-act", type: "button" }, "Descargar pronóstico acá");
+        const status = el("p", { class: "hn-muted" }, "Caja del punto + 300 nm.");
+        btn.addEventListener("click", () => {
+          if (btn.disabled) return;
+          btn.disabled = true;
+          btn.textContent = "Bajando…";
+          status.textContent = "0 %";
+          void downloadForecast(ui.store, id, [lon, lat, lon, lat], (r) => {
+            status.textContent = `${Math.round(r * 100)} %`;
+          })
+            .then((pkg) => {
+              ui.forecast.set(pkg);
+              ui.forecastHour.set(nearestSlot(pkg, Date.now()));
+              render();
+            })
+            .catch(() => {
+              btn.disabled = false;
+              btn.textContent = "Reintentar";
+              status.textContent = "error · sin conexión";
+            });
+        });
+        host.append(btn, status);
+        return;
+      }
+
+      host.append(el("p", { class: "hn-muted" }, `Pronóstico de la caja · ${getForecastAge(used)}`));
+      const isCtx = ctx !== null && ctx.id === used.id;
+      const t = isCtx ? slotTime(used, ui.forecastHour()) : slotTime(used, nearestSlot(used, Date.now()));
+      if (forecastCoversPoint(used, lat, lon, t)) {
+        const w = forecastWindField(used, null)(lat, lon, t);
+        if (w) {
+          const dir = POINT_CARDINALS[Math.round(w.dir / 22.5) % 16] ?? "—";
+          host.append(el("p", {}, `Pronóstico ${hourLabel(t)}: viento ${w.speed.toFixed(0)} kn del ${dir}`));
+        }
+      } else if (empalmeConClimatología(used, t)) {
+        host.append(el("p", { class: "hn-muted" }, "Más allá del horizonte del paquete: clima medio."));
+      }
+    });
+  };
+  render();
 }
 
 // ---- Optimizar desde acá: el pin es el origen, el próximo toque el destino.
@@ -4644,11 +4787,81 @@ function armPointOpt(ui: UiState): void {
 }
 
 async function runPointOpt(ui: UiState, from: LonLat, to: LonLat): Promise<void> {
-  const id = ++optJobSeq;
+  // UX-N.2 (D2): usa la caja del punto si cubre el destino (o el paquete que ya
+  // está cargado); si ninguna cubre pin→destino, ofrece bajar la combinada.
+  const pointPkg = await loadForecast(ui.store, forecastIdPoint(from[1], from[0])).catch(() => null);
+  const covers = (p: ForecastPackage | null): p is ForecastPackage =>
+    p !== null && bboxCovers(p.bbox, from[1], from[0]) && bboxCovers(p.bbox, to[1], to[0]);
+  const local = ui.forecast();
+  const covering = covers(local) ? local : covers(pointPkg) ? pointPkg : null;
+  if (!covering) {
+    promptCombinedForecast(ui, from, to);
+    return;
+  }
+  if (covering !== local) {
+    ui.forecast.set(covering);
+    ui.forecastHour.set(nearestSlot(covering, Date.now()));
+  }
+  await runPointOptNow(ui, from, to);
+}
+
+// Ítem 4: ofrece la caja combinada pin→destino antes de correr el motor; quien
+// no tiene red puede seguir con la climatología del mes.
+function promptCombinedForecast(ui: UiState, from: LonLat, to: LonLat): void {
+  buildPointSheet(ui, (host) => {
+    host.append(el("p", {}, "El pronóstico descargado no cubre el tramo pin → destino."));
+    host.append(
+      el("p", { class: "hn-muted" }, "¿Bajamos la caja combinada (300 nm de margen) antes de correr el motor?"),
+    );
+    const status = el("p", { class: "hn-muted" });
+    const dl = el("button", { class: "hn-point-act", type: "button" }, "Descargar y optimizar");
+    const clim = el("button", { class: "hn-point-act", type: "button" }, "Seguir con clima medio");
+    dl.addEventListener("click", () => {
+      if (dl.disabled) return;
+      const box = bboxOfTrack([from, to]);
+      if (!box) return;
+      const id = ++optJobSeq;
+      const code = `PT${id}`;
+      dl.disabled = true;
+      clim.disabled = true;
+      dl.textContent = "Bajando…";
+      status.textContent = "0 %";
+      void downloadForecast(ui.store, code, box, (r) => {
+        status.textContent = `${Math.round(r * 100)} %`;
+      })
+        .then((pkg) => {
+          ui.forecast.set(pkg);
+          ui.forecastHour.set(nearestSlot(pkg, Date.now()));
+          closePointSheet(ui);
+          void runPointOptNow(ui, from, to, id);
+        })
+        .catch(() => {
+          dl.disabled = false;
+          clim.disabled = false;
+          dl.textContent = "Reintentar";
+          status.textContent = "error · sin conexión";
+        });
+    });
+    clim.addEventListener("click", () => {
+      closePointSheet(ui);
+      void runPointOptNow(ui, from, to, undefined, true);
+    });
+    host.append(dl, clim, status);
+  });
+}
+
+async function runPointOptNow(
+  ui: UiState,
+  from: LonLat,
+  to: LonLat,
+  id = ++optJobSeq,
+  climateOnly = false,
+): Promise<void> {
   const code = `PT${id}`;
   const coords: LonLat[] = [from, to];
   const names = ["Origen", "Destino"];
-  const pkg = ui.forecast();
+  // "Seguir con clima medio" del prompt corre sin paquete a propósito.
+  const pkg = climateOnly ? null : ui.forecast();
   const month = ui.month();
   let clim = ui.clim.get(month) ?? null;
   if (!clim) clim = await ensureClim(ui, month);
