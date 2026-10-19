@@ -54,7 +54,7 @@ jobs:
                   except OSError:
                       self.send_error(404, "File not found")
                       return None
-                  size = os.path.fstat(f.fileno()).st_size
+                  size = os.fstat(f.fileno()).st_size
                   ctype = self.guess_type(path)
                   self._remaining = size
                   rng = self.headers.get("Range")

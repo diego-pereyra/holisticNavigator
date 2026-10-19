@@ -247,49 +247,36 @@ sobre tierra. Los cuatro tests de anclas de E12.7 (puerto de salida/llegada, isl
 gracia, pero con un radio grande el optimizador vuelve a cortar tierra junto al ancla —
 habría que eximir solo los extremos del segmento (no un radio) y eso es otro cambio.
 
-## UX-N.7 · el re-UAT no mide: la UI no monta en el job de UAT (bloqueante grande)
+## UX-N.7 · el re-UAT no medía: typo en el servidor del job `uat` (resuelto)
 
-**Qué falla.** El run fresco del workflow `uat` (commit `ed746a6`, 2026-10-19 19:31 UTC)
-devuelve **todo en falso** en los dos viewports: `.hn-context` no existe, el FAB no existe y
-todos los journeys fallan. No es un problema de selectores: los 2 únicos hallazgos de consola
-son `Failed to load resource: net::ERR_EMPTY_RESPONSE`; `http` y `erroresPagina` vienen vacíos.
-`#hn-loading.done` sí aparece, pero eso **no prueba** que la app arrancó: `web/public/index.html`
-tiene un `setTimeout(hide, 8000)` que le pone `.done` a los 8 s pase lo que pase. Con el
-**mismo código de app** (commit `3a07194`), el `smoke` de `deploy-pages` —que sí verifica
-`.hn-context`— pasó, así que el `main.js` monta la UI normalmente en ese job. La falla es
-específica del entorno del job `uat`.
+**Qué fallaba.** El run fresco del workflow `uat` (commit `ed746a6`, 2026-10-19 19:31 UTC)
+daba **todo en falso** en los dos viewports: `.hn-context` y el FAB no existían y todos los
+journeys fallaban. No era un problema de selectores ni de la app: `#hn-loading.done` sí
+aparecía (lo fuerza el `setTimeout(hide, 8000)` de `index.html`, así que no prueba nada) y el
+mismo código de app pasaba el `smoke` de `deploy-pages`, que sí verifica `.hn-context`.
 
-**Hipótesis principal.** El mapa no dispara `load`, así que `start()` (que hace `boot.hide()` y
-`mountApp(...)`, `web/src/main.ts`) nunca corre y la UI no existe; la salida de emergencia es el
-`setTimeout` de 8 s. La `detail` es una fuente `pmtiles://.../world-z6.pmtiles`; si la PMTiles
-llega truncada, `load` no llega. El job `uat` bajaba el `.pmtiles` con `curl --retry 3` (sin
-`--retry-all-errors` ni `--retry-delay`) mientras `deploy-pages` usa `--retry 6 --retry-delay 10
---retry-all-errors` y además baja `tiles.json`; durante el reemplazo de la release `tiles-latest`
-el asset puede dar 404/parcial por un instante.
+**Causa raíz (encontrada y medida).** El servidor HTTP con Range del propio `uat.yml` tenía un
+typo: `size = os.path.fstat(f.fileno()).st_size` (línea 57) en vez de `os.fstat(...)`.
+`os.path` no tiene `fstat`, así que `send_head` **tiraba `AttributeError`** para todo archivo
+servido por esa rama (200/206) y el hilo cerraba la conexión sin responder →
+`net::ERR_EMPTY_RESPONSE`. `index.html` zafaba porque se sirve por la rama de directorio
+(`super().send_head()`), que no pasa por esa línea: por eso la shell HTML cargaba pero
+`main.js` y `app.css` no, y la UI nunca montaba. Reproducido en local con el mismo script:
+`GET /holisticNavigator/main.js` → `code=000` (sin respuesta) y en el log
+`AttributeError: module 'posixpath' has no attribute 'fstat'`. Con `os.fstat` el mismo curl da
+`200` para `main.js`/`app.css` y `206` para un `Range`. `deploy-pages.yml` ya usaba
+`os.fstat` (correcto), de ahí que el deploy pasara.
 
-**Reescritura en curso (Claude).** Sobre `ed746a6` el arquitecto commiteó `ed1d919`
-("arnés reescrito contra la UI rediseñada"), que reordena los journeys (long-press → "Clima
-acá"; J6 pasa a Ajustes con el MOB) y agrega un diagnóstico de arranque (`body.innerText`) y la
-lista `recursosFallidos`. Esa reescritura **no** arregló dos cosas que siguen rompiendo la
-medición: el crash `ENOTDIR` del conteo de capturas y el selector de la tira de navegación.
+**Qué quedó hecho (UX-N.7).**
+- `uat.yml`: `os.path.fstat` → `os.fstat`. Además el paso de teselas usa la misma robustez que
+  `deploy-pages` (`--retry 6 --retry-delay 10 --retry-all-errors`), también baja `tiles.json` e
+  imprime el tamaño del `.pmtiles`.
+- Arnés (`web/uat/uat.mjs`, sobre la reescritura `ed1d919` de Claude): arreglado el crash que
+  marcaba el workflow en rojo — `readdirSync` sobre los JSON de `out/` tiraba
+  `ENOTDIR: ... scandir 'web/uat/out/uat-phone-390.json'`; el conteo de capturas ahora filtra
+  con `statSync(d).isDirectory()`. La tira de navegación usaba un locator inexistente
+  (`.hn-nav, #hn-navstrip, .hn-strip`); la clase real es `.hn-navstrip` → corregido.
 
-**Qué hice en esta tarea (sobre `ed1d919`).**
-- Arnés (`web/uat/uat.mjs`): arreglé el crash que marcaba el workflow en rojo —
-  `readdirSync` sobre los JSON de `out/` tiraba
-  `ENOTDIR: ... scandir 'web/uat/out/uat-phone-390.json'`; ahora el conteo de capturas filtra
-  con `statSync(d).isDirectory()`. La tira de navegación sigue con el locator roto
-  (`.hn-nav, #hn-navstrip, .hn-strip`, ninguno existe): la clase real es `.hn-navstrip` → lo
-  apunté a `.hn-navstrip, #hn-navstrip, .hn-nav`.
-- `uat.yml`: el paso de teselas ahora usa la misma robustez que `deploy-pages`
-  (`--retry-all-errors --retry-delay 10 --retry 6`) y además baja `tiles.json`, e imprime el
-  tamaño del `.pmtiles` (hipótesis de la PMTiles truncada).
-
-**Qué propongo (decisión pendiente para Diego/Claude).** Correr el `uat` de nuevo y mirar
-`recursosFallidos` (ya lo dejó el arquitecto en el JSON): si el recurso que falla es
-`/tiles/world-z6.pmtiles` (rangos), el arreglo del paso de teselas debería resolverlo. Si no,
-desacoplar el montaje de la UI del `load` del mapa: `mountApp` no depende de la carta de detalle
-y debería correr aunque la fuente `detail` falle (hoy `start()` cuelga de `map.on("load")`). Ese
-cambio toca `web/src/main.ts` y es más que un "hallazgo chico", por eso queda acá y no lo hice por
-mi cuenta. Nota: el `9/10` del re-score no se puede medir hasta que el job `uat` mida de verdad;
-el `Status:done` de UX-N.7 quedó puesto con el arnés corregido y el bloqueo documentado, pero el
-veredicto de la meta sigue abierto.
+**Estado.** El runner del `uat` ya midió de verdad (el run sobre el commit con el fix pasó verde
+y sin crash del arnés). Queda para Claude el re-score de `docs/07 §5` con la evidencia y las
+capturas del run; el `9/10` se mide contra ese resultado, no contra los runs rotos previos.
