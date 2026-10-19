@@ -159,7 +159,7 @@ async function jSeguirRuta(page, t) {
   await t.tap("Seguir", page.getByText("Seguir", { exact: true }));
   await sleep(1500);
   const nav = await page
-    .locator(".hn-nav, .hn-strip, #hn-navstrip")
+    .locator(".hn-navstrip, #hn-navstrip, .hn-nav")
     .first()
     .isVisible({ timeout: 3000 })
     .catch(() => false);
@@ -233,7 +233,7 @@ async function jPilotChart(page, t) {
   if (hayChip) {
     await sleep(400);
     await t.shot("selector-de-mes");
-    await t.tap("elegir marzo", page.locator("#hn-month-menu button, #hn-month-menu [role='button']").filter({ hasText: /mar|Mar/ }));
+    await t.tap("elegir marzo", page.locator(".hn-month-menu button, .hn-month-menu [role='button']").filter({ hasText: /mar/i }));
     await t.shot("mes-elegido");
   }
 }
