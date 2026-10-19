@@ -26,23 +26,35 @@
             "taps": 0
           }
         ],
-        "ms": 1289
+        "ms": 1214
       },
       {
         "journey": "j1-clima-en-un-punto",
-        "taps": 0,
+        "taps": 1,
         "pasosFallidos": [
-          "long-press abre la hoja de acciones"
+          "espera: panel del clima con datos (kn)"
         ],
         "steps": [
           {
             "label": "long-press abre la hoja de acciones",
-            "found": false,
+            "found": true,
             "extra": "",
             "taps": 0
+          },
+          {
+            "label": "Clima acá",
+            "found": true,
+            "extra": "",
+            "taps": 1
+          },
+          {
+            "label": "espera: panel del clima con datos (kn)",
+            "found": false,
+            "extra": "no apareció en 6000 ms",
+            "taps": 1
           }
         ],
-        "ms": 4627
+        "ms": 9403
       },
       {
         "journey": "j2-seguir-ruta",
@@ -86,13 +98,13 @@
             "taps": 4
           }
         ],
-        "ms": 2631
+        "ms": 2612
       },
       {
         "journey": "j3-optimizar",
         "taps": 4,
         "pasosFallidos": [
-          "el cálculo termina (≤ 150 s)",
+          "el cálculo termina (≤ 200 s)",
           "Descartar"
         ],
         "steps": [
@@ -115,7 +127,7 @@
             "taps": 3
           },
           {
-            "label": "el cálculo termina (≤ 150 s)",
+            "label": "el cálculo termina (≤ 200 s)",
             "found": false,
             "extra": "",
             "taps": 3
@@ -127,19 +139,17 @@
             "taps": 4
           }
         ],
-        "ms": 155871
+        "ms": 205857
       },
       {
         "journey": "j4-mob",
         "taps": 2,
-        "pasosFallidos": [
-          "Usar GPS"
-        ],
+        "pasosFallidos": [],
         "steps": [
           {
-            "label": "Usar GPS",
-            "found": false,
-            "extra": "no se encontró",
+            "label": "Usar GPS (chip de posición)",
+            "found": true,
+            "extra": "",
             "taps": 1
           },
           {
@@ -161,7 +171,7 @@
             "taps": 2
           }
         ],
-        "ms": 8479
+        "ms": 4569
       },
       {
         "journey": "j5-clima-y-mes",
@@ -213,7 +223,7 @@
             "taps": 5
           }
         ],
-        "ms": 5382
+        "ms": 5525
       },
       {
         "journey": "j6-ajustes",
@@ -265,23 +275,35 @@
             "taps": 0
           }
         ],
-        "ms": 1831
+        "ms": 2089
       },
       {
         "journey": "j1-clima-en-un-punto",
-        "taps": 0,
+        "taps": 1,
         "pasosFallidos": [
-          "long-press abre la hoja de acciones"
+          "espera: panel del clima con datos (kn)"
         ],
         "steps": [
           {
             "label": "long-press abre la hoja de acciones",
-            "found": false,
+            "found": true,
             "extra": "",
             "taps": 0
+          },
+          {
+            "label": "Clima acá",
+            "found": true,
+            "extra": "",
+            "taps": 1
+          },
+          {
+            "label": "espera: panel del clima con datos (kn)",
+            "found": false,
+            "extra": "no apareció en 6000 ms",
+            "taps": 1
           }
         ],
-        "ms": 4674
+        "ms": 9455
       },
       {
         "journey": "j2-seguir-ruta",
@@ -325,13 +347,13 @@
             "taps": 4
           }
         ],
-        "ms": 3327
+        "ms": 3886
       },
       {
         "journey": "j3-optimizar",
         "taps": 4,
         "pasosFallidos": [
-          "el cálculo termina (≤ 150 s)",
+          "el cálculo termina (≤ 200 s)",
           "Descartar"
         ],
         "steps": [
@@ -354,7 +376,7 @@
             "taps": 3
           },
           {
-            "label": "el cálculo termina (≤ 150 s)",
+            "label": "el cálculo termina (≤ 200 s)",
             "found": false,
             "extra": "",
             "taps": 3
@@ -366,19 +388,17 @@
             "taps": 4
           }
         ],
-        "ms": 156039
+        "ms": 206250
       },
       {
         "journey": "j4-mob",
         "taps": 2,
-        "pasosFallidos": [
-          "Usar GPS"
-        ],
+        "pasosFallidos": [],
         "steps": [
           {
-            "label": "Usar GPS",
-            "found": false,
-            "extra": "no se encontró",
+            "label": "Usar GPS (chip de posición)",
+            "found": true,
+            "extra": "",
             "taps": 1
           },
           {
@@ -400,7 +420,7 @@
             "taps": 2
           }
         ],
-        "ms": 8745
+        "ms": 4881
       },
       {
         "journey": "j5-clima-y-mes",
@@ -450,7 +470,7 @@
             "taps": 5
           }
         ],
-        "ms": 1968
+        "ms": 2000
       },
       {
         "journey": "j6-ajustes",
@@ -490,7 +510,7 @@
             "taps": 2
           }
         ],
-        "ms": 4956
+        "ms": 4869
       }
     ],
     "erroresConsola": [],
