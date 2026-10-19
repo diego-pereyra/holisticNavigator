@@ -40,3 +40,8 @@ Thumbs.db
 
 # --- Gradle ---
 .gradle/
+
+# hook del arquitecto
+.architect-hook.log
+.architect-hook.pid
+.architect-hook.lock

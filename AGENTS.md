@@ -9,10 +9,12 @@ Trabajás en la misma carpeta que Claude (arquitecto). Vos implementás; Claude 
 3. `SEMAFORO.md` tiene **una sola tarea**, escrita paso a paso. Hacé exactamente eso.
 4. Corré `npm test` (en `web/`) y `bash scripts/build-web.sh`.
 5. Un commit con el nombre que dice la tarea. `git push origin main`.
-6. **PARÁ.** No vuelvas al paso 1, no busques más tareas, no edites `SEMAFORO.md`. Reportá en
-   3 líneas qué hiciste. Claude escribe la siguiente tarea en `SEMAFORO.md` **solo después de
-   ese reporte**: nunca cambia la tarea mientras está en ejecución (lo urgente entra como
-   tarea siguiente, no pisando la actual).
+6. **Cerrá la tarea con `Status:done`.** Commiteá y pusheá; después agregá `Status:done` como
+   última línea de `SEMAFORO.md` (puede ir dentro del mismo commit). El hook del arquitecto
+   (`scripts/architect-hook.sh`) detecta el done, registra el cierre y carga automáticamente
+   la siguiente tarea de `queue/` — leé el archivo actualizado y volvé al paso 3. Con
+   `Status:done` escrito, la tarea ya no está en ejecución y el arquitecto puede revisarla.
+   Si el semáforo dice `ESPERAR`, ahi sí: **PARÁ** y reportá en 3 líneas qué hiciste.
 
 Si algo no se puede hacer como está escrito: anotalo en `BLOCKERS.md` (tarea, qué falla, qué
 proponés), saltá a la siguiente tarea de la cola. No inventes alternativas.
@@ -25,8 +27,9 @@ proponés), saltá a la siguiente tarea de la cola. No inventes alternativas.
   `docs/04-backlog-ux.md`. No inventar otros.
 - UI en español rioplatense, términos náuticos correctos, sin siglas internas.
 - Reglas de usabilidad: `docs/03-ux-architecture.md` §6 ter (12 reglas). Presupuestos: §6 quater.
-- No tocar `AGENTS.md` ni `docs/`: son de Claude. `SEMAFORO.md` solo para
-  borrar tareas hechas o poner `ESPERAR`.
+- No tocar `AGENTS.md` ni `docs/`: son de Claude. `SEMAFORO.md` solo para escribir
+  `Status:done` al terminar (y eso es todo) — nunca edites la tarea vigente.
+  `queue/` la administra el hook del arquitecto: no la toques.
 - No commitear `__pycache__`, builds, PDF/EPUB. No crear ramas.
 - Un solo build a la vez; nada de browsers headless en WSL: el browser real corre en CI (smoke test).
 
