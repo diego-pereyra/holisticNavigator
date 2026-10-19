@@ -547,3 +547,14 @@ Archivos: web/src/core/routing/isochrones.ts (+test), routing.e2e.test.ts (recue
    navegable sin scroll infinito.
 8. npm test (en web/), bash scripts/build-web.sh, commit "E12.10: waypoints solo donde el
    rumbo cambia", push, PARÁ.
+
+## Serie UX-N — Rediseño de usabilidad (Diego, 2026-10-19) · tras E12.10, una por semáforo
+
+Spec completa en `docs/07-rediseño-usabilidad.md` (modelo de navegación con cinco decisiones,
+diagnóstico puntuado y aceptación medible; meta: 9/10 en celular vertical y tablet apaisada).
+
+Orden: **UX-N.1** long-press → pin + hoja de acciones → **UX-N.2** pronóstico por caja
+(punto/vista/ruta) → **UX-N.3** modos Planificar/Navegar con gate de alarmas → **UX-N.4**
+Ajustes central (visibilidad de elementos + unidades) → **UX-N.5** consistencia ("Cuándo",
+ayuda, Medir, nav-to-wp) → **UX-N.6** tablet apaisada → **UX-N.7** re-UAT + re-score (≥ 9/10,
+veredicto de Diego en celu y tablet).

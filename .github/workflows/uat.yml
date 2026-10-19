@@ -12,6 +12,10 @@ jobs:
   uat:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      # Para commitear las métricas JSON al repo y que sean legibles sin
+      # login (los artefactos de Actions requieren autenticación).
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
@@ -98,3 +102,13 @@ jobs:
           name: uat
           path: web/uat/out
           if-no-files-found: warn
+      - name: "Métricas al repo (legibles sin login)"
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          mkdir -p uat-results
+          cp web/uat/out/*.json uat-results/ 2>/dev/null || echo "sin métricas"
+          git add uat-results
+          git diff --cached --quiet || git commit -m "uat: métricas del run"
+          git push origin main || echo "push de métricas rechazado (habrá otra corrida)"

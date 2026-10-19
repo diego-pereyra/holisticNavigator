@@ -8,7 +8,7 @@
 // Uso:   node web/uat/uat.mjs http://localhost:8087/holisticNavigator/ web/uat/out
 // Salida: <out>/<viewport>/*.png + <out>/uat-<viewport>.json
 import { chromium } from "playwright";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 
 const BASE = process.argv[2] ?? "http://localhost:8087/holisticNavigator/";
@@ -17,6 +17,10 @@ const VIEWPORTS = [
   { name: "phone-390", width: 390, height: 844 },
   { name: "tablet-1180", width: 1180, height: 820 },
 ];
+
+// Fallas de captura del viewport en curso (diagnóstico audible: antes se
+// tragaban en silencio y el artefacto salía sin fotos).
+const SHOT_FAILS = [];
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const ok = (b) => b === true;
@@ -30,9 +34,11 @@ function tester(page, dir, journey) {
 
   const shot = async (label) => {
     shotN++;
-    await page
-      .screenshot({ path: join(dir, `${journey}-${String(shotN).padStart(2, "0")}-${label}.png`) })
-      .catch(() => undefined);
+    try {
+      await page.screenshot({ path: join(dir, `${journey}-${String(shotN).padStart(2, "0")}-${label}.png`) });
+    } catch (e) {
+      SHOT_FAILS.push(`${journey} #${shotN} (${label}): ${String(e?.message ?? e).slice(0, 140)}`);
+    }
   };
 
   const note = (label, found, extra = "") =>
@@ -309,6 +315,7 @@ async function runViewport(vp) {
     erroresConsola: consoleErrors.slice(0, 30),
     erroresPagina: pageErrors.slice(0, 30),
     http: httpErrors.slice(0, 30),
+    capturasFallidas: SHOT_FAILS.splice(0),
   };
 }
 
@@ -318,4 +325,15 @@ for (const vp of VIEWPORTS) {
   writeFileSync(join(OUT, `uat-${vp.name}.json`), JSON.stringify(summary[vp.name], null, 2));
 }
 writeFileSync(join(OUT, "uat-summary.json"), JSON.stringify(summary, null, 2));
-console.log(`UAT LISTO — artefactos en ${OUT} (${Object.keys(summary).join(", ")})`);
+
+let pngs = 0;
+if (existsSync(OUT)) {
+  for (const vp of readdirSync(OUT)) {
+    const d = join(OUT, vp);
+    if (existsSync(d)) {
+      for (const f of readdirSync(d)) if (f.endsWith(".png")) pngs++;
+    }
+  }
+}
+console.log(`UAT LISTO — artefactos en ${OUT} (${Object.keys(summary).join(", ")}) · ${pngs} capturas · ${SHOT_FAILS.length} capturas fallidas`);
+for (const f of SHOT_FAILS) console.log(`  [shot-fail] ${f}`);
