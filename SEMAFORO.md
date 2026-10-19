@@ -29,3 +29,5 @@ web/public/app.css. Persistencia: hn.settings.visibilidad, hn.settings.unidades.
    archivo.
 
 Status: ready
+
+Status:done
