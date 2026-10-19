@@ -44,6 +44,11 @@ export interface IsoConfig {
   /** E12.10 — umbral náutico de salida: un waypoint de paso solo se emite si el
    * rumbo vira de verdad (≥ esta cantidad de grados) o es un Bordo. */
   wpTurnDeg: number;
+  /** E12.11 — una virada cuenta solo si el rumbo cambia ≥ esta cantidad de
+   * grados: descarta el ruido de ±2° que cruza el eje de popa. */
+  turnTackDeg: number;
+  /** E12.11 — coste de una trasluchada (maniobra en empopada), en minutos. */
+  gybePenaltyMin: number;
   // E12.6 — penalizaciones de los modos de enrutado (Confort/Crucero/Regata).
   // Ceñida: por debajo de `beatTwaDeg`, la velocidad se multiplica por un factor
   // que baja linealmente de 1 en `beatTwaDeg` hasta `beatPenaltyMin` en el cono
@@ -70,6 +75,8 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   maxTacks: 200,
   maxWaypoints: 40,
   wpTurnDeg: 12,
+  turnTackDeg: 20,
+  gybePenaltyMin: 2.5,
   beatTwaDeg: 0,
   beatPenaltyMin: 1,
   heavyTwsKn: Infinity,
@@ -93,19 +100,19 @@ export const ROUTING_MODES: RoutingModeDef[] = [
     id: "confort",
     label: "Confort",
     hint: "Casi sin ceñida y viento suave; vira lo menos posible aunque el ETA se alargue.",
-    config: { beatTwaDeg: 70, beatPenaltyMin: 0.55, heavyTwsKn: 18, heavyPenalty: 0.6, tackPenaltyMin: 20, maxTws: 22, maxWaypoints: 15 },
+    config: { beatTwaDeg: 70, beatPenaltyMin: 0.55, heavyTwsKn: 18, heavyPenalty: 0.6, tackPenaltyMin: 20, gybePenaltyMin: 10, maxTws: 22, maxWaypoints: 15 },
   },
   {
     id: "crucero",
     label: "Crucero",
     hint: "Equilibrio: evita la ceñida sin demorar el ETA de forma absurda.",
-    config: { beatTwaDeg: 55, beatPenaltyMin: 0.75, heavyTwsKn: 25, heavyPenalty: 0.75, tackPenaltyMin: 10, maxTws: 30, maxWaypoints: 15 },
+    config: { beatTwaDeg: 55, beatPenaltyMin: 0.75, heavyTwsKn: 25, heavyPenalty: 0.75, tackPenaltyMin: 10, gybePenaltyMin: 5, maxTws: 30, maxWaypoints: 15 },
   },
   {
     id: "regata",
     label: "Regata",
     hint: "Polar cruda, vira seguido y va por el ETA mínimo.",
-    config: { beatTwaDeg: 0, beatPenaltyMin: 1, heavyTwsKn: Infinity, heavyPenalty: 1, tackPenaltyMin: 3, maxTws: 45, maxWaypoints: 15 },
+    config: { beatTwaDeg: 0, beatPenaltyMin: 1, heavyTwsKn: Infinity, heavyPenalty: 1, tackPenaltyMin: 3, gybePenaltyMin: 1.5, maxTws: 45, maxWaypoints: 15 },
   },
 ];
 
@@ -134,8 +141,10 @@ export interface IsoWaypoint {
   lon: number;
   lat: number;
   etaMs: number;
-  /** E12.7 — el waypoint cae en una virada (bordo): se numera "Bordo n" al aplicar. */
+  /** E12.11 — el waypoint es una maniobra (virada o trasluchada). */
   tack?: boolean;
+  /** E12.11 — clasificación de la maniobra: ceñida ("tack") o empopada ("gybe"). */
+  maneuver?: "tack" | "gybe";
 }
 
 export interface IsoLeg {
@@ -159,7 +168,10 @@ export interface IsoResult {
   reached: boolean;
   etaMs: number;
   nm: number;
+  /** Viradas de ceñida (maniobras cruzando el viento de proa). */
   tacks: number;
+  /** Trasluchadas de empopada (maniobras cruzando el viento de popa). */
+  gybes: number;
   /** Viento máximo encontrado a lo largo del trazado optimizado (kn), o null. */
   windMax: number | null;
   waypoints: IsoWaypoint[];
@@ -212,6 +224,7 @@ export interface IsoLegSegment {
   etaMs: number;
   nm: number;
   tacks: number;
+  gybes: number;
   windMax: number | null;
   /** Puntos optimizados intermedios (sin los extremos obligatorios). */
   points: IsoWaypoint[];
@@ -227,6 +240,7 @@ export interface IsoMultiResult {
   etaMs: number;
   nm: number;
   tacks: number;
+  gybes: number;
   windMax: number | null;
   anchors: LonLat[];
   segments: IsoLegSegment[];
@@ -275,6 +289,33 @@ function relative(heading: number, windDir: number): number {
   let a = ((heading - windDir + 540) % 360) - 180;
   if (a === -180) a = 180;
   return a;
+}
+
+// E12.11 — clasificación de una maniobra por el TWA de sus dos patas: cerca de
+// la proa (|TWA| < 70) es virada de ceñida; cerca de la popa (|TWA| > 120) es
+// trasluchada. En el medio es una virada abierta (se trata como ceñida).
+export function classifyManeuver(twaInDeg: number, twaOutDeg: number): "tack" | "gybe" {
+  return Math.max(Math.abs(twaInDeg), Math.abs(twaOutDeg)) > 120 ? "gybe" : "tack";
+}
+
+// E12.11 — ¿hubo una maniobra real entre dos rumbos? Devuelve "tack" (ceñida),
+// "gybe" (empopada) o null si no la hubo. El signo del TWA solo es ambiguo (amura
+// y popa): sin el umbral `turnTackDeg`, una oscilación de 2° en empopada se
+// contaba como virada.
+export function detectManeuver(
+  prevHeading: number,
+  heading: number,
+  windDir: number,
+  turnTackDeg: number,
+): "tack" | "gybe" | null {
+  if (Number.isNaN(prevHeading)) return null;
+  const twaIn = relative(prevHeading, windDir);
+  const twaOut = relative(heading, windDir);
+  const sIn = Math.sign(twaIn);
+  const sOut = Math.sign(twaOut);
+  if (sIn === 0 || sOut === 0 || sIn === sOut) return null;
+  if (Math.abs(relative(prevHeading, heading)) < turnTackDeg) return null;
+  return classifyManeuver(twaIn, twaOut);
 }
 
 // ¿Hay tierra a menos de `coastDeg` del punto? Se muestrea un anillo (la máscara
@@ -650,13 +691,15 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         continue;
       }
 
-      const tack = !Number.isNaN(p.heading) && Math.sign(twa) !== Math.sign(relative(p.heading, wp.dir));
-      const tacks = p.tacks + (tack ? 1 : 0);
+      // E12.11 — maniobra real = cruce del viento + cambio de rumbo significativo.
+      const maneuver = detectManeuver(p.heading, h, wp.dir, cfg.turnTackDeg);
+      const tacks = p.tacks + (maneuver ? 1 : 0);
       if (tacks > cfg.maxTacks) {
         nd.tack++;
         continue;
       }
-      const t = p.t + dtMs + (tack ? cfg.tackPenaltyMin * 60_000 : 0);
+      const penaltyMin = maneuver === "gybe" ? cfg.gybePenaltyMin : cfg.tackPenaltyMin;
+      const t = p.t + dtMs + (maneuver ? penaltyMin * 60_000 : 0);
       const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p, ...(isRetry ? { retry: true } : {}) };
       out.push(node);
 
@@ -850,6 +893,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
   let startMs = opts.startMs;
   let nm = 0;
   let tacks = 0;
+  let gybes = 0;
   let steps = 0;
   let reached = true;
   let windMax: number | null = null;
@@ -885,6 +929,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       etaMs: r.etaMs,
       nm: r.nm,
       tacks: r.tacks,
+      gybes: r.gybes,
       windMax: r.windMax,
       points,
       isochrones: r.isochrones,
@@ -894,6 +939,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     startMs = r.etaMs;
     nm += r.nm;
     tacks += r.tacks;
+    gybes += r.gybes;
     steps += r.steps;
     if (r.windMax !== null) windMax = windMax === null ? r.windMax : Math.max(windMax, r.windMax);
     if (!r.reached) {
@@ -915,7 +961,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     lat: number;
     etaMs: number;
     anchor: boolean;
-    tack: boolean;
+    maneuver: "tack" | "gybe" | null;
     seg: number;
   }
   const g: StepPoint[] = [];
@@ -925,11 +971,11 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       lat: anchors[i]![1],
       etaMs: i === 0 ? opts.startMs : (segments[i - 1]?.etaMs ?? opts.startMs),
       anchor: true,
-      tack: false,
+      maneuver: null,
       seg: -1,
     });
     for (const p of segments[i]?.points ?? []) {
-      g.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, anchor: false, tack: p.tack === true, seg: i });
+      g.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, anchor: false, maneuver: p.maneuver ?? null, seg: i });
     }
   }
   const turnG = (a: number, b: number, c: number): number => {
@@ -944,7 +990,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       const c = kept[kept.length - 1]!;
       const b = kept[kept.length - 2]!;
       const a = kept[kept.length - 3]!;
-      if (g[b]!.anchor || g[b]!.tack) break;
+      if (g[b]!.anchor || g[b]!.maneuver !== null) break;
       const t = turnG(a, b, c);
       // Virada chica: no cambia el rumbo del trazado. Virada mediana en pata
       // corta: se fusiona el segmento sin perder la esquina de verdad.
@@ -952,12 +998,12 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       kept.splice(kept.length - 2, 1);
     }
   }
-  let stepCount = kept.filter((i) => !g[i]!.anchor && !g[i]!.tack).length;
+  let stepCount = kept.filter((i) => !g[i]!.anchor && g[i]!.maneuver === null).length;
   if (stepCount > MAX_STEP_WAYPOINTS) {
     const turns = new Map<number, number>();
     for (let k = 1; k + 1 < kept.length; k++) {
       const i = kept[k]!;
-      if (!g[i]!.anchor && !g[i]!.tack) turns.set(i, turnG(kept[k - 1]!, i, kept[k + 1]!));
+      if (!g[i]!.anchor && g[i]!.maneuver === null) turns.set(i, turnG(kept[k - 1]!, i, kept[k + 1]!));
     }
     const droppable = [...turns.keys()].sort((a, b) => turns.get(a)! - turns.get(b)!);
     const drop = new Set<number>();
@@ -972,10 +1018,15 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
   for (const i of kept) {
     const p = g[i]!;
     if (p.anchor || p.seg < 0) continue;
-    segments[p.seg]!.points.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, ...(p.tack ? { tack: true } : {}) });
+    segments[p.seg]!.points.push({
+      lon: p.lon,
+      lat: p.lat,
+      etaMs: p.etaMs,
+      ...(p.maneuver ? { tack: true, maneuver: p.maneuver } : {}),
+    });
   }
 
-  return { reached, etaMs: startMs, nm, tacks, windMax, anchors, segments, isochrones, steps, ...(reason ? { reason } : {}) };
+  return { reached, etaMs: startMs, nm, tacks, gybes, windMax, anchors, segments, isochrones, steps, ...(reason ? { reason } : {}) };
 }
 
 // Ruta optimizada completa (anclas + puntos intermedios de cada tramo). E12.7: si
@@ -1026,11 +1077,12 @@ function buildResult(
     cfg?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg,
     Math.max(2, maxWaypoints),
   );
-  // E12.10 — Bordo (virada): el rumbo entra y sale cruzando el viento entre las
-  // patas VISIBLES de la salida — lo que el marino ve en la tabla. Un zigzag de
-  // popa (mismo lado del viento) no es un bordo. La marca se calcula ya sobre la
-  // lista reducida y jamás se filtra después.
-  const tackRaw: boolean[] = raw.map(() => false);
+  // E12.11 — maniobra entre las patas VISIBLES de la salida (lo que el marino ve
+  // en la tabla): cruce del viento + cambio de rumbo ≥ `turnTackDeg`. Se clasifica
+  // virada (ceñida) o trasluchada (empopada) por el TWA. El ruido de ±2° ya no
+  // cuenta; la marca se calcula sobre la lista reducida y jamás se filtra después.
+  const turnTackDeg = cfg?.turnTackDeg ?? DEFAULT_ISO_CONFIG.turnTackDeg;
+  const maneuverRaw: ("tack" | "gybe" | null)[] = raw.map(() => null);
   for (let k = 1; k + 1 < keep.length; k++) {
     const b = keep[k]!;
     const w = wind(raw[b]![1], raw[b]![0], etaOf[b]!);
@@ -1039,11 +1091,10 @@ function buildResult(
     const c = keep[k + 1]!;
     const hIn = initialBearingDeg(raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0]);
     const hOut = initialBearingDeg(raw[b]![1], raw[b]![0], raw[c]![1], raw[c]![0]);
-    const sIn = Math.sign(relative(hIn, w.dir));
-    const sOut = Math.sign(relative(hOut, w.dir));
-    if (sIn !== 0 && sOut !== 0 && sIn !== sOut) tackRaw[b] = true;
+    maneuverRaw[b] = detectManeuver(hIn, hOut, w.dir, turnTackDeg);
   }
-  keep = selectWaypointsByTurn(keep, raw, tackRaw, cfg?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg, Math.max(2, maxWaypoints));
+  const maneuverFlags = maneuverRaw.map((m) => m !== null);
+  keep = selectWaypointsByTurn(keep, raw, maneuverFlags, cfg?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg, Math.max(2, maxWaypoints));
 
   // E12.7 — post-verificación de la simplificación: el recorte no puede meter un
   // tramo que cruce tierra con margen ni que cruce viento > máximo del modo. Si
@@ -1089,8 +1140,12 @@ function buildResult(
       lat: raw[i]![1],
       etaMs: etaOf[i] ?? etaOf[etaOf.length - 1] ?? 0,
     };
-    // E12.7 — marca de virada (detectada sobre el trazado crudo en `tackRaw`).
-    if (tackRaw[i] === true) wp.tack = true;
+    // E12.11 — marca y clasificación de la maniobra (detectada en `maneuverRaw`).
+    const m = maneuverRaw[i];
+    if (m) {
+      wp.tack = true;
+      wp.maneuver = m;
+    }
     return wp;
   });
 
@@ -1111,11 +1166,7 @@ function buildResult(
     for (let i = a + 1; i <= b; i++) {
       const cur = path[i]!;
       const prev = path[i - 1]!;
-      if (!Number.isNaN(cur.heading) && !Number.isNaN(prev.heading)) {
-        const s1 = Math.sign(relative(cur.heading, wp?.dir ?? 0));
-        const s2 = Math.sign(relative(prev.heading, wp?.dir ?? 0));
-        if (s1 !== 0 && s2 !== 0 && s1 !== s2) tacks++;
-      }
+      if (detectManeuver(prev.heading, cur.heading, wp?.dir ?? 0, turnTackDeg) !== null) tacks++;
     }
     legs.push({
       from: k,
@@ -1129,7 +1180,10 @@ function buildResult(
     });
   }
 
-  const totalTacks = path[path.length - 1]?.tacks ?? 0;
+  // E12.11 — el conteo sale de los waypoints VISIBLES (los que la tabla muestra),
+  // separando viradas de ceñida y trasluchadas de empopada.
+  const tacks = waypoints.filter((w) => w.maneuver === "tack").length;
+  const gybes = waypoints.filter((w) => w.maneuver === "gybe").length;
   const etaMs = etaOf[etaOf.length - 1] ?? _startMs;
 
   let windMax = 0;
@@ -1147,7 +1201,8 @@ function buildResult(
     reached,
     etaMs,
     nm,
-    tacks: totalTacks,
+    tacks,
+    gybes,
     windMax: windSeen ? windMax : null,
     waypoints,
     legs,

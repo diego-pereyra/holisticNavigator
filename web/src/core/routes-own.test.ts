@@ -230,24 +230,30 @@ test("E12.6 aplicar optimización conserva obligatorios y descarta opcionales", 
   assert.equal(out.updatedAt, 2);
 });
 
-test("E12.7 los puntos de virada se bautizan 'Bordo n'", () => {
+test("E12.11 las maniobras se bautizan 'Virada n' o 'Trasluchada n'", () => {
   let r = newOwnRoute("MIA-bordo", "Bordos", 1);
   r = addWaypoint(r, 0, 0, "Inicio");
   r = addWaypoint(r, 0, 2, "Fin");
 
   const out = applyOptimization(
     r,
-    [[{ lat: 0.1, lon: 0.5, tack: true }, { lat: 0.2, lon: 1, tack: false }, { lat: 0.3, lon: 1.5, tack: true }]],
+    [[
+      { lat: 0.1, lon: 0.5, tack: true, maneuver: "tack" },
+      { lat: 0.2, lon: 1, tack: false },
+      { lat: 0.3, lon: 1.5, tack: true, maneuver: "gybe" },
+      { lat: 0.35, lon: 1.7, tack: true, maneuver: "tack" },
+    ]],
     2,
   );
-  assert.deepEqual(out.waypoints.map((w) => w.name), ["Inicio", "Bordo 1", "WP3", "Bordo 2", "Fin"]);
-  assert.deepEqual(out.waypoints.map((w) => w.mandatory), [true, false, false, false, true]);
-  // El sufijo "Bordo n" no queda pegado a los waypoints existentes.
+  assert.deepEqual(out.waypoints.map((w) => w.name), ["Inicio", "Virada 1", "WP3", "Trasluchada 1", "Virada 2", "Fin"]);
+  assert.deepEqual(out.waypoints.map((w) => w.mandatory), [true, false, false, false, false, true]);
+  // El sufijo de la maniobra no queda pegado a los waypoints existentes.
   assert.deepEqual(out.waypoints.map((w) => [w.lat, w.lon]), [
     [0, 0],
     [0.1, 0.5],
     [0.2, 1],
     [0.3, 1.5],
+    [0.35, 1.7],
     [0, 2],
   ]);
 });

@@ -89,7 +89,7 @@ import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack,
 import type { OwnRoute } from "../core/routes-own.ts";
 import { addWaypoint } from "../core/routes-own.ts";
 import { genericPolar } from "../core/routing/polar.ts";
-import { forecastHorizon, forecastWindField } from "../core/routing/windfield.ts";
+import { forecastWindField, horizonNotice } from "../core/routing/windfield.ts";
 import {
   DEFAULT_ROUTING_MODE,
   ROUTING_MODES,
@@ -3592,7 +3592,6 @@ interface OptJob {
   result: IsoMultiResult | null;
   baseline: IsoBaseline | null;
   climateOnly: boolean;
-  beyondForecast: boolean;
   // E12.6: opcionales que el trazado optimizado ya no toca (solo rutas propias).
   dropped: number;
   error?: string;
@@ -3635,8 +3634,6 @@ function optHandle(ui: UiState, msg: IsoWorkerResponse): void {
     job.ratio = 1;
     job.result = msg.result;
     job.baseline = msg.baseline;
-    const pkg = ui.forecast();
-    job.beyondForecast = !!pkg && !job.climateOnly && job.result.etaMs > forecastHorizon(pkg);
     optJobCode.delete(msg.id);
   } else if (msg.type === "cancelled") {
     job.status = "cancelled";
@@ -3682,7 +3679,7 @@ async function optStart(
   if (!clim && !pkg) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: true, beyondForecast: false, dropped, error: "no hay datos de viento",
+      climateOnly: true, dropped, error: "no hay datos de viento",
     });
     optRefreshPanel(ui);
     return;
@@ -3693,7 +3690,7 @@ async function optStart(
   } catch (err) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: !pkg, beyondForecast: false, dropped, error: err instanceof Error ? err.message : String(err),
+      climateOnly: !pkg, dropped, error: err instanceof Error ? err.message : String(err),
     });
     optRefreshPanel(ui);
     return;
@@ -3701,7 +3698,7 @@ async function optStart(
   const id = ++optJobSeq;
   const job: OptJob = {
     code, kind, coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
-    climateOnly: !pkg, beyondForecast: false, dropped,
+    climateOnly: !pkg, dropped,
   };
   optJobs.set(code, job);
   optJobCode.set(id, code);
@@ -3746,10 +3743,12 @@ function optApply(ui: UiState, code: string): void {
   const job = optJobs.get(code);
   const route = ownRouteById(code);
   if (!job?.result || !job.result.reached || !route) return;
-  // E12.6/E12.7: conserva los obligatorios y agrega los puntos optimizados de
-  // cada tramo; los opcionales que el trazado ya no toca se descartan. Los puntos
-  // en virada se bautizan "Bordo n" (tack).
-  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack })));
+  // E12.6/E12.11: conserva los obligatorios y agrega los puntos optimizados de
+  // cada tramo; los opcionales que el trazado ya no toca se descartan. Las
+  // maniobras se bautizan "Virada n" (ceñida) o "Trasluchada n" (empopada).
+  const segments = job.result.segments.map((s) =>
+    s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack, maneuver: p.maneuver })),
+  );
   const before = route.waypoints.map((w) => ({ ...w }));
   applyOptimizationToOwn(ownCtx(ui), route, segments);
   const dropped = job.dropped;
@@ -3862,13 +3861,13 @@ function optRender(
       const stats = el("div", { class: "hn-opt-stats" });
       stats.append(
         el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
-        el("span", {}, `Ceñidas: ${r.tacks} bordos`),
+        el("span", {}, `Ceñida: ${r.tacks} viradas`),
         el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`),
       );
+      if (r.gybes > 0) stats.append(el("span", {}, `Empopada: ${r.gybes} trasluchadas`));
       panel.append(stats);
-      if (job.beyondForecast) {
-        panel.append(el("p", { class: "hn-muted" }, "Pasado el horizonte del pronóstico se usa la climatología del mes."));
-      }
+      const notice = horizonNotice(job.climateOnly ? null : ui.forecast(), r.etaMs);
+      if (notice) panel.append(el("p", { class: "hn-muted hn-opt-notice" }, notice));
     }
     const acts = el("div", { class: "hn-opt-acts" });
     if (kind === "own" && r.reached) {
@@ -5056,7 +5055,7 @@ async function runPointOptNow(
     openPointOptSheet(ui, code, "no hay datos de viento");
     optJobs.set(code, {
       code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: true, beyondForecast: false, dropped: 0, error: "no hay datos de viento",
+      climateOnly: true, dropped: 0, error: "no hay datos de viento",
     });
     return;
   }
@@ -5068,13 +5067,13 @@ async function runPointOptNow(
     openPointOptSheet(ui, code, msg);
     optJobs.set(code, {
       code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: !pkg, beyondForecast: false, dropped: 0, error: msg,
+      climateOnly: !pkg, dropped: 0, error: msg,
     });
     return;
   }
   const job: OptJob = {
     code, kind: "own", coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
-    climateOnly: !pkg, beyondForecast: false, dropped: 0,
+    climateOnly: !pkg, dropped: 0,
   };
   optJobs.set(code, job);
   optJobCode.set(id, code);
@@ -5138,10 +5137,13 @@ function renderPointOptBody(ui: UiState, host: HTMLElement, code: string, bootEr
   const stats = el("div", { class: "hn-opt-stats" });
   stats.append(
     el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
-    el("span", {}, `Ceñidas: ${r.tacks} bordos`),
+    el("span", {}, `Ceñida: ${r.tacks} viradas`),
   );
+  if (r.gybes > 0) stats.append(el("span", {}, `Empopada: ${r.gybes} trasluchadas`));
   if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`));
   host.append(stats);
+  const notice = horizonNotice(job.climateOnly ? null : ui.forecast(), r.etaMs);
+  if (notice) host.append(el("p", { class: "hn-muted hn-opt-notice" }, notice));
   host.append(pointOptBtn("Aplicar", () => pointOptApply(ui, code)));
   host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
 }
@@ -5167,7 +5169,9 @@ function pointOptApply(ui: UiState, code: string): void {
   goTo(ui, "rutas");
   const route = copyToOwn(ctx, "Optimizada desde el punto", job.coords, job.names);
   const before = route.waypoints.map((w) => ({ name: w.name, lat: w.lat, lon: w.lon }));
-  const segments = job.result.segments.map((s) => s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack })));
+  const segments = job.result.segments.map((s) =>
+    s.points.map((p) => ({ lat: p.lat, lon: p.lon, tack: p.tack, maneuver: p.maneuver })),
+  );
   applyOptimizationToOwn(ctx, route, segments);
   showUndoBand("Ruta optimizada creada en Mis rutas", () => {
     const cur = ownRouteById(route.id);

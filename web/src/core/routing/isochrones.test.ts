@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import { genericPolar } from "./polar.ts";
 import {
+  detectManeuver,
   multiRouteCoords,
   routeOptimal,
   routeOptimalMulti,
@@ -398,6 +399,55 @@ test("E12.10 rodeo de isla → la esquina de rodeo cae sola en el umbral", () =>
   assert.equal(res.reached, true);
   const maxDev = Math.max(...res.waypoints.map((w) => distToLineNm([w.lon, w.lat], [0, 0], [6, 0])));
   assert.ok(maxDev > 3, `la esquina de rodeo sobrevive con umbral alto (${maxDev.toFixed(1)} nm)`);
+});
+
+// E12.11 — viradas clasificadas y cero ruido por el signo ambiguo del TWA.
+
+test("E12.11 empopada pura → trasluchadas, nunca viradas", () => {
+  // Viento del norte y rumbo directo al sur: TWA ~180 (cono muerto de popa) → el
+  // motor traslucha en zigzag. Esas maniobras son de empopada, no de ceñida.
+  const res = routeOptimal(base({ from: [0, 0], to: [0, -6], wind: uniform(0, 14) }));
+  assert.equal(res.reached, true);
+  assert.ok(res.gybes >= 1, `debe trasluchar (${res.gybes})`);
+  assert.equal(res.tacks, 0, `no hay viradas de ceñida (${res.tacks})`);
+  for (const w of res.waypoints) {
+    if (w.tack) assert.equal(w.maneuver, "gybe", "toda maniobra marcada es una trasluchada");
+  }
+});
+
+test("E12.11 ceñida pura → viradas, nunca trasluchadas", () => {
+  const res = routeOptimal(base({ from: [0, 0], to: [0, 6], wind: uniform(0, 14) }));
+  assert.equal(res.reached, true);
+  assert.ok(res.tacks >= 1, `debe virar (${res.tacks})`);
+  assert.equal(res.gybes, 0, `no hay trasluchadas (${res.gybes})`);
+  for (const w of res.waypoints) {
+    if (w.tack) assert.equal(w.maneuver, "tack", "toda maniobra marcada es una virada");
+  }
+});
+
+test("E12.11 reach (TWA ~90) → cero viradas y cero trasluchadas", () => {
+  // Viento del este y rumbo al sur: TWA ~90, sin cruzar el viento.
+  const res = routeOptimal(base({ from: [0, 0], to: [0, -6], wind: uniform(90, 14) }));
+  assert.equal(res.reached, true);
+  assert.equal(res.tacks, 0, `sin viradas (${res.tacks})`);
+  assert.equal(res.gybes, 0, `sin trasluchadas (${res.gybes})`);
+  assert.equal(res.waypoints.filter((w) => w.tack === true).length, 0, "sin maniobras marcadas");
+});
+
+test("E12.11 ruido de ±2° sobre el eje no cuenta como maniobra", () => {
+  // Mismo lado del viento, rumbo que cambia 2°: no hay cruce real.
+  assert.equal(detectManeuver(179, 181, 0, 20), null, "crossing de popa sin cambio de rumbo");
+  assert.equal(detectManeuver(179, 181, 0, 0), "gybe", "sin umbral el ruido aparecía");
+  // Cambio de rumbo grande y cruce de viento de proa → virada.
+  assert.equal(detectManeuver(-40, 40, 0, 20), "tack");
+});
+
+test("E12.11 umbral alto no borra maniobras reales de la tabla", () => {
+  // Un umbral de giro irrisorio no puede eliminar las viradas de una ceñida.
+  const res = routeOptimal(base({ wind: uniform(0, 14), config: { turnTackDeg: 1 } }));
+  assert.ok(res.tacks >= 1, `la ceñida vira (${res.tacks})`);
+  const marcados = res.waypoints.filter((w) => w.tack === true).length;
+  assert.equal(marcados, res.tacks + res.gybes, "cada maniobra visible suma al conteo");
 });
 
 test("E12.10 muchos tramos → puntos de paso ≤ 40 globales", () => {

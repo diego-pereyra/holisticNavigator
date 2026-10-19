@@ -147,35 +147,42 @@ export function mandatoryIndexes(route: OwnRoute): number[] {
   return out;
 }
 
-// E12.6/E12.7 — aplica el resultado de una optimización tramo a tramo: conserva
+// E12.6/E12.11 — aplica el resultado de una optimización tramo a tramo: conserva
 // TODOS los obligatorios (con nombre y posición) y agrega, entre cada par
 // consecutivo, los puntos optimizados (nacen opcionales). Los waypoints opcionales
 // que el trazado ya no toca se descartan. `segments[k]` son los puntos intermedios
-// del tramo entre el obligatorio k y el k+1; los que caen en una virada (`tack`)
-// se bautizan "Bordo n" en vez de "WPn".
+// del tramo entre el obligatorio k y el k+1; los que son una maniobra se bautizan
+// "Virada n" (ceñida) o "Trasluchada n" (empopada) en vez de "WPn".
 export function applyOptimization(
   route: OwnRoute,
-  segments: { lat: number; lon: number; tack?: boolean }[][],
+  segments: { lat: number; lon: number; tack?: boolean; maneuver?: "tack" | "gybe" }[][],
   now = Date.now(),
 ): OwnRoute {
   const anchors = route.waypoints.filter((w) => w.mandatory);
   if (anchors.length < 2) return route;
-  const out: (OwnWaypoint & { tack?: boolean })[] = [];
+  const out: (OwnWaypoint & { tack?: boolean; maneuver?: "tack" | "gybe" })[] = [];
   for (let k = 0; k < anchors.length; k++) {
     const a = anchors[k]!;
     out.push({ ...a });
     const seg = segments[k];
     if (seg) {
-      for (const p of seg) out.push({ name: "", lat: p.lat, lon: p.lon, mandatory: false, tack: p.tack });
+      for (const p of seg) {
+        out.push({ name: "", lat: p.lat, lon: p.lon, mandatory: false, tack: p.tack, maneuver: p.maneuver });
+      }
     }
   }
   // Los puntos optimizados no traen nombre: se numeran sin pisar los del usuario.
-  let bordo = 0;
+  let virada = 0;
+  let trasluchada = 0;
   out.forEach((w, i) => {
     if (w.name !== "") return;
-    if (w.tack) {
-      bordo += 1;
-      w.name = `Bordo ${bordo}`;
+    if (w.maneuver === "gybe") {
+      trasluchada += 1;
+      w.name = `Trasluchada ${trasluchada}`;
+    } else if (w.tack) {
+      // Maniobras viejas sin clasificar (compatibilidad): son viradas de ceñida.
+      virada += 1;
+      w.name = `Virada ${virada}`;
     } else {
       w.name = `WP${i + 1}`;
     }

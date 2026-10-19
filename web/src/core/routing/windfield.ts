@@ -175,3 +175,24 @@ export function forecastWindField(pkg: ForecastPackage, clim: ClimMonth | null):
 export function beyondForecast(pkg: ForecastPackage | null, tMs: number): boolean {
   return pkg !== null && tMs > forecastHorizon(pkg);
 }
+
+// E12.11 — el usuario siempre sabe con qué viento se calculó cada parte del
+// trazado. Sin paquete (climateOnly) es pilot charts del mes; con paquete y ETA
+// dentro del horizonte no hay aviso; si la ETA lo supera, se avisa cuántos días
+// de pronóstico real hay (y hasta cuándo) y que el resto es clima medio.
+const DAY_MS = 86_400_000;
+
+function shortDateUtc(ms: number): string {
+  const d = new Date(ms);
+  const p = (n: number): string => String(n).padStart(2, "0");
+  return `${p(d.getUTCDate())}/${p(d.getUTCMonth() + 1)}`;
+}
+
+export function horizonNotice(pkg: ForecastPackage | null, etaMs: number): string {
+  if (!pkg) return "Trazado con pilot charts del mes (clima medio, sin pronóstico real).";
+  const horizon = forecastHorizon(pkg);
+  if (etaMs <= horizon) return "";
+  const start = pkg.times[0] ?? pkg.fetchedAt;
+  const days = Math.max(1, Math.round((horizon - start) / DAY_MS));
+  return `Pronóstico real: ${days} días (hasta ${shortDateUtc(horizon)}) · el resto del trazado se calcula con pilot charts (clima medio).`;
+}
