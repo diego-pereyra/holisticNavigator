@@ -1,0 +1,270 @@
+{
+  "viewport": "1180x820",
+  "journeys": [
+    {
+      "journey": "arranque",
+      "taps": 0,
+      "pasosFallidos": [
+        "existe: barra de contexto",
+        "existe: FAB ◉"
+      ],
+      "steps": [
+        {
+          "label": "arranca en < 15 s",
+          "found": true,
+          "extra": "",
+          "taps": 0
+        },
+        {
+          "label": "existe: barra de contexto",
+          "found": false,
+          "extra": "",
+          "taps": 0
+        },
+        {
+          "label": "existe: FAB ◉",
+          "found": false,
+          "extra": "",
+          "taps": 0
+        }
+      ],
+      "ms": 13416
+    },
+    {
+      "journey": "j1-clima-en-un-punto",
+      "taps": 5,
+      "pasosFallidos": [
+        "long-press en el mapa abre acciones",
+        "tab Aquí",
+        "descargar pronóstico",
+        "botón Tiempo (1.er toque: pilot chart)",
+        "botón Tiempo (2.do toque: pronóstico)",
+        "existe: deslizador de hora",
+        "botón Tiempo (apagar)"
+      ],
+      "steps": [
+        {
+          "label": "long-press en el mapa abre acciones",
+          "found": false,
+          "extra": "",
+          "taps": 0
+        },
+        {
+          "label": "tab Aquí",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 1
+        },
+        {
+          "label": "descargar pronóstico",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 2
+        },
+        {
+          "label": "botón Tiempo (1.er toque: pilot chart)",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 3
+        },
+        {
+          "label": "botón Tiempo (2.do toque: pronóstico)",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 4
+        },
+        {
+          "label": "existe: deslizador de hora",
+          "found": false,
+          "extra": "",
+          "taps": 4
+        },
+        {
+          "label": "botón Tiempo (apagar)",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 5
+        }
+      ],
+      "ms": 29431
+    },
+    {
+      "journey": "j2-seguir-ruta",
+      "taps": 4,
+      "pasosFallidos": [
+        "tab Rutas",
+        "la lista de rutas carga",
+        "primera ruta de la lista",
+        "Seguir",
+        "la tira de navegación aparece al seguir",
+        "Dejar de seguir"
+      ],
+      "steps": [
+        {
+          "label": "tab Rutas",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 1
+        },
+        {
+          "label": "la lista de rutas carga",
+          "found": false,
+          "extra": "sin .hn-row a los 10 s",
+          "taps": 1
+        },
+        {
+          "label": "primera ruta de la lista",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 2
+        },
+        {
+          "label": "Seguir",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 3
+        },
+        {
+          "label": "la tira de navegación aparece al seguir",
+          "found": false,
+          "extra": "",
+          "taps": 3
+        },
+        {
+          "label": "Dejar de seguir",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 4
+        }
+      ],
+      "ms": 28373
+    },
+    {
+      "journey": "j3-optimizar",
+      "taps": 3,
+      "pasosFallidos": [
+        "tab Rutas",
+        "abrir una ruta",
+        "Optimizar"
+      ],
+      "steps": [
+        {
+          "label": "tab Rutas",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 1
+        },
+        {
+          "label": "abrir una ruta",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 2
+        },
+        {
+          "label": "Optimizar",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 3
+        }
+      ],
+      "ms": 26024
+    },
+    {
+      "journey": "j4-mob",
+      "taps": 1,
+      "pasosFallidos": [
+        "Usar GPS",
+        "existe: botón MOB visible"
+      ],
+      "steps": [
+        {
+          "label": "Usar GPS",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 1
+        },
+        {
+          "label": "existe: botón MOB visible",
+          "found": false,
+          "extra": "",
+          "taps": 1
+        }
+      ],
+      "ms": 9027
+    },
+    {
+      "journey": "j5-pilot-chart-mes",
+      "taps": 5,
+      "pasosFallidos": [
+        "Tiempo → pilot chart",
+        "existe: panel Capas",
+        "apagar capa Olas",
+        "botón Tiempo (apagar)",
+        "tab Rutas",
+        "chip Salgo en {mes}"
+      ],
+      "steps": [
+        {
+          "label": "Tiempo → pilot chart",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 1
+        },
+        {
+          "label": "existe: panel Capas",
+          "found": false,
+          "extra": "",
+          "taps": 1
+        },
+        {
+          "label": "apagar capa Olas",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 2
+        },
+        {
+          "label": "botón Tiempo (apagar)",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 3
+        },
+        {
+          "label": "tab Rutas",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 4
+        },
+        {
+          "label": "chip Salgo en {mes}",
+          "found": false,
+          "extra": "no se encontró",
+          "taps": 5
+        }
+      ],
+      "ms": 23325
+    },
+    {
+      "journey": "j6-temas",
+      "taps": 0,
+      "pasosFallidos": [
+        "existe: botón de tema"
+      ],
+      "steps": [
+        {
+          "label": "existe: botón de tema",
+          "found": false,
+          "extra": "",
+          "taps": 0
+        }
+      ],
+      "ms": 2501
+    }
+  ],
+  "erroresConsola": [
+    "Failed to load resource: net::ERR_EMPTY_RESPONSE",
+    "Failed to load resource: net::ERR_EMPTY_RESPONSE"
+  ],
+  "erroresPagina": [],
+  "http": [],
+  "capturasFallidas": []
+}
