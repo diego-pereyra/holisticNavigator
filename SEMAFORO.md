@@ -23,3 +23,5 @@ Archivos: web/public/app.css (principalmente), web/src/ui/app.ts (offsets de ban
    primera", push. Al terminar escribí "Status:done" al final de este archivo.
 
 Status: ready
+
+Status:done
