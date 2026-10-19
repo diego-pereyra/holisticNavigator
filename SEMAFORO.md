@@ -22,3 +22,5 @@ arreglos chicos que el re-UAT descubra).
    push. Al terminar escribí "Status:done" al final de este archivo.
 
 Status: ready
+
+Status:done
