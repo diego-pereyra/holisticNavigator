@@ -5,6 +5,8 @@
 // La descarga real y el guardado en IndexedDB viven en `platform/forecast.ts`;
 // acá la red se inyecta por `hooks.fetchJson` para poder probar sin conexión.
 
+import { formatLat, formatLon } from "./coords.ts";
+
 export type BBox = [number, number, number, number]; // [oeste, sur, este, norte]
 
 // Variables del paquete, tal como se exponen a capas y enrutado.
@@ -150,6 +152,19 @@ export function forecastKind(id: string): ForecastKind {
   if (id.startsWith("punto-")) return "punto";
   if (id === "vista") return "vista";
   return "ruta";
+}
+
+// UX-N.5b — dueño legible de un paquete: cada pronóstico va atado a su caja.
+// La ruta usa su código ("AN12"); un punto se nombra por su vínculo ("Clima acá ·
+// coords"); la vista es "Vista". El centro puede faltar (paquete sin coordenadas
+// en mano): en ese caso el punto queda como "Clima acá" a secas.
+export function forecastOwnerName(id: string, center: { lat: number; lon: number } | null = null): string {
+  const kind = forecastKind(id);
+  if (kind === "vista") return "Vista";
+  if (kind === "punto") {
+    return center ? `Clima acá · ${formatLat(center.lat)} ${formatLon(center.lon)}` : "Clima acá";
+  }
+  return id;
 }
 
 // Caja del punto: el punto más 300 nm de margen (misma regla que la travesía).

@@ -13,6 +13,7 @@ import {
   forecastIdPoint,
   forecastIdView,
   forecastKind,
+  forecastOwnerName,
   forecastResolution,
   getForecastAge,
   marginBbox,
@@ -196,6 +197,18 @@ test("UX-N.2 ids de caja: punto, vista y ruta", () => {
   assert.equal(forecastKind(id), "punto");
   assert.equal(forecastKind("vista"), "vista");
   assert.equal(forecastKind("CANAL-01"), "ruta");
+});
+
+test("UX-N.5b el dueño de cada paquete se nombra por su vínculo", () => {
+  // Ruta: el código, sin adornos.
+  assert.equal(forecastOwnerName("AN12"), "AN12");
+  // Vista: etiqueta fija.
+  assert.equal(forecastOwnerName("vista"), "Vista");
+  // Punto: "Clima acá" + coordenadas formateadas.
+  const id = forecastIdPoint(15, -60);
+  assert.equal(forecastOwnerName(id, { lat: 15, lon: -60 }), "Clima acá · 15°00.0'N 060°00.0'W");
+  // Punto sin centro disponible: no inventa coordenadas.
+  assert.equal(forecastOwnerName(id, null), "Clima acá");
 });
 
 test("UX-N.2 la caja del punto lleva 300 nm de margen", () => {

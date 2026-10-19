@@ -64,6 +64,7 @@ import {
   forecastBytes,
   forecastIdPoint,
   forecastIdView,
+  forecastOwnerName,
   getForecastAge,
   type BBox,
   type ForecastPackage,
@@ -191,7 +192,7 @@ import {
   type WxLayers,
 } from "./weather.ts";
 
-type TabName = "aqui" | "rutas" | "travesia" | "ajustes";
+type TabName = "aqui" | "rutas" | "travesia" | "ajustes" | "datos";
 type SheetState = "peek" | "half" | "full";
 // Arranque progresivo (W5.1): el catálogo (índice+cuencas) y la geometría de
 // rutas llegan después de montar el mapa; la hoja muestra el estado mientras tanto.
@@ -1932,7 +1933,9 @@ function renderWeatherLegend(
     }
     const time = slotTime(pkg, hour);
     const beyond = empalmeConClimatología(pkg, time);
-    host.append(el("div", { class: "hn-wx-title" }, `Pronóstico · ${hourLabel(time)}`));
+    const owner = forecastOwnerName(pkg.id, bboxCenter(pkg.bbox));
+    host.append(el("div", { class: "hn-wx-title" }, `Pronóstico de ${owner} · ${ageText(pkg.fetchedAt)}`));
+    host.append(el("div", { class: "hn-wx-note" }, hourLabel(time)));
     if (layers.isobars) {
       host.append(el("div", { class: "hn-wx-note" }, `isobaras cada ${WX_ISOBAR_INTERVAL} hPa · etiqueta en hPa`));
     }
@@ -2097,8 +2100,9 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     bodyCleanup = [];
     clear(body);
     untracked(() => {
-      // Ajustes no depende del catálogo: siempre disponible.
+      // Ajustes y Datos no dependen del catálogo: siempre disponibles.
       if (tab === "ajustes") renderAjustes(ui, body, bodyCleanup);
+      else if (tab === "datos") renderDatos(ui, body, bodyCleanup);
       else if (catalog === "loading") renderCatalogLoading(body);
       else if (catalog === "failed") renderCatalogFailed(body);
       else if (tab === "aqui") renderAqui(ui, body, bodyCleanup);
@@ -2510,17 +2514,23 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
 // Panel "Sin conexión" en Aquí: qué se ve sin red y qué zonas de la carta
 // detallada están descargadas. Cada zona se baja a IndexedDB y queda disponible
 // en modo avión.
-function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
-  const card = el("div", { class: "hn-card" });
-  card.append(el("div", { class: "hn-card-title" }, "Sin conexión"));
+// UX-N.5b — "Datos sin conexión" es sección propia (no Ajustes): cada paquete va
+// con su dueño (ruta, punto o vista). Filas de datos, no interruptores.
+function renderDatos(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
+  const head = el("div", { class: "hn-datos-head" });
+  const back = el("button", { class: "hn-back", type: "button" }, "‹ Ajustes");
+  back.addEventListener("click", () => goTo(ui, "ajustes"));
+  head.append(el("h2", { class: "hn-h2" }, "Datos sin conexión"), back);
+  body.append(head);
+  body.append(el("p", { class: "hn-muted" }, "Lo que viaja atado a cada ruta, punto o vista."));
+
+  const card = el("div", { class: "hn-card hn-datos-card" });
   card.append(offlineRow("Carta base · 0,2 MB", "siempre"));
   // Pilot charts (12 meses) · 1,8 MB · [Guardar]
   card.append(pilotChartsRow(ui));
-  // UX-N.2 (D2): las cajas son de primera clase. Una fila para bajar/actualizar
-  // la caja del contexto (ruta activa o vista) y la lista de TODAS las
-  // guardadas (punto, vista, ruta), con edad y borrar por fila.
-  const list = forecastListHost(ui, cleanup);
-  card.append(forecastRow(ui, cleanup, list.reload), list.host);
+  // UX-N.2 (D2): cada caja es de primera clase. Lista de TODAS las guardadas
+  // (punto, vista, ruta) con su dueño, edad, [Actualizar] y [Borrar].
+  card.append(forecastListHost(ui, cleanup).host);
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
 
   const zonesBox = el("div", { class: "hn-offline-zones" });
@@ -2534,7 +2544,7 @@ function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
         : states.map((st) => zoneRow(ui, st));
     zonesBox.replaceChildren(...nodes);
   })();
-  return card;
+  body.append(card);
 }
 
 function offlineRow(name: string, info: string): HTMLElement {
@@ -2555,7 +2565,7 @@ function forecastListHost(
       .catch(() => [] as ForecastEntry[])
       .then((entries) => {
         clear(host);
-        host.append(el("div", { class: "hn-forecast-title" }, "Paquetes guardados"));
+        host.append(el("div", { class: "hn-forecast-title" }, "Pronósticos guardados"));
         if (entries.length === 0) {
           host.append(el("p", { class: "hn-muted" }, "Todavía no hay paquetes de pronóstico."));
           return;
@@ -2573,15 +2583,29 @@ function forecastListHost(
 function forecastEntryRow(ui: UiState, entry: ForecastEntry, reload: () => void): HTMLElement {
   const row = el("div", { class: "hn-offline-row hn-forecast-entry" });
   const center = bboxCenter(entry.bbox);
-  const name =
-    entry.kind === "punto"
-      ? `Punto ${formatLat(center.lat)} · ${formatLon(center.lon)}`
-      : entry.kind === "vista"
-        ? "Vista del mapa"
-        : `Ruta ${entry.id}`;
-  const info = `${entry.kind} · ${fmtMb1(entry.bytes)} · ${ageText(entry.savedAt)}`;
+  const owner = forecastOwnerName(entry.id, center);
+  const kindLabel = entry.kind === "ruta" ? "ruta" : entry.kind === "punto" ? "punto" : "vista";
+  const info = `${kindLabel} · ${fmtMb1(entry.bytes)} · ${ageText(entry.savedAt)}`;
   const action = el("span", { class: "hn-offline-action" });
-  const del = el("button", { class: "hn-btn", type: "button", "aria-label": `Borrar ${name}` }, "Borrar");
+  const upd = el("button", { class: "hn-btn hn-btn-mini", type: "button", "aria-label": `Actualizar ${owner}` }, "Actualizar");
+  upd.addEventListener("click", () => {
+    if (upd.disabled) return;
+    upd.disabled = true;
+    upd.textContent = "Bajando…";
+    void downloadForecast(ui.store, entry.id, entry.bbox, (r) => {
+      upd.textContent = `${Math.round(r * 100)} %`;
+    })
+      .then((pkg) => {
+        // Si es la caja cargada en el mapa, se refresca con la nueva versión.
+        if (ui.forecast()?.id === entry.id) ui.forecast.set(pkg);
+        reload();
+      })
+      .catch(() => {
+        upd.disabled = false;
+        upd.textContent = "Reintentar";
+      });
+  });
+  const del = el("button", { class: "hn-btn", type: "button", "aria-label": `Borrar ${owner}` }, "Borrar");
   del.addEventListener("click", () => {
     if (del.disabled) return;
     del.disabled = true;
@@ -2589,8 +2613,8 @@ function forecastEntryRow(ui: UiState, entry: ForecastEntry, reload: () => void)
     if (ui.forecast()?.id === entry.id) ui.forecast.set(null);
     void removeForecast(ui.store, entry.id).then(reload);
   });
-  action.append(del);
-  row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info), action);
+  action.append(upd, del);
+  row.append(el("span", { class: "hn-offline-name" }, `Pronóstico · ${owner}`), el("span", { class: "hn-offline-info" }, info), action);
   return row;
 }
 
@@ -2654,75 +2678,59 @@ function pilotChartsRow(_ui: UiState): HTMLElement {
   return row;
 }
 
-// Pronóstico de la travesía (E13.1): baja el paquete Open-Meteo de la caja de
-// la ruta (o de la vista) + 300 nm, lo guarda en IndexedDB con la edad visible
-// y lo reemplaza con "Actualizar".
-function forecastRow(ui: UiState, cleanup: (() => void)[], onChange?: () => void): HTMLElement {
-  const row = el("div", { class: "hn-offline-row" });
+// UX-N.5b — bloque de pronóstico de la ficha de una ruta. Regla de Diego: el
+// pronóstico vive EN la ficha de su ruta. Muestra el estado de SU paquete
+// ("hace 4 h") o "Sin pronóstico · [Descargar]", y lo baja/actualiza desde acá.
+function routeForecastBlock(ui: UiState, code: string, host: HTMLElement): void {
+  const row = el("div", { class: "hn-offline-row hn-fc-route-row" });
   const info = el("span", { class: "hn-offline-info" }, "…");
   const action = el("span", { class: "hn-offline-action" });
-  const btn = el("button", { class: "hn-btn", type: "button" }, "Descargar");
+  const btn = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Descargar");
   action.append(btn);
-  row.append(el("span", { class: "hn-offline-name" }, "Pronóstico de la travesía"), info, action);
+  row.append(el("span", { class: "hn-offline-name" }, "Pronóstico de esta ruta"), info, action);
+  host.append(row);
 
   let busy = false;
   let pkg: ForecastPackage | null = null;
-  const ctxCode = (): string | null => ui.active()?.code ?? ui.selected()?.code ?? null;
-  const ctxId = (): string => ctxCode() ?? "vista";
-  const ctxBBox = (): BBox | null => {
-    const code = ctxCode();
-    if (code) {
-      const g = selectedGeometry(ui, code);
-      const bb = g ? bboxOfTrack(g.coords) : null;
-      if (bb) return bb;
+  const bboxOf = (): BBox | null => {
+    const g = selectedGeometry(ui, code);
+    if (g) return bboxOfTrack(g.coords);
+    const own = ownRouteById(code);
+    if (own && own.waypoints.length >= 2) {
+      return bboxOfTrack(own.waypoints.map((w) => [w.lon, w.lat] as [number, number]));
     }
-    return bboxOfBounds(ui.map.getBounds());
-  };
-
-  const showAge = (): void => {
-    info.textContent = pkg ? `${fmtMb1(forecastBytes(pkg))} · ${getForecastAge(pkg)}` : "sin paquete";
+    return null;
   };
   const showIdle = (): void => {
     btn.disabled = false;
     btn.textContent = pkg ? "Actualizar" : "Descargar";
-    showAge();
+    info.textContent = pkg ? `${fmtMb1(forecastBytes(pkg))} · ${getForecastAge(pkg)}` : "sin pronóstico";
   };
-
-  cleanup.push(
-    effect(() => {
-      const id = ctxId();
-      void loadForecast(ui.store, id).then((p) => {
-        if (ctxId() !== id) return;
-        pkg = p;
-        showIdle();
-      });
-    }),
-  );
-  const timer = setInterval(() => {
-    if (pkg && !busy) showAge();
-  }, 60_000);
-  cleanup.push(() => clearInterval(timer));
+  void loadForecast(ui.store, code).then((p) => {
+    pkg = p;
+    showIdle();
+  });
 
   btn.addEventListener("click", () => {
     if (busy) return;
-    const box = ctxBBox();
+    const box = bboxOf();
     if (!box) {
-      info.textContent = "sin caja de travesía";
+      info.textContent = "sin caja de ruta";
       return;
     }
-    const id = ctxId();
     busy = true;
     btn.disabled = true;
     btn.textContent = "Bajando…";
     info.textContent = "0 %";
-    void downloadForecast(ui.store, id, box, (r) => {
+    void downloadForecast(ui.store, code, box, (r) => {
       info.textContent = `${Math.round(r * 100)} %`;
     })
       .then((p) => {
         busy = false;
         pkg = p;
+        // Si esta ruta es la que está cargada en el mapa, se refresca con la nueva.
+        if (ui.forecast()?.id === code) ui.forecast.set(p);
         showIdle();
-        onChange?.();
       })
       .catch(() => {
         busy = false;
@@ -2731,8 +2739,6 @@ function forecastRow(ui: UiState, cleanup: (() => void)[], onChange?: () => void
         info.textContent = "error · sin conexión";
       });
   });
-
-  return row;
 }
 
 function fmtMb1(bytes: number): string {
@@ -3817,6 +3823,16 @@ function optRender(
   }
   panel.append(modes);
 
+  // UX-N.5b: con qué viento se calcula — el mismo paquete que se ve en la ficha.
+  const pkg = ui.forecast();
+  panel.append(
+    el(
+      "p",
+      { class: "hn-muted hn-opt-src" },
+      pkg ? `Pronóstico de ${forecastOwnerName(pkg.id, bboxCenter(pkg.bbox))} · ${getForecastAge(pkg)}` : "Ruta del mes (sin pronóstico)",
+    ),
+  );
+
   const head = el("div", { class: "hn-opt-head" });
   if (job?.status === "running") {
     head.append(
@@ -3949,6 +3965,8 @@ function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: stri
     const host = el("div", { class: "hn-ficha-host" });
     body.append(host);
     renderOwnFicha(host, ownCtx(ui), own);
+    // UX-N.5b: el pronóstico de esta ruta vive en su ficha (también en las propias).
+    routeForecastBlock(ui, own.id, host);
     const coords = own.waypoints.map((w) => [w.lon, w.lat] as LonLat);
     const names = own.waypoints.map((w) => w.name);
     optMount(ui, host, own.id, "own", coords, names);
@@ -4085,6 +4103,8 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   host.append(facts);
   host.append(wxLine);
   refreshWx();
+  // UX-N.5b: el pronóstico de esta ruta vive acá, junto al viento, sin scrollear.
+  routeForecastBlock(ui, d.code, host);
 
   if (d.needsReview) {
     host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
@@ -4909,7 +4929,7 @@ function appendPointForecast(ui: UiState, wx: HTMLElement, lat: number, lon: num
         return;
       }
 
-      host.append(el("p", { class: "hn-muted" }, `Pronóstico de la caja · ${getForecastAge(used)}`));
+      host.append(el("p", { class: "hn-muted" }, `Pronóstico de ${forecastOwnerName(used.id, bboxCenter(used.bbox))} · ${getForecastAge(used)}`));
       const isCtx = ctx !== null && ctx.id === used.id;
       const t = isCtx ? slotTime(used, ui.forecastHour()) : slotTime(used, nearestSlot(used, Date.now()));
       if (forecastCoversPoint(used, lat, lon, t)) {
@@ -5296,5 +5316,14 @@ function renderAjustes(ui: UiState, body: HTMLElement, cleanup: (() => void)[]):
 
   body.append(alarmsCard(ui, cleanup));
   body.append(themeCard(ui, cleanup));
-  body.append(offlineCard(ui, cleanup));
+
+  // UX-N.5b — los datos no se mezclan con los interruptores: entrada destacada
+  // a la sección propia "Datos sin conexión".
+  const datosCard = el("button", { class: "hn-card hn-datos-link", type: "button" });
+  datosCard.append(
+    el("span", { class: "hn-card-title" }, "Datos sin conexión"),
+    el("span", { class: "hn-offline-info" }, "Pronósticos y cartas guardadas ›"),
+  );
+  datosCard.addEventListener("click", () => goTo(ui, "datos"));
+  body.append(datosCard);
 }

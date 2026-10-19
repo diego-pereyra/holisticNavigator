@@ -1866,6 +1866,9 @@ html[data-theme="red"] {
 }
 .hn-offline-action {
   flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 .hn-offline-action .hn-btn {
   min-height: 32px;
@@ -2261,4 +2264,45 @@ html[data-theme="red"] {
 @media (min-width: 1100px) {
   .hn-measure { left: 320px; }
   body.hn-has-ficha .hn-measure { left: 760px; }
+}
+
+/* UX-N.5b: "Datos sin conexión" es su propia sección, no parte de Ajustes. */
+.hn-datos-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.hn-datos-head .hn-h2 {
+  order: 2;
+}
+.hn-datos-head .hn-back {
+  order: 1;
+}
+.hn-datos-card {
+  border: 1px dashed var(--hn-line);
+}
+.hn-datos-link {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+}
+.hn-datos-link .hn-offline-info {
+  color: var(--hn-accent, var(--hn-muted));
+}
+/* UX-N.5b: bloque de pronóstico de la ficha de una ruta. */
+.hn-fc-route-row {
+  border-top: 0;
+  padding-top: 2px;
+}
+.hn-fc-route-row .hn-offline-name {
+  font-weight: 600;
+}
+.hn-opt-src {
+  margin: 2px 0 6px;
+  font-size: 12px;
 }
