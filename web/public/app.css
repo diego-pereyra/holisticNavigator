@@ -1168,7 +1168,7 @@ html[data-theme="red"] {
 @media (min-width: 700px) {
   .hn-scale-note { left: 416px; bottom: 16px; }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-scale-note { left: 336px; }
   body.hn-has-ficha .hn-scale-note { left: 776px; }
 }
@@ -1257,7 +1257,7 @@ html[data-theme="red"] {
   .hn-wx-stack { left: 416px; bottom: 16px; }
   .hn-wx-bar { left: 400px; }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-wx-stack { left: 336px; }
   body.hn-has-ficha .hn-wx-stack { left: 776px; }
   .hn-wx-bar { left: 320px; }
@@ -1423,7 +1423,7 @@ html[data-theme="red"] {
     bottom: 88px;
   }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-mob {
     left: 336px;
   }
@@ -1479,7 +1479,7 @@ html[data-theme="red"] {
   }
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-sheet { width: 320px; }
   .hn-sheet.hn-ficha-open { width: 760px; }
   .hn-context { left: 320px; right: 0; }
@@ -1701,7 +1701,7 @@ html[data-theme="red"] {
     border-bottom: 1px solid var(--hn-shadow);
   }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-fixband { left: 320px; }
   body.hn-has-ficha .hn-fixband { left: 760px; }
 }
@@ -1834,7 +1834,7 @@ html[data-theme="red"] {
     border-bottom: 1px solid var(--hn-shadow);
   }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-undo { left: 320px; }
   body.hn-has-ficha .hn-undo { left: 760px; }
 }
@@ -2261,7 +2261,7 @@ html[data-theme="red"] {
     border-bottom: 2px solid #FF8A65;
   }
 }
-@media (min-width: 1100px) {
+@media (min-width: 820px) {
   .hn-measure { left: 320px; }
   body.hn-has-ficha .hn-measure { left: 760px; }
 }
@@ -2305,4 +2305,120 @@ html[data-theme="red"] {
 .hn-opt-src {
   margin: 2px 0 6px;
   font-size: 12px;
+}
+
+/* UX-N.6 — Tablet apaisada (≥820 px): el layout de escritorio (lista 320 px +
+   ficha en dock, mapa siempre visible) rige desde acá. Objetivos táctiles de un
+   escalón (≥48 px; el celular mantiene 44) y tipografía de barra/tira +1. */
+@media (min-width: 820px) {
+  .hn-btn,
+  .hn-row,
+  .hn-tab,
+  .hn-ctx-where,
+  .hn-ctx-when,
+  .hn-ctx-pos,
+  .hn-ctx-theme,
+  .hn-ctx-wx {
+    min-height: 48px;
+  }
+  .hn-ctx-mode {
+    min-height: 36px;
+  }
+  .hn-ctx-label {
+    font-size: 12px;
+  }
+  .hn-ctx-value {
+    font-size: 15px;
+  }
+  .hn-tab {
+    font-size: 14px;
+  }
+}
+
+/* UX-N.6 — Dock de ficha con ancho por variable: a partir de 820 px la lista y
+   la ficha reparten el ancho y el mapa queda siempre a la derecha, sin que la
+   hoja lo tape. En 820–1099 se angosta (280 + 280) para que el mapa respire. */
+@media (min-width: 820px) {
+  :root {
+    --hn-list-w: 320px;
+    --hn-dock: 760px;
+  }
+  .hn-sheet {
+    width: var(--hn-list-w);
+  }
+  .hn-sheet.hn-ficha-open {
+    width: var(--hn-dock);
+  }
+  .hn-context {
+    left: var(--hn-list-w);
+    right: 0;
+  }
+  body.hn-has-ficha .hn-context {
+    left: var(--hn-dock);
+  }
+  .hn-alarm {
+    left: var(--hn-list-w);
+  }
+  body.hn-has-ficha .hn-alarm {
+    left: var(--hn-dock);
+  }
+  .hn-cols {
+    flex-direction: row;
+  }
+  .hn-col-list,
+  .hn-sheet.hn-ficha-open .hn-col-list {
+    flex: 0 0 var(--hn-list-w);
+  }
+  .hn-sheet.hn-ficha-open .hn-col-ficha {
+    flex: 1 1 auto;
+    border-top: none;
+    border-left: 1px solid var(--hn-line);
+  }
+  .hn-scale-note {
+    left: calc(var(--hn-list-w) + 16px);
+  }
+  body.hn-has-ficha .hn-scale-note {
+    left: calc(var(--hn-dock) + 16px);
+  }
+  .hn-wx-stack {
+    left: calc(var(--hn-list-w) + 16px);
+    bottom: 16px;
+  }
+  body.hn-has-ficha .hn-wx-stack {
+    left: calc(var(--hn-dock) + 16px);
+  }
+  .hn-wx-bar {
+    left: var(--hn-list-w);
+  }
+  body.hn-has-ficha .hn-wx-bar {
+    left: var(--hn-dock);
+  }
+  .hn-mob {
+    left: calc(var(--hn-list-w) + 16px);
+  }
+  body.hn-has-ficha .hn-mob {
+    left: calc(var(--hn-dock) + 16px);
+  }
+  .hn-fixband,
+  .hn-undo,
+  .hn-measure {
+    left: var(--hn-list-w);
+  }
+  body.hn-has-ficha .hn-fixband,
+  body.hn-has-ficha .hn-undo,
+  body.hn-has-ficha .hn-measure {
+    left: var(--hn-dock);
+  }
+  /* La hoja de acciones del pin deja el dock libre: se apoya en el mapa. */
+  body.hn-has-ficha .hn-point-actions {
+    left: calc(var(--hn-dock) + 12px);
+    right: 12px;
+    width: auto;
+  }
+}
+@media (min-width: 820px) and (max-width: 1099px) {
+  :root {
+    --hn-list-w: 280px;
+    --hn-dock: 560px;
+  }
 }
