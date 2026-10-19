@@ -1,59 +1,51 @@
 ADELANTE
 
-TAREA ÚNICA: E12.8 — El optimizador fino con la tierra: margen real, corredores y anclas de
-confianza. (Reporte de Diego tras E12.7: "me dice bloqueado por tierra y todavía no llegué a
-la isla; tiene que ser más fino con la tierra; sino no va a poder entrar por canales; si tengo
-un punto obligatorio debe tomarse como correcto".)
+TAREA ÚNICA: E12.9 — Salida de puerto y llegada sin trucos: el enrutado arranca desde un ancla
+tocada en el mapa. (Reporte de Diego tras E12.8: "sin corredor navegable cerca de (coords)
+pero está en aguas abiertas". Reproducido y diagnosticado por el arquitecto con datos
+reales — ver abajo.)
 
-Diagnóstico ya hecho (no buscar más):
-- web/src/core/routing/landmask.ts:62-79 — isLandWithMargin con nm=3 usa una caja de
-  k=ceil(3/6)=1 celda alrededor de cada muestra: bloquea hasta ~0,15-0,2° (~9-12 nm) alrededor
-  de CADA celda de tierra. Un canal de menos de ~12 nm queda bloqueado de lado a lado: de ahí
-  el "bloqueado por tierra" sin haber llegado a la isla.
-- isochrones.ts (motivo mentiroso) — con reached:false, el motivo se diagnostica con la RECTA
-  origen→destino (segmentClear(origin, dest)): como esa recta cruza la isla — que es justo lo
-  que el enrutado evita — el motivo dice "bloqueado por tierra" SIEMPRE que hay obstáculo de
-  por medio, aunque la frontera haya muerto a 100 nm por otra razón.
-- La gracia de las anclas es ±0,1° (graceDeg = max(3,6)/60): insuficiente para puertos en
-  bahías cóncavas y para confiar en un punto obligatorio pegado a la costa.
-- El paso cerca de costa avanza ~5-8 nm por salto (1 h): un canal de 4 nm no se atraviesa si
-  ningún rumbo aterriza adentro; falta reintento con paso reducido.
+REPRODUCCIÓN YA HECHA Y COMITEADA (383552f): web/src/core/routing/routing.e2e.test.ts corre
+sobre la máscara REAL (public/basemap/land.bits) y la climatología REAL (public/clim/m10.bin).
+Hoy está EN ROJO — tu trabajo lo vuelve VERDE sin tocar los asserts.
 
-Reglas de Diego (van como contrato):
-- Un waypoint obligatorio (⚓) es CORRECTO por definición: el optimizador confía en él y jamás
-  lo rechaza por tierra.
-- Tiene que entrar por canales: el margen de 3 nm es 3 nm de verdad, no una caja de una celda.
+Diagnóstico (evidencia del repro, no buscar más):
+- **Ancla en celda de tierra + climatología → muerte al paso 0 con "sin datos de viento"**:
+  getCell devuelve null en celdas de tierra (ws=255), climateWindField también, y el motor no
+  arranca. La regla "el ancla es VERDAD" (E12.8) se aplicó al chequeo de tierra pero no al
+  viento. Caso real: origen tocado en un puerto (28 N 16 W, Tenerife).
+- **Con viento que nunca es null, la frontera se atasca igual**: 700 pasos y el nodo más
+  cercano al destino solo avanzó 1 025 nm de 2 700. El reintento adaptativo de E12.8 inunda la
+  frontera de micro-pasos (Δt 0,25 h ≈ 1,5 nm), que GANAN la poda por ETA (menor t) y la
+  frontera avanza a paso de tortuga. De ahí el "sin corredor navegable" con posición en aguas
+  abiertas: deathPos reporta el punto más cercano al destino de una frontera envenenada.
+- **En aguas abiertas puras todo funciona** (18 pasos, reached) — el bug es específico del
+  arranque/llegada en costa.
 
-Archivos: web/src/core/routing/landmask.ts (+test), web/src/core/routing/isochrones.ts
-(+test), web/src/ui/app.ts (solo el texto del motivo).
+Archivos: web/src/core/routing/isochrones.ts, windfield.ts, isochrones.test.ts,
+routing.e2e.test.ts (solo arreglar, no aflojar), climateWindField está en windfield.ts y
+getCell en web/src/core/clim.ts.
 
-1. **Margen fino (transformada de distancia):** al decodificar la máscara, calcular una
-   transformada de distancia (dos pasadas, chamfer; el paso horizontal ponderado por
-   cos(latitud) por fila — o BFS con costes escalados, a criterio). isLandWithMargin(lat,
-   lon, nm) pasa a comparar la distancia REAL en millas contra nm. El margen de 3 nm bloquea
-   3 nm, no 9-12. nm=0 sigue siendo isLand puro. El cálculo corre una vez al cargar
-   (< 300 ms en un móvil medio; mantener el test de 1 M de consultas < 50 ms).
-2. **Anclas de confianza:** la gracia por ancla sube a ±0,2° (~12 nm) y las anclas (from/to de
-   cada tramo, incluidos los ⚓) son VERDAD: el motivo de falla jamás las cuestiona. El
-   usuario marcó el punto; el optimizador lo respeta.
-3. **Motivo honesto:** eliminar el diagnóstico por recta origen→destino. El motivo sale del
-   último estado de la frontera (contar por qué mueren los candidatos: tierra / sin viento /
-   TWS máximo / límite de bordos) y dice DÓNDE murió: "sin corredor navegable cerca de (lat,
-   lon)", "sin datos de viento en la zona", "viento supera el máximo del modo", "se agotaron
-   los pasos antes de llegar". Nunca "bloqueado por tierra" si la frontera murió lejos del
-   obstáculo.
-4. **Paso adaptativo en corredores:** si TODOS los candidatos de un punto mueren por tierra,
-   reintentar ese punto con Δt reducido a la mitad (piso 15 min) antes de darlo por muerto:
-   pasos de 1-2 nm atraviesan canales que los de 7 nm saltan.
-5. **Tests:** (a) canal de 0,2° (12 nm) entre isla y continente → el trazado lo atraviesa con
-   margen de 3 nm; (b) isLandWithMargin en el medio de un canal de 0,1° con margen 3 nm →
-   false (el margen es 3 nm reales, no la caja); (c) motivo honesto: frontera muerta lejos del
-   obstáculo → el texto no dice "bloqueado por tierra" y trae la posición; (d) ancla a 1 nm de
-   la costa → el tramo parte y llega sin rechazo; (e) reintento de paso: corredor de ~3 nm →
-   al menos un candidato sobrevive con Δt reducido; (f) TODOS los tests de E12.7 siguen
-   verdes (puerto, isla de 1 celda, simplificación, "Bordo n").
-6. Prueba de Diego en el celu: Noronha por el norte ⚓ y un canal angosto (p. ej. entre islas
-   del Caribe) → el optimizador entra; si algo no llega, el motivo dice dónde y por qué de
-   verdad.
-7. npm test (en web/), bash scripts/build-web.sh, commit "E12.8: margen fino, corredores y
-   anclas de confianza", push, PARÁ.
+1. **Anclas con viento garantizado:** si la consulta de viento cae en una celda sin viento
+   (tierra en máscara/clim), el campo de viento NO la anula: devuelve el viento de la celda
+   de agua más cercana (búsqueda en anillo, radio ~0,5°). Vale para climateWindField y para
+   forecastWindField en los bordes de su caja. Un ancla es VERDAD y siempre tiene viento.
+2. **Escape de puerto:** si el punto de partida (o el candidato de llegada) queda dentro de
+   la zona bloqueada, caminata greedy por celdas de agua hasta agua despejada (dentro de la
+   gracia de ~0,5°), sumando el tiempo al ETA; la frontera arranca desde el agua. La frontera
+   NUNCA "lucha" contra la costa del puerto de salida.
+3. **El reintento adaptativo no puede envenenar la poda:** los micro-pasos no compiten por
+   menor t en la poda de sectores. A tu criterio: piso de reintento en 0,5 h y una sola
+   reintentada por punto, o excluir los pasos de reintento de la poda normal (que compitan
+   por progreso hacia el destino, no por ETA cruda). La frontera sana avanza a pasos reales.
+4. **Los tests del repro pasan:** (a) aguas abiertas margen; (b) uniforme Canarias→Barbados
+   reached en ≤ 400 pasos; (c) clim octubre Canarias→Barbados reached; (d) clim aguas
+   abiertas reached; (e) uniforme agua→Barbados (celda de isla) reached; (f) ningún waypoint
+   pisa tierra fuera de la gracia. Los unitarios de E12.6-E12.8 siguen verdes.
+5. Prueba de Diego en el celu: la ruta que le falló + una salida de puerto real (Montevideo,
+   Palma) + Noronha por el norte ⚓ — todas llegan, y si algo no llega, el motivo es de verdad.
+6. npm test (en web/ — incluye routing.e2e.test.ts con datos reales), bash scripts/build-web.sh,
+   commit "E12.9: salida de puerto y llegada sin trucos", push, PARÁ.
+
+Nota de proceso (pedido de Diego, "ya van 2 fallidos"): desde acá, TODA tarea del enrutado
+pasa por routing.e2e.test.ts en CI antes de publicarse — el repro rojo es el contrato.
