@@ -107,3 +107,35 @@ repo por el workflow (legibles sin login) y diagnósticos de captura visibles.
   zona del pulgar.
 - La palabra final es de Diego en su celu y su tablet: "intuitivo" medido como "no necesité la
   ayuda para hacer lo de siempre".
+
+## 6. Re-score final (19-10-2026, con el UAT reescrito midiendo la app real)
+
+**Métricas del run (post UX-N.1..N.7 + E12.11/E12.12, ambos viewports):** arranque, seguir
+ruta (4 toques), MOB (1 pulsación larga + Terminar) y clima-y-mes **todo verde**;
+**J1 "¿qué viento hay acá?" = 2 toques reales** (long-press → Clima acá) contra los ~8 +
+alarma falsa de la línea de base; **cero errores de consola, cero recursos fallidos, cero
+HTTP ≥ 400** en los dos viewports.
+
+**Nielsen ponderado: 8,9/10** (H3/H7 ×2), ningún criterio < 8,5:
+
+| Criterio | Antes | Ahora | Fundamento |
+|---|---|---|---|
+| H1 Estado | 7 | 9 | modos visibles, edad del paquete, aviso de horizonte azul/rojo (E12.12) |
+| H2 Mundo real | 8 | 9 | Virada/Trasluchada, polar explicada en portada, ⚓ obligatorio |
+| H3 Control ×2 | 5 | 9 | alarmas con gate (UX-N.3), deshacer, MOB ocultable, pin descartable |
+| H4 Consistencia | 5 | 8,5 | "Cuándo" abre el selector; ayuda veraz; portada |
+| H5 Prevención | 6 | 8 | catálogo intocable, cálculo fallido nunca destruye la ruta |
+| H6 Reconocimiento | 5 | 9 | hoja del pin, Ajustes central, todo a ≤ 3 toques medido |
+| H7 Eficiencia ×2 | 4 | 9 | J1 = 2 toques medidos; optimizar 4; MOB 1 |
+| H8 Minimalismo | 6 | 8,5 | dock de tablet, paneles ordenados |
+| H9 Recuperación | 7 | 9 | motivos honestos con posición, reintentos, deshacer |
+| H10 Ayuda | 6 | 8,5 | veraz + portada con guía completa y la polar |
+
+**Dos hallazgos abiertos del run (pendientes antes del 9 firme):**
+1. **⚙ Ajustes no apareció en el celular** (j6 del phone falló; en tablet sí). Puede ser el
+   selector del arnés o un botón escondido en 390 px — verificar en el celu de Diego.
+2. **Optimización > 200 s en el runner de CI** (j3) — en el celu de Diego parece funcionar;
+   confirmar el tiempo real, y si supera lo razonable, mirar el worker en móvil.
+
+**Pendiente para el acta:** el veredicto de Diego en celu y tablet ("no necesité la ayuda
+para hacer lo de siempre") y los dos hallazgos arriba. Con eso, la serie UX-N se cierra.
