@@ -24,13 +24,13 @@ log "hook iniciado (pid $$)"
 
 while true; do
   sleep "$INTERVAL"
-  if ! grep -q "Status:done" SEMAFORO.md 2>/dev/null; then
+  if ! tail -3 SEMAFORO.md 2>/dev/null | grep -qiE '^status: *done *$'; then
     continue
   fi
 
   task="$(grep -m1 'TAREA ÚNICA' SEMAFORO.md 2>/dev/null | sed 's/^TAREA ÚNICA: //' | head -c 120)"
   # Guarda anti-carrera: releer (el arquitecto puede haber avanzado a mano).
-  if ! grep -q "Status:done" SEMAFORO.md 2>/dev/null; then
+  if ! tail -3 SEMAFORO.md 2>/dev/null | grep -qiE '^status: *done *$'; then
     continue
   fi
 
@@ -53,5 +53,5 @@ while true; do
   fi
 
   # Esperar a que el Status:done desaparezca antes de volver a disparar.
-  while grep -q "Status:done" SEMAFORO.md 2>/dev/null; do sleep "$INTERVAL"; done
+  while tail -3 SEMAFORO.md 2>/dev/null | grep -qiE '^status: *done *$'; do sleep "$INTERVAL"; done
 done

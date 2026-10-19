@@ -1,42 +1,34 @@
 ADELANTE
 
-TAREA ÚNICA: UX-N.1 — El mapa es la interfaz primaria: long-press → pin 📍 + hoja de acciones.
-(Parte del rediseño de usabilidad — docs/07-rediseño-usabilidad.md, decisión D1. La meta de la
-serie es 9/10 en celu vertical y tablet apaisada.)
+TAREA ÚNICA: UX-N.2 — El pronóstico por caja: punto, vista o ruta, todos de primera clase.
+(RETOMADA: el hook la saltó por disparo falso — su texto contenía el marcador; ya corregido.
+docs/07-rediseño-usabilidad.md, decisión D2. Hoy la descarga solo existe en "Sin conexión"
+y su caja depende de la ruta activa/seleccionada — app.ts:2326-2401.)
 
-Hoy el mapa no distingue toque de presión larga (cero handlers): "acciones sobre este punto"
-no tiene camino — el clima exige seguir una ruta (8-10 pasos), la posición exige el menú del
-chip, el waypoint exige la ficha. D1 lo cambia: mantener pulsado el mar pide acciones sobre
-ese punto.
+Archivos: web/src/core/forecast.ts (+test), web/src/platform/forecast.ts, web/src/ui/app.ts,
+web/public/app.css.
 
-Archivos: web/src/main.ts (handler contextmenu/pointerhold), web/src/ui/app.ts (hoja y
-acciones), web/public/app.css. Sin cambios en core ni en el worker.
+0. **Arreglo previo (rojo de UX-N.3):** el test "E12.1 consulta de 1 000 000 de puntos en
+   < 50 ms" dio **61,9 ms** — la transformada de distancia (E12.8) encareció
+   `isLandWithMargin`. Optimizá la ruta de consulta hasta volver a < 50 ms (el presupuesto es
+   de la casa: no se afloja el test).
+1. **Tres cajas de primera clase**, con ids propios: `punto-<hash>` (pin + 300 nm de
+   margen), `vista` (límites actuales del mapa), `<código de ruta>`. `downloadForecast` ya
+   recibe id+caja: solo faltan las superficies que las piden.
+2. **"Clima acá" gana descarga:** en la hoja de UX-N.1, botón "Descargar pronóstico acá"
+   (caja del punto + 300 nm) con progreso y edad en el panel; con el paquete, muestra los
+   datos de la hora del deslizador.
+3. **Panel Tiempo:** botón "Descargar pronóstico de la vista" cuando ningún paquete cubra el
+   centro del mapa.
+4. **"Optimizar desde acá":** si ningún paquete cubre pin→destino, ofrece descargar la caja
+   combinada antes de correr el motor.
+5. **Sin conexión lista TODOS los paquetes** (nombre, tipo de caja, edad, tamaño) con borrar
+   por fila — `removeForecast` por fin se llama; sin acumulación eterna.
+6. Tests (node:test): ids punto/vista/ruta; la caja del punto lleva 300 nm de margen; borrar
+   saca el paquete del IndexedDB y no reaparece.
+7. Aceptación: "Clima acá" descarga SIN ninguna ruta seleccionada (J1 del UAT en ≤ 3 toques);
+   Sin conexión muestra las cajas con edad y las borra.
+8. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.2: pronóstico por caja",
+   push. Al terminar escribí "Status: DONE" como última línea de este archivo.
 
-1. **Long-press en el mapa:** mantener pulsado ~500 ms (móvil/táctil) o click derecho
-   (escritorio) pone un pin 📍 en ese punto y abre la hoja `hn-point-actions` (patrón banda:
-   abajo, sin modal del navegador). Un toque corto sigue haciendo TODO lo de hoy (rutas,
-   cuencas, waypoints, fijar posición armada): cero regresión de los clicks existentes.
-2. **La hoja — 4 acciones en N.1:**
-   - **Clima acá:** panel con el clima del punto: pilot chart del mes de planificación
-     (getCell de clim.ts) y, si hay paquete de pronóstico que cubra el punto, los datos de
-     esa hora. (La descarga de una caja por punto llega en UX-N.2; acá solo mostrar.)
-   - **Optimizar desde acá:** el pin es el origen; el próximo toque del mapa es el destino;
-     corre el mismo motor (worker, modos Confort/Crucero/Regata, routing.e2e.test.ts verde)
-     con anclas [pin, destino]. El resultado es la vista de E12.5 (isócronas + comparación,
-     línea punteada): "Aplicar" crea una ruta propia nueva en Mis rutas; el catálogo jamás
-     se toca y nada se guarda solo.
-   - **Fijar posición acá:** posición manual en el pin (reusa UX-2: no pisa el GPS).
-   - **Waypoint acá:** si hay edición de ruta armada, agrega el punto ahí; si no, arranca
-     "+ Nueva ruta" en Mis rutas con ese primer punto.
-   (Medir desde acá se agrega en UX-N.5 cuando exista la herramienta.)
-3. **El pin es descartable:** toque fuera, Esc o ✕ lo quita; el panel de clima se cierra como
-   las bandas.
-4. **Aceptación medible:** el paso "long-press abre acciones" del UAT pasa de hallazgo a
-   verde; J1 "¿qué viento hay acá?" queda en ≤ 3 toques (hoy ~8 + alarma falsa); el smoke de
-   CI sigue verde (un toque corto en el mar no abre nada).
-5. Tests (node:test): coordenadas del pin y destino de cada acción; la hoja muestra las 4;
-   ningún cambio en el catálogo; el toque corto no dispara la hoja.
-6. npm test (en web/), bash scripts/build-web.sh, commit "UX-N.1: long-press, pin y hoja de
-   acciones", push, PARÁ.
-
-Status: DONE
+Status: ready
