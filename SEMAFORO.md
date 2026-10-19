@@ -1,37 +1,39 @@
 ADELANTE
 
-TAREA ÚNICA: E12.12 — La parte de pilot charts del trazado optimizado se pinta de rojo
-punteada. (Diego: "la ruta usa el pronóstico hasta que se acaba y después salta a las
-pilot charts — clarísimo, así está bien; pintá la línea de las pilot punteada de rojo".)
+TAREA ÚNICA: E12.13 — Duración estimada de la ruta en la ficha: cuánto demora con el clima
+del mes (o el pronóstico descargado) y la polar. (Pedido de Diego: "agregar cuánto tiempo
+demora una ruta en esas condiciones para esas polares" — y le gustó la demostración de que
+el viento se evalúa a la hora de llegada del barco.)
 
-REGLA (no negociable): el comportamiento del motor NO se toca. El salto
-pronóstico→pilot charts en el horizonte es correcto y querido. Nada de blend, nada de
-suavizados, nada de cambios en windfield. Esta tarea es SOLO VISUAL.
+LA PIEZA YA EXISTE: `traverseRoute(coords, startMs, wind, polar)` en
+web/src/core/routing/isochrones.ts:664 calcula ETA, viento máximo y millas de un trazado con
+el mismo viento y polar del optimizador (es la base de la comparación "vs original"). No se
+reinventa nada: se expone.
 
-Archivos: web/src/ui/app.ts (optDraw / fuente optroute / capa route-opt),
-isochrones.test.ts (solo si el test necesita exponer algo del split), web/public/app.css
-(solo si la leyenda del panel lo pide).
+Archivos: web/src/core/routing/isochrones.ts (solo si hace falta un envoltorio),
+web/src/ui/app.ts (bloque de la ficha), web/src/core/format.ts (duración, +test),
+web/public/app.css (solo si hace falta).
 
-1. **El corte:** el primer waypoint del trazado optimizado con `etaMs` mayor que
-   `forecastHorizon(pkg)` (windfield.ts:138) marca dónde empieza la parte de pilot
-   charts. Con "Ruta del mes" (climateOnly) TODO el trazado es de pilots.
-2. **La pintura:** los features de la fuente `optroute` se parten en ese punto y llevan
-   la propiedad `clima: true | false`; el paint de la capa `route-opt` pasa `line-color`
-   a `["case", ["get","clima"], "#FF1744", "#4FC3F7"]`:
-   - azul `#4FC3F7` punteada `[3, 2]` → donde hay pronóstico real;
-   - ROJO `#FF1744` punteada `[3, 2]` → donde rige la pilot chart (clima medio).
-   Mismo dash en ambos (lo punteado distingue la propuesta de la ruta real); el COLOR
-   distingue el dato: azul = viento real, rojo = clima medio. El `#FF1744` queda
-   registrado en "Nombres fijos" (docs/04) con esta acepción: "trazado optimizado en
-   clima medio (pilot charts)".
-3. **La leyenda del panel de optimización**, junto al aviso de horizonte de E12.11:
-   "— azul = pronóstico real · - - rojo = pilot charts (clima medio)".
-4. Tests (node:test): con horizonte, los features se parten en el waypoint correcto
-   (clima:false antes, clima:true después); climateOnly → un solo feature con
-   clima:true; todo dentro del horizonte → todo clima:false.
-5. Prueba de Diego: optimizás una travesía más larga que el paquete → azul hasta
-   donde llega el pronóstico, rojo punteada desde ahí; "Ruta del mes" → todo rojo.
-6. npm test (en web/), bash scripts/build-web.sh, commit "E12.12: pilots en rojo
-   punteada", push. Al terminar escribí "Status: DONE" como última línea.
-
-Status: DONE
+1. **Helper estimado (puro, testeable):** `estimateRouteDuration({ coords, clim, pkg,
+   polar, startMs })` → { etaMs, nm, windMaxKn, windSource: "clima" | "pronostico" } —
+   elige el campo: si hay paquete propio de la ruta que cubra el trazado (UX-N.5b),
+   `forecastWindField(pkg, clim)`; si no, `climateWindField(clim)` del mes de planificación.
+   Con traverseRoute debajo, sin tocar el motor.
+2. **En la ficha, junto a "Viento medio en ruta":** la línea "Duración estimada":
+   "≈ 21 días · 5,4 kn medios · viento máx 28 kn — clima de octubre (polar 40 pies)".
+   Con paquete propio: "≈ 18 días · con el pronóstico descargado (hace 4 h)". Formato de
+   duración en format.ts ("≈ 21 días", medias jornadas como "≈ 20,5 días"), unidades por
+   hn.settings.unidades, y la edad visible del paquete (regla 7 de §6 ter).
+3. **Honestidad del rótulo:** dice SIEMPRE con qué viento se calculó (mes de climatología o
+   pronóstico) y qué polar usa ("polar 40 pies" hasta que exista la propia importable).
+   Es un estimado de planificación: no compite con el "Optimizar" — es su antesala.
+4. **Caché:** por (código, variante, mes) mientras la ficha esté abierta; el cálculo es
+   barato (traverseRoute sobre el trazado ya corre en cada optimización).
+5. Tests (node:test): el helper con clim sola → windSource "clima"; con paquete cubriendo
+   → "pronostico" y ETA distinto; formato de duración (21 días, 20,5 días); el viento máx
+   coincide con el máximo de los tramos.
+6. Prueba de Diego: AN12 en octubre → "≈ 21 días · 5,4 kn medios" (los números del
+   arquitecto ya verificaron Canarias→Barbados: 2 761 nm, 21,2-21,5 días, 5,4 kn);
+   con el pronóstico de la ruta descargado → el número baja a lo real y la edad se ve.
+7. npm test (en web/), bash scripts/build-web.sh, commit "E12.13: duración estimada en la
+   ficha", push. Al terminar escribí "Status: DONE" como última línea.
