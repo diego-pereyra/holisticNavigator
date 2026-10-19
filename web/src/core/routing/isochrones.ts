@@ -41,6 +41,9 @@ export interface IsoConfig {
   maxTacks: number;
   /** Máximo de waypoints conservados al simplificar (por tramo). */
   maxWaypoints: number;
+  /** E12.10 — umbral náutico de salida: un waypoint de paso solo se emite si el
+   * rumbo vira de verdad (≥ esta cantidad de grados) o es un Bordo. */
+  wpTurnDeg: number;
   // E12.6 — penalizaciones de los modos de enrutado (Confort/Crucero/Regata).
   // Ceñida: por debajo de `beatTwaDeg`, la velocidad se multiplica por un factor
   // que baja linealmente de 1 en `beatTwaDeg` hasta `beatPenaltyMin` en el cono
@@ -66,6 +69,7 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   tackPenaltyMin: 5,
   maxTacks: 200,
   maxWaypoints: 40,
+  wpTurnDeg: 12,
   beatTwaDeg: 0,
   beatPenaltyMin: 1,
   heavyTwsKn: Infinity,
@@ -448,6 +452,57 @@ function simplifyIndices(coords: LonLat[], tol: number): number[] {
     }
   }
   return [...keep].sort((x, y) => x - y);
+}
+
+// E12.10 — selección náutica de waypoints de paso. Un punto de paso solo se
+// emite si el rumbo vira de verdad ahí (≥ `wpTurnDeg`, medido contra el rumbo
+// combinado de sus vecinos de salida, no contra los crudos); los extremos
+// (anclas) y los Bordos (viradas) son la verdad del viaje y jamás se tocan.
+// Si aún así se pasa `cap`, se recortan los de menor virada.
+function selectWaypointsByTurn(
+  keep: number[],
+  raw: LonLat[],
+  tack: boolean[],
+  wpTurnDeg: number,
+  cap: number,
+): number[] {
+  const turn = (a: number, b: number, c: number): number => {
+    const hIn = initialBearingDeg(raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0]);
+    const hOut = initialBearingDeg(raw[b]![1], raw[b]![0], raw[c]![1], raw[c]![0]);
+    return Math.abs(relative(hIn, hOut));
+  };
+  // Pila: mientras el punto del medio vire menos que el umbral (y no sea Bordo)
+  // se colapsa contra su predecesor de salida. En una curva suave esto deja un
+  // waypoint cada ~2×umbral de acumulado, no uno cada pocas millas.
+  const out: number[] = [];
+  for (const i of keep) {
+    out.push(i);
+    while (out.length >= 3) {
+      const c = out[out.length - 1]!;
+      const b = out[out.length - 2]!;
+      const a = out[out.length - 3]!;
+      if (tack[b] === true) break;
+      if (turn(a, b, c) >= wpTurnDeg) break;
+      out.splice(out.length - 2, 1);
+    }
+  }
+  if (out.length <= cap) return out;
+  // Prioridad al recortar: esquinas de rodeo (viradas grandes) primero; los
+  // Bordos y los extremos no entran en la cola de recorte.
+  const turns = new Map<number, number>();
+  for (let k = 1; k + 1 < out.length; k++) {
+    const i = out[k]!;
+    if (tack[i] !== true) turns.set(i, turn(out[k - 1]!, i, out[k + 1]!));
+  }
+  const droppable = [...turns.keys()].sort((a, b) => turns.get(a)! - turns.get(b)!);
+  let excess = out.length - cap;
+  const drop = new Set<number>();
+  for (const i of droppable) {
+    if (excess <= 0) break;
+    drop.add(i);
+    excess--;
+  }
+  return out.filter((i) => !drop.has(i));
 }
 
 export function routeOptimal(opts: IsoInput): IsoResult {
@@ -847,6 +902,79 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     }
   }
 
+  // E12.10 — la salida final es un solo trazado, no un tramo por tramo: tras
+  // concatenar, un punto de paso solo queda donde el rumbo vira de verdad (o
+  // es un Bordo); las anclas son la verdad del viaje y jamás se tocan. Los
+  // segmentos cortos (< 5 nm) que no cambien el rumbo se fusionan. El total de
+  // pasos queda en ≤ 40; si los Bordos y anclas llevan el número por encima,
+  // se respeta (es la realidad de la ceñida).
+  const wpTurnDeg = opts.config?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg;
+  const MAX_STEP_WAYPOINTS = 40;
+  interface StepPoint {
+    lon: number;
+    lat: number;
+    etaMs: number;
+    anchor: boolean;
+    tack: boolean;
+    seg: number;
+  }
+  const g: StepPoint[] = [];
+  for (let i = 0; i < anchors.length; i++) {
+    g.push({
+      lon: anchors[i]![0],
+      lat: anchors[i]![1],
+      etaMs: i === 0 ? opts.startMs : (segments[i - 1]?.etaMs ?? opts.startMs),
+      anchor: true,
+      tack: false,
+      seg: -1,
+    });
+    for (const p of segments[i]?.points ?? []) {
+      g.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, anchor: false, tack: p.tack === true, seg: i });
+    }
+  }
+  const turnG = (a: number, b: number, c: number): number => {
+    const hIn = initialBearingDeg(g[a]!.lat, g[a]!.lon, g[b]!.lat, g[b]!.lon);
+    const hOut = initialBearingDeg(g[b]!.lat, g[b]!.lon, g[c]!.lat, g[c]!.lon);
+    return Math.abs(relative(hIn, hOut));
+  };
+  let kept: number[] = [];
+  for (let i = 0; i < g.length; i++) {
+    kept.push(i);
+    while (kept.length >= 3) {
+      const c = kept[kept.length - 1]!;
+      const b = kept[kept.length - 2]!;
+      const a = kept[kept.length - 3]!;
+      if (g[b]!.anchor || g[b]!.tack) break;
+      const t = turnG(a, b, c);
+      // Virada chica: no cambia el rumbo del trazado. Virada mediana en pata
+      // corta: se fusiona el segmento sin perder la esquina de verdad.
+      if (t >= wpTurnDeg && !(t < 2 * wpTurnDeg && haversineNm(g[b]!.lat, g[b]!.lon, g[c]!.lat, g[c]!.lon) < 5)) break;
+      kept.splice(kept.length - 2, 1);
+    }
+  }
+  let stepCount = kept.filter((i) => !g[i]!.anchor && !g[i]!.tack).length;
+  if (stepCount > MAX_STEP_WAYPOINTS) {
+    const turns = new Map<number, number>();
+    for (let k = 1; k + 1 < kept.length; k++) {
+      const i = kept[k]!;
+      if (!g[i]!.anchor && !g[i]!.tack) turns.set(i, turnG(kept[k - 1]!, i, kept[k + 1]!));
+    }
+    const droppable = [...turns.keys()].sort((a, b) => turns.get(a)! - turns.get(b)!);
+    const drop = new Set<number>();
+    for (const i of droppable) {
+      if (stepCount <= MAX_STEP_WAYPOINTS) break;
+      drop.add(i);
+      stepCount--;
+    }
+    kept = kept.filter((i) => !drop.has(i));
+  }
+  for (const s of segments) s.points = [];
+  for (const i of kept) {
+    const p = g[i]!;
+    if (p.anchor || p.seg < 0) continue;
+    segments[p.seg]!.points.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, ...(p.tack ? { tack: true } : {}) });
+  }
+
   return { reached, etaMs: startMs, nm, tacks, windMax, anchors, segments, isochrones, steps, ...(reason ? { reason } : {}) };
 }
 
@@ -889,15 +1017,33 @@ function buildResult(
     raw[raw.length - 1] = [dest.lon, dest.lat];
   }
 
-  const idx = simplifyIndices(raw, 0.1);
-  let keep = idx;
-  const cap = Math.max(2, maxWaypoints);
-  if (idx.length > cap) {
-    const stride = (idx.length - 1) / (cap - 1);
-    const thinned: number[] = [];
-    for (let i = 0; i < cap; i++) thinned.push(idx[Math.round(i * stride)]!);
-    keep = [...new Set(thinned)].sort((a, b) => a - b);
+  // E12.10 — umbral náutico de salida: el motor interno conserva toda su
+  // resolución; la lista de paso solo lleva viradas de verdad.
+  let keep = selectWaypointsByTurn(
+    simplifyIndices(raw, 0.1),
+    raw,
+    raw.map(() => false),
+    cfg?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg,
+    Math.max(2, maxWaypoints),
+  );
+  // E12.10 — Bordo (virada): el rumbo entra y sale cruzando el viento entre las
+  // patas VISIBLES de la salida — lo que el marino ve en la tabla. Un zigzag de
+  // popa (mismo lado del viento) no es un bordo. La marca se calcula ya sobre la
+  // lista reducida y jamás se filtra después.
+  const tackRaw: boolean[] = raw.map(() => false);
+  for (let k = 1; k + 1 < keep.length; k++) {
+    const b = keep[k]!;
+    const w = wind(raw[b]![1], raw[b]![0], etaOf[b]!);
+    if (!w) continue;
+    const a = keep[k - 1]!;
+    const c = keep[k + 1]!;
+    const hIn = initialBearingDeg(raw[a]![1], raw[a]![0], raw[b]![1], raw[b]![0]);
+    const hOut = initialBearingDeg(raw[b]![1], raw[b]![0], raw[c]![1], raw[c]![0]);
+    const sIn = Math.sign(relative(hIn, w.dir));
+    const sOut = Math.sign(relative(hOut, w.dir));
+    if (sIn !== 0 && sOut !== 0 && sIn !== sOut) tackRaw[b] = true;
   }
+  keep = selectWaypointsByTurn(keep, raw, tackRaw, cfg?.wpTurnDeg ?? DEFAULT_ISO_CONFIG.wpTurnDeg, Math.max(2, maxWaypoints));
 
   // E12.7 — post-verificación de la simplificación: el recorte no puede meter un
   // tramo que cruce tierra con margen ni que cruce viento > máximo del modo. Si
@@ -923,15 +1069,16 @@ function buildResult(
     while (keep.length >= 2 && guard++ < raw.length + 1) {
       let bad = -1;
       for (let k = 0; k + 1 < keep.length; k++) {
-        if (!pairOk(keep[k]!, keep[k + 1]!)) { bad = k; break; }
+        const a = keep[k]!;
+        const b = keep[k + 1]!;
+        // E12.10 — dos vecinos crudos no tienen resolución que reintroducir:
+        // ese par YA es la ruta real del motor. Reintegrar la ruta cruda
+        // entera era lo que llenaba la tabla (la ruta de 268 puntos).
+        if (b - a >= 2 && !pairOk(a, b)) { bad = k; break; }
       }
       if (bad < 0) break;
       const a = keep[bad]!;
       const b = keep[bad + 1]!;
-      if (b - a < 2) {
-        keep = raw.map((_, i) => i);
-        break;
-      }
       keep = [...keep, Math.floor((a + b) / 2)].sort((x, y) => x - y);
     }
   }
@@ -942,17 +1089,8 @@ function buildResult(
       lat: raw[i]![1],
       etaMs: etaOf[i] ?? etaOf[etaOf.length - 1] ?? 0,
     };
-    // E12.7 — marca de virada: el rumbo entra por un lado y sale por el otro.
-    if (i > 0 && i < raw.length - 1) {
-      const hIn = initialBearingDeg(raw[i - 1]![1], raw[i - 1]![0], raw[i]![1], raw[i]![0]);
-      const hOut = initialBearingDeg(raw[i]![1], raw[i]![0], raw[i + 1]![1], raw[i + 1]![0]);
-      const w = wind(raw[i]![1], raw[i]![0], wp.etaMs);
-      if (w) {
-        const sIn = Math.sign(relative(hIn, w.dir));
-        const sOut = Math.sign(relative(hOut, w.dir));
-        if (sIn !== 0 && sOut !== 0 && sIn !== sOut) wp.tack = true;
-      }
-    }
+    // E12.7 — marca de virada (detectada sobre el trazado crudo en `tackRaw`).
+    if (tackRaw[i] === true) wp.tack = true;
     return wp;
   });
 

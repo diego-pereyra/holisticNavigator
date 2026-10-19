@@ -347,3 +347,77 @@ test("E12.8 ancla a 1 nm de la costa → el tramo parte y llega sin rechazo", ()
   const last = res.waypoints[res.waypoints.length - 1]!;
   assert.ok(last.lon < 0.5, `llega sin pisar tierra (${last.lon})`);
 });
+
+// E12.10 — el trazado dice lo justo: waypoints de paso solo donde el rumbo vira
+// de verdad (umbral náutico), Bordos y anclas intactos, tope global honesto.
+
+// Máscara con una isla circular (radio en grados) para forzar rodeos suaves.
+function circleLand(cLat: number, cLon: number, rDeg: number): Landmask {
+  const rad = (lat: number, lon: number): number =>
+    Math.hypot(lat - cLat, (lon - cLon) * Math.cos((cLat * Math.PI) / 180));
+  const inside = (lat: number, lon: number): boolean => rad(lat, lon) <= rDeg;
+  return {
+    width: 3600,
+    height: 1800,
+    isLand: inside,
+    isLandWithMargin: (lat, lon, nm) => rad(lat, lon) <= rDeg + nm / 60,
+  };
+}
+
+function countPasos(waypoints: Array<{ tack?: boolean }>, anchors: number): number {
+  const bordos = waypoints.filter((w) => w.tack === true).length;
+  return waypoints.length - anchors - bordos;
+}
+
+test("E12.10 curva suave de ~90° en el rodeo → ≤ 5 waypoints de paso", () => {
+  // Isla circular grande entre origen y destino: la ruta la rodea en un arco
+  // suave de ~120° acumulados. Douglas-Peucker dejaba un punto cada ~6 nm
+  // (decenas); el umbral náutico deja solo las viradas de verdad.
+  const land = circleLand(1.2, 0, 1.2);
+  const res = routeOptimal(base({ from: [-2.5, 0], to: [2.5, 0], wind: uniform(270, 14), land }));
+  assert.equal(res.reached, true);
+  const pasos = countPasos(res.waypoints, 2);
+  assert.ok(pasos <= 5, `waypoints de paso: ${pasos}`);
+  assert.ok(res.waypoints.length >= 3, "las anclas y al menos la esquina del arco");
+});
+
+test("E12.10 ceñida → todos los Bordos presentes, con cualquier umbral", () => {
+  const sinUmbral = routeOptimal(base({ wind: uniform(0, 14) }));
+  const conUmbral = routeOptimal(base({ wind: uniform(0, 14), config: { wpTurnDeg: 60 } }));
+  const bordos = (r: typeof sinUmbral): number => r.waypoints.filter((w) => w.tack === true).length;
+  assert.ok(bordos(sinUmbral) >= 2, `la ceñida tiene bordos (${bordos(sinUmbral)})`);
+  assert.equal(bordos(conUmbral), bordos(sinUmbral), "un umbral alto no borra Bordos");
+  assert.equal(bordos(conUmbral), conUmbral.tacks, "cada bordo del motor está en la tabla");
+});
+
+test("E12.10 rodeo de isla → la esquina de rodeo cae sola en el umbral", () => {
+  const island = blockLand(2.95, -0.05, 3.05, 0.05);
+  const res = routeOptimal(
+    base({ from: [0, 0], to: [6, 0], wind: uniform(270, 12), land: island, config: { wpTurnDeg: 60 } }),
+  );
+  assert.equal(res.reached, true);
+  const maxDev = Math.max(...res.waypoints.map((w) => distToLineNm([w.lon, w.lat], [0, 0], [6, 0])));
+  assert.ok(maxDev > 3, `la esquina de rodeo sobrevive con umbral alto (${maxDev.toFixed(1)} nm)`);
+});
+
+test("E12.10 muchos tramos → puntos de paso ≤ 40 globales", () => {
+  // Canal serpenteante de ~22 dientes cruzado por 4 tramos: la tabla final es
+  // un solo trazado (no un tramo por tramo) y el tope de pasos es global.
+  const teeth: Array<[number, number, number, number]> = [];
+  for (let k = 0; k < 22; k++) {
+    const lon0 = 0.5 + k * 0.7;
+    if (k % 2 === 0) teeth.push([lon0, 1.1, lon0 + 0.45, 2.2]);
+    else teeth.push([lon0, -2.2, lon0 + 0.45, -1.1]);
+  }
+  const land = fineLand(teeth);
+  const res = routeMulti({
+    anchors: [[0.1, 0], [4, 0], [8, 0], [12, 0], [16.2, 0]],
+    wind: uniform(270, 13),
+    land,
+  });
+  assert.equal(res.reached, true, "la ruta tiene que llegar serpenteano");
+  const pts = res.segments.flatMap((s) => s.points);
+  const pasos = countPasos(pts, 0);
+  assert.ok(pasos <= 40, `pasos globales: ${pasos}`);
+  assert.ok(pts.some((p) => p.tack === true), "los Bordos del canal siguen presentes");
+});

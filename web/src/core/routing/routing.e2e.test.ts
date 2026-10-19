@@ -67,3 +67,16 @@ runCase("climatología octubre, aguas abiertas", octubre, [-55, 15], [-50, 10]);
 runCase("SONDA uniforme, origen mar abierto → Barbados (celda de isla)", uniforme, [-55, 15], [-59, 13]);
 runCase("SONDA uniforme, origen mar abierto → agua al NE de Barbados", uniforme, [-55, 15], [-58.6, 12.9]);
 runCase("SONDA uniforme, origen isla Canarias → agua al NE de Barbados", uniforme, [-16, 28], [-58.6, 12.9]);
+
+// E12.10 — la tabla de waypoints queda navegable: los puntos de paso son solo
+// viradas de verdad; los Bordos de la ceñida-popa y las anclas suman lo que
+// suman (es la realidad del viaje, y no se recortan).
+test("E12.10 Canarias→Barbados: recuento navegable de la tabla", () => {
+  const r = routeOptimal({ from: [-16, 28], to: [-59, 13], startMs: T0, wind: uniforme, polar: genericPolar(), land });
+  assert.ok(r.reached, `no llegó: ${r.reason ?? "sin motivo"}`);
+  const bordos = r.waypoints.filter((w) => w.tack === true).length;
+  const pasos = r.waypoints.length - 2 - bordos;
+  console.log(`  [E12.10] wps=${r.waypoints.length} bordos=${bordos} pasos=${pasos}`);
+  assert.ok(pasos <= 15, `puntos de paso: ${pasos}`);
+  assert.ok(r.waypoints.length <= 20, `tabla total: ${r.waypoints.length}`);
+});
