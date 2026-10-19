@@ -1045,6 +1045,55 @@ export function multiRouteCoords(result: IsoMultiResult): LonLat[] {
   return out;
 }
 
+// E12.12 — la ruta optimizada con la ETA de cada punto, en el mismo orden que
+// `multiRouteCoords`. El primer punto es la salida: su ETA (startMs = Date.now())
+// cae siempre dentro del horizonte del paquete, así que se marca con -Infinity
+// para que nunca dispare el corte a las pilot charts.
+function multiRouteTimed(result: IsoMultiResult): { lon: number; lat: number; etaMs: number }[] {
+  const out: { lon: number; lat: number; etaMs: number }[] = [];
+  if (result.anchors.length === 0) return out;
+  out.push({ lon: result.anchors[0]![0], lat: result.anchors[0]![1], etaMs: Number.NEGATIVE_INFINITY });
+  for (let i = 0; i < result.segments.length; i++) {
+    const seg = result.segments[i]!;
+    for (const p of seg.points) out.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs });
+    if (!seg.reached) break;
+    const anchor = result.anchors[i + 1];
+    if (anchor) out.push({ lon: anchor[0], lat: anchor[1], etaMs: seg.etaMs });
+  }
+  return out;
+}
+
+// E12.12 — el trazado optimizado partido en el horizonte del pronóstico: la
+// parte dentro del horizonte es viento real y la que empieza en el primer
+// waypoint con ETA mayor es pilot charts (clima medio). Sin paquete
+// (climateOnly / "Ruta del mes") todo el trazado es de pilots. Devuelve los
+// tramos con la propiedad `clima` para el paint de la capa `route-opt`. Cada
+// tramo es un LineString propio; cuando hay corte, comparten el waypoint del
+// corte para que la línea siga continua.
+export function multiRouteSplit(result: IsoMultiResult, horizon: number | null): { coords: LonLat[]; clima: boolean }[] {
+  const pts = multiRouteTimed(result);
+  const coords = pts.map((p) => [p.lon, p.lat] as LonLat);
+  if (coords.length === 0) return [];
+  if (horizon === null) return [{ coords, clima: true }];
+  const k = pts.findIndex((p) => p.etaMs > horizon);
+  if (k === -1) return [{ coords, clima: false }];
+  if (k >= pts.length - 1) {
+    // El corte cae en el último punto: un tramo rojo de un solo punto no es
+    // válido, así que se corre un paso atrás y la parte que cruza el horizonte
+    // queda en rojo.
+    const s = pts.length - 2;
+    if (s <= 0) return [{ coords, clima: true }];
+    return [
+      { coords: coords.slice(0, s + 1), clima: false },
+      { coords: coords.slice(s), clima: true },
+    ];
+  }
+  return [
+    { coords: coords.slice(0, k + 1), clima: false },
+    { coords: coords.slice(k), clima: true },
+  ];
+}
+
 function buildResult(
   path: Node[],
   dest: { lat: number; lon: number },

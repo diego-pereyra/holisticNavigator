@@ -2096,6 +2096,21 @@ html[data-theme="red"] {
   font-size: 12px;
   font-variant-numeric: tabular-nums;
 }
+/* E12.12 — leyenda del trazado optimizado: azul = pronóstico real, rojo
+   punteado = pilot charts (clima medio). El color distingue el dato. */
+.hn-opt-legend {
+  margin: 6px 0 0;
+  color: var(--hn-muted);
+  font-size: 12px;
+}
+.hn-leg-azul {
+  color: #4FC3F7;
+  font-weight: 600;
+}
+.hn-leg-rojo {
+  color: #FF1744;
+  font-weight: 600;
+}
 .hn-opt-acts {
   display: flex;
   flex-wrap: wrap;

@@ -5,12 +5,14 @@ import { genericPolar } from "./polar.ts";
 import {
   detectManeuver,
   multiRouteCoords,
+  multiRouteSplit,
   routeOptimal,
   routeOptimalMulti,
   routingModeConfig,
   traverseRoute,
   type IsoInput,
   type IsoMultiInput,
+  type IsoMultiResult,
   type RoutingMode,
 } from "./isochrones.ts";
 import type { Landmask } from "./landmask.ts";
@@ -470,4 +472,59 @@ test("E12.10 muchos tramos → puntos de paso ≤ 40 globales", () => {
   const pasos = countPasos(pts, 0);
   assert.ok(pasos <= 40, `pasos globales: ${pasos}`);
   assert.ok(pts.some((p) => p.tack === true), "los Bordos del canal siguen presentes");
+});
+
+// E12.12 — resultado mínimo con ETAs conocidas: 2 anclas y un tramo, de modo que
+// el trazado sea [salida, puntos…, llegada] con la ETA de cada punto.
+function splitResult(pointEtas: number[], segEta: number): IsoMultiResult {
+  const points = pointEtas.map((etaMs, i) => ({ lon: i + 1, lat: 0, etaMs }));
+  return {
+    reached: true,
+    etaMs: segEta,
+    nm: 1,
+    tacks: 0,
+    gybes: 0,
+    windMax: null,
+    anchors: [[0, 0], [pointEtas.length + 1, 0]],
+    segments: [{ reached: true, etaMs: segEta, nm: 1, tacks: 0, gybes: 0, windMax: null, points, isochrones: [] }],
+    isochrones: [],
+    steps: 0,
+  };
+}
+
+test("E12.12 con horizonte, el trazado se parte en el primer waypoint que lo supera", () => {
+  const res = splitResult([10, 20, 30], 40); // ETAs: -inf, 10, 20, 30, 40
+  const parts = multiRouteSplit(res, 25);
+  assert.equal(parts.length, 2, "dos tramos: pronóstico + pilot charts");
+  assert.equal(parts[0]!.clima, false, "el primero es pronóstico real (azul)");
+  assert.equal(parts[1]!.clima, true, "el segundo es pilot charts (rojo)");
+  assert.deepEqual(parts[0]!.coords.at(-1), parts[1]!.coords[0], "comparten el waypoint del corte");
+  assert.deepEqual(parts[0]!.coords.at(-1), [3, 0], "el corte es el waypoint con ETA 30 (> 25)");
+  assert.equal(parts[0]!.coords.length, 4, "azul hasta el corte, inclusive");
+  assert.equal(parts[1]!.coords.length, 2, "rojo desde el corte");
+});
+
+test("E12.12 climateOnly → todo el trazado es pilot charts", () => {
+  const res = splitResult([10, 20], 30);
+  const parts = multiRouteSplit(res, null);
+  assert.equal(parts.length, 1, "un solo tramo");
+  assert.equal(parts[0]!.clima, true, "todo pilot charts (rojo)");
+  assert.equal(parts[0]!.coords.length, multiRouteCoords(res).length, "el trazado completo");
+});
+
+test("E12.12 todo dentro del horizonte → todo pronóstico real", () => {
+  const res = splitResult([10, 20], 30);
+  const parts = multiRouteSplit(res, 1000);
+  assert.equal(parts.length, 1, "un solo tramo");
+  assert.equal(parts[0]!.clima, false, "todo pronóstico real (azul)");
+});
+
+test("E12.12 corte en el último waypoint → dos tramos válidos y continuos", () => {
+  const res = splitResult([10, 20, 30], 40); // el primer ETA > 35 es el 40 (último)
+  const parts = multiRouteSplit(res, 35);
+  assert.equal(parts.length, 2);
+  assert.equal(parts[0]!.clima, false);
+  assert.equal(parts[1]!.clima, true);
+  assert.equal(parts[1]!.coords.length, 2, "el tramo rojo conserva 2 puntos");
+  assert.deepEqual(parts[0]!.coords.at(-1), parts[1]!.coords[0], "comparten el corte");
 });

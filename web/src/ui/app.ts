@@ -90,11 +90,12 @@ import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack,
 import type { OwnRoute } from "../core/routes-own.ts";
 import { addWaypoint } from "../core/routes-own.ts";
 import { genericPolar } from "../core/routing/polar.ts";
-import { forecastWindField, horizonNotice } from "../core/routing/windfield.ts";
+import { forecastHorizon, forecastWindField, horizonNotice } from "../core/routing/windfield.ts";
 import {
   DEFAULT_ROUTING_MODE,
   ROUTING_MODES,
   multiRouteCoords,
+  multiRouteSplit,
   routingModeConfig,
   type IsoBaseline,
   type IsoMultiResult,
@@ -1006,11 +1007,17 @@ function installBaseLayers(map: MlMap): void {
   });
   // Trazado óptimo propuesto (E12.5): mismo color que la ruta activa pero
   // punteado, para distinguirlo de la ruta real sin inventar un color nuevo.
+  // E12.12: azul donde rige el pronóstico real, rojo punteado donde empieza la
+  // pilot chart (clima medio); mismo dash en ambos, el color distingue el dato.
   map.addLayer({
     id: "route-opt",
     type: "line",
     source: "optroute",
-    paint: { "line-color": "#4FC3F7", "line-width": 2.5, "line-dasharray": [3, 2] },
+    paint: {
+      "line-color": ["case", ["get", "clima"], "#FF1744", "#4FC3F7"],
+      "line-width": 2.5,
+      "line-dasharray": [3, 2],
+    },
   });
   // Waypoints de la ruta elegida: puntos tocables para seleccionar la fila (W4.5 #3 bis).
   map.addLayer({
@@ -3736,8 +3743,12 @@ function optDraw(ui: UiState, code: string): void {
   }
   const isos = job.result.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
   setSource(ui.map, "wx-isochrones", featureCollection(isos));
-  const line = multiRouteCoords(job.result) as [number, number][];
-  setSource(ui.map, "optroute", featureCollection([lineFeature(line)]));
+  // E12.12: azul hasta donde llega el pronóstico, rojo punteado desde ahí.
+  const pkg = job.climateOnly ? null : ui.forecast();
+  const parts = multiRouteSplit(job.result, pkg ? forecastHorizon(pkg) : null).map((part) =>
+    lineFeature(part.coords as [number, number][], { clima: part.clima }),
+  );
+  setSource(ui.map, "optroute", featureCollection(parts));
 }
 
 function optClearLayers(ui: UiState): void {
@@ -3884,6 +3895,17 @@ function optRender(
       panel.append(stats);
       const notice = horizonNotice(job.climateOnly ? null : ui.forecast(), r.etaMs);
       if (notice) panel.append(el("p", { class: "hn-muted hn-opt-notice" }, notice));
+      // E12.12 — leyenda del trazado: el color distingue el dato, no el dash.
+      panel.append(
+        el(
+          "p",
+          { class: "hn-opt-legend" },
+          el("span", { class: "hn-leg-azul" }, "—"),
+          " azul = pronóstico real · ",
+          el("span", { class: "hn-leg-rojo" }, "- -"),
+          " rojo = pilot charts (clima medio)",
+        ),
+      );
     }
     const acts = el("div", { class: "hn-opt-acts" });
     if (kind === "own" && r.reached) {
@@ -5152,7 +5174,12 @@ function renderPointOptBody(ui: UiState, host: HTMLElement, code: string, bootEr
   // Mismas capas de E12.5: isócronas + trazado punteado de comparación.
   const isos = r.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
   setSource(ui.map, "wx-isochrones", featureCollection(isos));
-  setSource(ui.map, "optroute", featureCollection([lineFeature(multiRouteCoords(r) as [number, number][])]));
+  // E12.12: azul hasta donde llega el pronóstico, rojo punteado desde ahí.
+  const pkg = job.climateOnly ? null : ui.forecast();
+  const parts = multiRouteSplit(r, pkg ? forecastHorizon(pkg) : null).map((part) =>
+    lineFeature(part.coords as [number, number][], { clima: part.clima }),
+  );
+  setSource(ui.map, "optroute", featureCollection(parts));
   if (job.baseline) host.append(el("p", { class: "hn-opt-compare" }, optCompareText(ui, job)));
   const stats = el("div", { class: "hn-opt-stats" });
   stats.append(
