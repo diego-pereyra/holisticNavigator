@@ -28,4 +28,4 @@ Archivos: web/src/ui/app.ts, web/public/app.css. core/format.ts ya está hecho �
    completo (UI de visibilidad y unidades)", push. Al terminar escribí "Status: DONE"
    como última línea de este archivo.
 
-Status: ready
+Status: done
