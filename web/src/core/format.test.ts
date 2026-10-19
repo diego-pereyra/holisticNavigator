@@ -47,3 +47,42 @@ test("defaults", () => {
   assert.equal(DEFAULT_UNITS.distance, "nm");
   assert.equal(DEFAULT_UNITS.depth, "m");
 });
+
+import { applyVisibility, applyUnits, mobButtonVisible, DEFAULT_VISIBILITY, DEFAULT_UNITS as DU } from "./format.ts";
+
+test("visibility defaults: todo visible", () => {
+  assert.deepEqual(applyVisibility(null), DEFAULT_VISIBILITY);
+  assert.deepEqual(applyVisibility({}), DEFAULT_VISIBILITY);
+});
+
+test("visibility persistida: sobrevive recarga y respeta defaults", () => {
+  const saved = JSON.parse('{"mob":false,"fab":false,"basura":1}');
+  const v = applyVisibility(saved);
+  assert.equal(v.mob, false);
+  assert.equal(v.fab, false);
+  assert.equal(v.scaleNote, true);
+  assert.equal(v.graticule, true);
+  assert.equal(v.seamarksOnline, true);
+});
+
+test("mobButtonVisible: activo siempre se ve, oculto con posición se esconde", () => {
+  const off = { ...DEFAULT_VISIBILITY, mob: false };
+  assert.equal(mobButtonVisible(off, true, false), false);
+  assert.equal(mobButtonVisible(off, true, true), true);
+  assert.equal(mobButtonVisible(off, false, true), true);
+  assert.equal(mobButtonVisible(DEFAULT_VISIBILITY, true, false), true);
+  assert.equal(mobButtonVisible(DEFAULT_VISIBILITY, false, false), false);
+});
+
+test("unidades persistidas: km/h y km sobreviven", () => {
+  const saved = JSON.parse('{"speed":"kmh","distance":"km","depth":"ft","otra":9}');
+  const u = applyUnits(saved);
+  assert.equal(u.speed, "kmh");
+  assert.equal(u.distance, "km");
+  assert.equal(u.depth, "ft");
+});
+
+test("unidades persistidas: basura cae a defaults náuticos", () => {
+  const u = applyUnits({ speed: "mph", distance: 42, depth: "brazas" });
+  assert.deepEqual(u, DU);
+});

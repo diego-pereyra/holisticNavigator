@@ -2180,3 +2180,38 @@ html[data-theme="red"] {
     padding: 12px 8px 8px;
   }
 }
+
+/* UX-N.4b: entrada fija ⚙ a Ajustes en la barra de contexto. */
+.hn-ctx-ajustes {
+  min-height: 44px;
+  min-width: 40px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  padding: 4px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.hn-ctx-ajustes:hover {
+  background: var(--hn-panel-2);
+}
+.hn-ctx-ajustes.on {
+  color: var(--hn-accent);
+}
+
+/* UX-N.4b: unidades en Ajustes. Tres campos que se apilan en pantallas chicas. */
+.hn-unit-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 6px;
+}
+.hn-unit-fields .hn-field {
+  min-width: 92px;
+}
+.hn-unit-select {
+  width: 100%;
+}

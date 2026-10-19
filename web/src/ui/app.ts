@@ -145,10 +145,22 @@ import {
   MONTH_INITIAL,
   MONTH_NAME,
   currentMonthUtc,
-  nm,
-  nmDecimal,
-  rangeNm,
 } from "./format.ts";
+import {
+  formatSpeed,
+  formatDistance,
+  formatDepth,
+  applyUnits,
+  applyVisibility,
+  mobButtonVisible,
+  FT_PER_M,
+  DEFAULT_UNITS,
+  DEFAULT_VISIBILITY,
+  type Units,
+  type DistanceUnit,
+  type DepthUnit,
+  type Visibility,
+} from "../core/format.ts";
 import { resolveTheme, THEME_LABEL, THEME_ORDER, themeIcon, type ThemeChoice, type ThemeName } from "./theme.ts";
 import { POINT_ACTIONS, forecastCoversPoint, type PointActionId } from "./point-actions.ts";
 import {
@@ -177,7 +189,7 @@ import {
   type WxLayers,
 } from "./weather.ts";
 
-type TabName = "aqui" | "rutas" | "travesia";
+type TabName = "aqui" | "rutas" | "travesia" | "ajustes";
 type SheetState = "peek" | "half" | "full";
 // Arranque progresivo (W5.1): el catálogo (índice+cuencas) y la geometría de
 // rutas llegan después de montar el mapa; la hoja muestra el estado mientras tanto.
@@ -203,6 +215,8 @@ interface Settings {
   // UX-N.3: Planificar y Navegar (D3). Las alarmas de navegación solo suenan
   // en Navegar.
   uiMode?: UiMode;
+  visibilidad?: Visibility;
+  unidades?: Units;
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -301,6 +315,8 @@ interface UiState {
   // desenganchar un Navegar forzado a mano antes de los 2 minutos.
   mode: Signal<UiMode>;
   modeEnteredAt: number;
+  unidades: Signal<Units>;
+  visibilidad: Signal<Visibility>;
   settings: Settings;
   zones?: ZoneHooks;
 }
@@ -369,7 +385,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     navFixes: [],
     mode: signal<UiMode>("planificar"),
     modeEnteredAt: Date.now(),
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE, uiMode: "planificar" },
+    unidades: signal<Units>({ ...DEFAULT_UNITS }),
+    visibilidad: signal<Visibility>({ ...DEFAULT_VISIBILITY }),
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE, uiMode: "planificar", visibilidad: { ...DEFAULT_VISIBILITY }, unidades: { ...DEFAULT_UNITS } },
     zones: deps.zones,
   };
 
@@ -377,6 +395,19 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   // E13.4: las capas wx-* ya existen; aplicar ya el estado de los interruptores
   // (el effect de arranque puede correr antes de que las capas estén creadas).
   applyWxLayers(map, ui.wxLayers());
+
+  // UX-N.4b: retícula y balizas OSM online siguen el interruptor de visibilidad.
+  effect(() => {
+    const on = ui.visibilidad().graticule ? "visible" : "none";
+    for (const id of ["graticule-line", "graticule-label"]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", on);
+    }
+  });
+  effect(() => {
+    if (map.getLayer("seamarks-online")) {
+      map.setLayoutProperty("seamarks-online", "visibility", ui.visibilidad().seamarksOnline ? "visible" : "none");
+    }
+  });
   wireGps(ui);
 
   // Tema Día / Noche / Rojo (T11.5): `theme` resuelve Auto con la posición y la
@@ -473,6 +504,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     ui.map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(ui.map.getZoom(), 6) });
   });
   root.append(fab);
+  effect(() => {
+    fab.hidden = !ui.visibilidad().fab;
+  });
 
   // UX-3: nota discreta abajo a la izquierda cuando el zoom pasa el detalle
   // disponible en el centro (la carta base llega a zoom 6; una zona descargada,
@@ -480,6 +514,11 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   const scaleNote = el("div", { class: "hn-scale-note" });
   scaleNote.hidden = true;
   root.append(scaleNote);
+  // UX-N.4b: la nota de escala respeta el interruptor de visibilidad.
+  let scaleNoteText: string | null = null;
+  effect(() => {
+    scaleNote.hidden = scaleNoteText === null || !ui.visibilidad().scaleNote;
+  });
 
   // E8.3/E13.3: leyenda compacta y selector de capas abajo a la izquierda,
   // cuando el interruptor "Tiempo" no está apagado.
@@ -551,7 +590,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     mobBtn.classList.remove("hn-mob-press");
   };
   mobBtn.addEventListener("pointerdown", (ev) => {
-    if (ui.mob() || !ui.position()) return;
+    if (!ui.visibilidad().mob || ui.mob() || !ui.position()) return;
     ev.preventDefault();
     mobBtn.classList.add("hn-mob-press");
     mobPress = window.setTimeout(() => {
@@ -573,7 +612,8 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   effect(() => {
     const has = ui.position() !== null;
     const on = ui.mob() !== null;
-    mobBtn.hidden = !has;
+    // Un MOB activo siempre se ve, aunque el botón esté oculto.
+    mobBtn.hidden = !mobButtonVisible(ui.visibilidad(), has, on);
     mobBtn.classList.toggle("hn-mob-on", on);
   });
 
@@ -640,6 +680,14 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     ui.settings.uiMode = m;
     saveSettings(ui);
   });
+  ui.visibilidad.subscribe((v) => {
+    ui.settings.visibilidad = v;
+    saveSettings(ui);
+  });
+  ui.unidades.subscribe((v) => {
+    ui.settings.unidades = v;
+    saveSettings(ui);
+  });
 
   // UX-2: recién después de restaurar se decide arrancar el GPS, para no pisar
   // una posición manual persistida aunque el permiso esté concedido.
@@ -683,12 +731,10 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
       ui.routes.set("failed");
     },
     setScaleNote(text) {
-      if (text === null) {
-        scaleNote.hidden = true;
-        return;
-      }
-      if (scaleNote.textContent !== text) scaleNote.textContent = text;
-      scaleNote.hidden = false;
+      scaleNoteText = text;
+      if (text !== null && scaleNote.textContent !== text) scaleNote.textContent = text;
+      // El effect de visibilidad arma `hidden`; acá solo se refleja el texto.
+      scaleNote.hidden = text === null || !ui.visibilidad().scaleNote;
     },
     openPointActions(lat, lon) {
       openPointActions(ui, lat, lon);
@@ -726,6 +772,16 @@ async function restore(ui: UiState): Promise<void> {
     }
     if (s.routingMode && ROUTING_MODES.some((m) => m.id === s.routingMode)) {
       ui.settings.routingMode = s.routingMode;
+    }
+    if (s.visibilidad) {
+      const v = applyVisibility(s.visibilidad);
+      ui.visibilidad.set(v);
+      ui.settings.visibilidad = v;
+    }
+    if (s.unidades) {
+      const u = applyUnits(s.unidades);
+      ui.unidades.set(u);
+      ui.settings.unidades = u;
     }
     const mode = normalizeUiMode(s.uiMode);
     if (mode) {
@@ -835,9 +891,8 @@ function persist(ui: UiState, key: string, value: string): void {
 function installBaseLayers(map: MlMap): void {
   const empty = featureCollection([]);
 
-  // Balizas OSM en línea (E10.3): raster de OpenSeaMap al pie del mapa. Arranca
-  // apagada (el interruptor está en el panel "Sin conexión"), así no pide
-  // teselas por red hasta que el usuario la prenda.
+  // Balizas OSM en línea (E10.3): raster de OpenSeaMap. UX-N.4b: el interruptor
+  // vive en Ajustes › Visibilidad y arranca encendido (efecto en mountApp).
   map.addSource("seamarks-online", {
     type: "raster",
     tiles: ["https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png"],
@@ -1434,9 +1489,9 @@ function simUpdateRow(): void {
   }
   if (sim.speedBtn) sim.speedBtn.textContent = `x${sim.speed}`;
   if (sim.progress) {
-    sim.progress.textContent =
-      `${Math.round(sim.doneNm).toLocaleString("es-AR")} / ` +
-      `${Math.round(sim.totalNm).toLocaleString("es-AR")} nm`;
+    const done = sim.ui ? dst(sim.ui, sim.doneNm, false) : `${Math.round(sim.doneNm)} nm`;
+    const total = sim.ui ? dst(sim.ui, sim.totalNm, false) : `${Math.round(sim.totalNm)} nm`;
+    sim.progress.textContent = `${done} / ${total}`;
   }
 }
 
@@ -1691,7 +1746,13 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
       ui.mode.set(ui.mode() === "navegar" ? "planificar" : "navegar");
     });
 
-    bar.append(where, when, wxBtn, themeBtn, modeBtn, chip);
+    const ajustesBtn = el("button", { class: "hn-ctx-ajustes", type: "button" }, "⚙");
+    ajustesBtn.title = "Ajustes";
+    ajustesBtn.setAttribute("aria-label", "Ajustes");
+    if (ui.tab() === "ajustes") ajustesBtn.classList.add("on");
+    ajustesBtn.addEventListener("click", () => openAjustes(ui));
+
+    bar.append(where, when, wxBtn, themeBtn, modeBtn, ajustesBtn, chip);
   });
 }
 
@@ -1775,13 +1836,13 @@ function setWxLayer(ui: UiState, key: WxLayerKey, on: boolean): void {
 }
 
 // Rampa de colores con sus marcas (nudos o metros) para la leyenda.
-function wxRamp(stops: number[], colors: string[]): HTMLElement {
+function wxRamp(stops: number[], colors: string[], label?: (v: number) => string): HTMLElement {
   const ramp = el("div", { class: "hn-wx-ramp" });
   for (let i = 0; i < stops.length; i++) {
     const cell = el("div", { class: "hn-wx-cell" });
     const sw = el("div", { class: "hn-wx-sw" });
     sw.style.background = colors[i] ?? "#888";
-    cell.append(sw, el("div", { class: "hn-wx-kn" }, String(stops[i])));
+    cell.append(sw, el("div", { class: "hn-wx-kn" }, label ? label(stops[i]!) : String(stops[i])));
     ramp.append(cell);
   }
   return ramp;
@@ -1859,7 +1920,11 @@ function renderWeatherLegend(
 
   host.append(el("div", { class: "hn-wx-title" }, `Pilot chart · ${MONTH_NAME[month - 1] ?? ""}`));
   if (layers.wind) {
-    host.append(wxRamp(WX_WIND_STOPS, WX_WIND_COLORS), el("div", { class: "hn-wx-note" }, "nudos · flechas tenues = viento variable"));
+    const windU = ui.unidades().speed;
+    host.append(
+      wxRamp(WX_WIND_STOPS, WX_WIND_COLORS, (v) => (windU === "kmh" ? String(Math.round(v * 1.852)) : String(v))),
+      el("div", { class: "hn-wx-note" }, `${windU === "kmh" ? "km/h" : "nudos"} · flechas tenues = viento variable`),
+    );
   }
   if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: líneas azules finas y discontinuas"));
   if (layers.cyclone) host.append(el("div", { class: "hn-wx-note" }, "rayado = ciclones"));
@@ -1876,6 +1941,12 @@ function goTo(ui: UiState, tab: TabName): void {
   ui.selected.set(null);
   ui.tab.set(tab);
   if (ui.sheet() === "peek") ui.sheet.set("half");
+}
+
+// UX-N.4b: la entrada fija ⚙ abre Ajustes en toda su altura en móvil.
+function openAjustes(ui: UiState): void {
+  goTo(ui, "ajustes");
+  ui.sheet.set("full");
 }
 
 function positionLabel(ui: UiState): string {
@@ -1968,6 +2039,7 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
   effect(() => {
     const sel = ui.selected();
     ui.variant();
+    ui.unidades();
     ownRoutes();
     ownEdit();
     untracked(() => {
@@ -1992,7 +2064,9 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     bodyCleanup = [];
     clear(body);
     untracked(() => {
-      if (catalog === "loading") renderCatalogLoading(body);
+      // Ajustes no depende del catálogo: siempre disponible.
+      if (tab === "ajustes") renderAjustes(ui, body, bodyCleanup);
+      else if (catalog === "loading") renderCatalogLoading(body);
       else if (catalog === "failed") renderCatalogFailed(body);
       else if (tab === "aqui") renderAqui(ui, body, bodyCleanup);
       else if (tab === "rutas") renderRutas(ui, body, bodyCleanup);
@@ -2092,22 +2166,21 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
   cleanup.push(
     effect(() => {
       const active = ui.active();
+      // Las métricas de la ruta en curso leen unidades: repintar al cambiarlas.
+      ui.unidades();
       activeSlot.replaceChildren();
       if (active) renderActive(ui, activeSlot, active);
     }),
   );
 
-  body.append(alarmsCard(ui, cleanup));
   body.append(anchorCard(ui, cleanup));
-  body.append(offlineCard(ui, cleanup));
-  body.append(themeCard(ui, cleanup));
 }
 
 // Ajustes de tema (T11.5): los mismos tres temas que el botón de la barra, más
 // Auto, y el interruptor para usar Rojo cuando ya es de noche.
 function themeCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const card = el("div", { class: "hn-card" });
-  card.append(el("div", { class: "hn-card-title" }, "Ajustes"));
+  card.append(el("div", { class: "hn-card-title" }, "Tema"));
 
   const chips = el("div", { class: "hn-chips" });
   card.append(chips, el("p", { class: "hn-muted" }, "Auto sigue el día y la noche según tu posición."));
@@ -2271,17 +2344,15 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   card.append(el("div", { class: "hn-card-title" }, "Fondeo"));
 
   const radius = el("input", { class: "hn-search", type: "number", min: "5", step: "5", inputmode: "numeric" });
-  radius.value = String(Math.round(ui.anchor().radiusM));
+  const radiusLabel = el("span", { class: "hn-field-label" }, "Radio (m)");
   radius.addEventListener("change", () => {
     const r = Number(radius.value);
-    if (Number.isFinite(r) && r > 0) ui.anchor.update((a) => ({ ...a, radiusM: r }));
+    if (!Number.isFinite(r) || r <= 0) return;
+    // El valor interno siempre es metros; en ft se convierte al guardar.
+    const meters = ui.unidades().depth === "ft" ? r / FT_PER_M : r;
+    ui.anchor.update((a) => ({ ...a, radiusM: meters }));
   });
-  const field = el(
-    "label",
-    { class: "hn-field" },
-    el("span", { class: "hn-field-label" }, "Radio (m)"),
-    radius,
-  );
+  const field = el("label", { class: "hn-field" }, radiusLabel, radius);
 
   const info = el("div", { class: "hn-anchor-info hn-muted" });
   const actions = el("div", { class: "hn-actions" });
@@ -2291,6 +2362,12 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
     effect(() => {
       const a = ui.anchor();
       const pos = ui.position();
+      const ft = ui.unidades().depth === "ft";
+      radiusLabel.textContent = ft ? "Radio (ft)" : "Radio (m)";
+      radius.step = ft ? "10" : "5";
+      if (document.activeElement !== radius) {
+        radius.value = String(Math.round(ft ? a.radiusM * FT_PER_M : a.radiusM));
+      }
       clear(info);
       clear(actions);
       radius.disabled = a.active;
@@ -2309,7 +2386,7 @@ function anchorCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
         return;
       }
       info.textContent = pos
-        ? `Fondeado a ${Math.round(anchorDistanceM(pos, a))} m del punto · radio ${Math.round(a.radiusM)} m`
+        ? `Fondeado a ${dep(ui, anchorDistanceM(pos, a))} del punto · radio ${dep(ui, a.radiusM)}`
         : "Fondeado · esperando posición";
       const off = el("button", { class: "hn-btn", type: "button" }, "Desactivar");
       off.addEventListener("click", () => ui.anchor.set({ ...DEFAULT_ANCHOR }));
@@ -2336,7 +2413,6 @@ function offlineCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const list = forecastListHost(ui, cleanup);
   card.append(forecastRow(ui, cleanup, list.reload), list.host);
   card.append(offlineRow("Carta mundial (zoom ≤ 6)", "45 MB · con red"));
-  card.append(onlineSeamarkRow(ui));
 
   const zonesBox = el("div", { class: "hn-offline-zones" });
   card.append(zonesBox);
@@ -2406,28 +2482,6 @@ function forecastEntryRow(ui: UiState, entry: ForecastEntry, reload: () => void)
   });
   action.append(del);
   row.append(el("span", { class: "hn-offline-name" }, name), el("span", { class: "hn-offline-info" }, info), action);
-  return row;
-}
-
-// Balizas OSM en línea (E10.3): capa raster de OpenSeaMap, apagada por defecto.
-// Sirve donde hay red; sin conexión quedan las balizas bajadas con la zona.
-function onlineSeamarkRow(ui: UiState): HTMLElement {
-  const row = el("div", { class: "hn-offline-row" });
-  const action = el("span", { class: "hn-offline-action" });
-  const btn = el("button", { class: "hn-btn", type: "button" }, "Mostrar");
-  let on = false;
-  btn.addEventListener("click", () => {
-    if (!ui.map.getLayer("seamarks-online")) return;
-    on = !on;
-    ui.map.setLayoutProperty("seamarks-online", "visibility", on ? "visible" : "none");
-    btn.textContent = on ? "Ocultar" : "Mostrar";
-  });
-  action.append(btn);
-  row.append(
-    el("span", { class: "hn-offline-name" }, "Balizas OSM online"),
-    el("span", { class: "hn-offline-info" }, "con red"),
-    action,
-  );
   return row;
 }
 
@@ -2655,11 +2709,11 @@ function renderActive(ui: UiState, body: HTMLElement, active: ActiveRoute): void
     grid.append(
       navCell("Próximo", nav.fix.nextName || `${formatLat(nav.fix.nextLat)} ${formatLon(nav.fix.nextLon)}`),
       navCell("Rumbo", `${Math.round(nav.fix.bearingDeg)}°`),
-      navCell("Distancia", nmDecimal(nav.fix.distanceNm)),
-      navCell("Desvío", xteLabel(nav.fix.xteNm)),
+      navCell("Distancia", dst(ui, nav.fix.distanceNm)),
+      navCell("Desvío", xteLabel(ui, nav.fix.xteNm)),
       navCell("Tramo", `${nav.fix.legIndex + 1} de ${maxLeg(nav.track)}`),
-      navCell("Velocidad", nav.kin.sogKn === null ? "—" : `${nav.kin.sogKn.toFixed(1)} kn`),
-      navCell("VMG", nav.kin.vmgKn === null ? "—" : `${nav.kin.vmgKn.toFixed(1)} kn`),
+      navCell("Velocidad", nav.kin.sogKn === null ? "—" : spd(ui, nav.kin.sogKn)),
+      navCell("VMG", nav.kin.vmgKn === null ? "—" : spd(ui, nav.kin.vmgKn)),
       navCell("ETA próximo", nav.kin.etaNextMs === null ? "—" : clock(nav.kin.etaNextMs)),
       navCell("ETA destino", nav.kin.etaDestMs === null ? "—" : clock(nav.kin.etaDestMs)),
     );
@@ -2717,7 +2771,7 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
       const at = (): { lat: number; lon: number } => ui.position() ?? { lat: mob.lat, lon: mob.lon };
       const line = (): string => {
         const f = mobFix(at(), mob);
-        return `${nmDecimal(f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
+        return `${dst(ui, f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
       };
       const bearing = Math.round(mobFix(at(), mob).bearingDeg);
       const row1 = el("div", { class: "hn-navstrip-row1" });
@@ -2771,8 +2825,8 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
     const next = fix.nextName || `${formatLat(fix.nextLat)} ${formatLon(fix.nextLon)}`;
     const dest = track.names[track.names.length - 1] || "destino";
     const eta = kin.etaNextMs === null ? "—" : clock(kin.etaNextMs);
-    const sog = kin.sogKn === null ? "—" : `${kin.sogKn.toFixed(1)} kn`;
-    const dev = fix.xteNm === 0 ? "en rumbo" : xteLabel(fix.xteNm);
+    const sog = kin.sogKn === null ? "—" : spd(ui, kin.sogKn);
+    const dev = fix.xteNm === 0 ? "en rumbo" : xteLabel(ui, fix.xteNm);
     const row1 = el("div", { class: "hn-navstrip-row1" });
     row1.append(
       el("span", { class: "hn-navstrip-next" }, next),
@@ -2781,12 +2835,12 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
     const row2 = el(
       "div",
       { class: "hn-navstrip-row2" },
-      `${nm(fix.distanceNm)} · ETA ${eta} · SOG ${sog} · desvío ${dev}`,
+      `${dst(ui, fix.distanceNm, false)} · ETA ${eta} · SOG ${sog} · desvío ${dev}`,
     );
     const row3 = el(
       "div",
       { class: "hn-navstrip-row3" },
-      `tramo ${fix.legIndex + 1} de ${maxLeg(track)} · ${dest} a ${nm(remainingToDest(track.coords, fix))}`,
+      `tramo ${fix.legIndex + 1} de ${maxLeg(track)} · ${dest} a ${dst(ui, remainingToDest(track.coords, fix), false)}`,
     );
     host.replaceChildren(row1, row2, row3);
   });
@@ -2840,12 +2894,12 @@ function renderAlarmBand(ui: UiState): void {
     if (mob) {
       kind = "mob";
       const f = mobFix(pos ?? { lat: mob.lat, lon: mob.lon }, mob);
-      message = `✖ Hombre al agua · ${nmDecimal(f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
+      message = `✖ Hombre al agua · ${dst(ui, f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
       beeps = 2;
       intervalMs = 5_000;
     } else if (mode === "navegar" && anchor.active && pos && anchorAlarm(pos, anchor)) {
       kind = "anchor";
-      message = `⚓ Garreando: ${Math.round(anchorDistanceM(pos, anchor))} m del fondeo`;
+      message = `⚓ Garreando: ${dep(ui, anchorDistanceM(pos, anchor))} del fondeo`;
     } else if (nav) {
       const next = navAlarmGate(mode, nav.fix, ui.settings.alarms, { active: null, silencedFor: null });
       if (next.active === "arrival") {
@@ -2853,7 +2907,7 @@ function renderAlarmBand(ui: UiState): void {
         message = `⚑ Llegando a ${nav.fix.nextName || "el waypoint"}`;
       } else if (next.active === "xte") {
         kind = "xte";
-        message = `⚠ Desvío de ${Math.abs(nav.fix.xteNm).toFixed(1).replace(".", ",")} nm`;
+        message = `⚠ Desvío de ${dst(ui, Math.abs(nav.fix.xteNm))}`;
       }
     }
 
@@ -2910,12 +2964,34 @@ function activeNav(
 }
 
 
-function xteLabel(xteNm: number): string {
-  const v = Math.abs(xteNm).toFixed(1).replace('.', ',');
-  if (xteNm > 0) return `${v} nm a estribor`;
-  if (xteNm < 0) return `${v} nm a babor`;
-  return '0,0 nm';
+// UX-N.4b: formato con unidades elegidas (Ajustes › Unidades). Los valores
+// internos siempre son kn / nm / m; estas envolturas leen el signal `unidades`.
+function spd(ui: UiState, kn: number, decimal = true): string {
+  return formatSpeed(kn, ui.unidades(), decimal);
 }
+
+function dst(ui: UiState, nm: number, decimal = true): string {
+  return formatDistance(nm, ui.unidades(), decimal);
+}
+
+function dep(ui: UiState, m: number): string {
+  return formatDepth(m, ui.unidades());
+}
+
+function rangeDist(ui: UiState, min: number, max: number): string {
+  const u = ui.unidades();
+  if (min === max || max === 0) return formatDistance(min, u, false);
+  const a = formatDistance(min, u, false).replace(` ${u.distance}`, "");
+  return `${a}–${formatDistance(max, u, false)}`;
+}
+
+function xteLabel(ui: UiState, xteNm: number): string {
+  const d = dst(ui, Math.abs(xteNm));
+  if (xteNm > 0) return `${d} a estribor`;
+  if (xteNm < 0) return `${d} a babor`;
+  return `${dst(ui, 0)}`;
+}
+
 
 function maxLeg(track: RouteTrack): number {
   return Math.max(0, track.coords.length - 1);
@@ -2943,8 +3019,8 @@ function routeRow(
   main.append(el("div", { class: "hn-row-title" }, `${e.code} · ${e.title}`));
   const sub =
     distanceNm !== undefined
-      ? `${nmDecimal(distanceNm)}${nearestWp ? ` · ${nearestWp}` : ""}`
-      : `${e.from} → ${e.to} · ${rangeNm(e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`;
+      ? `${dst(ui, distanceNm)}${nearestWp ? ` · ${nearestWp}` : ""}`
+      : `${e.from} → ${e.to} · ${rangeDist(ui, e.nmMin, e.nmMax)} · ${e.variantCount} variante${e.variantCount === 1 ? "" : "s"}`;
   main.append(el("div", { class: "hn-row-sub" }, sub));
   if (ui.region() === "" && e.region) main.append(el("div", { class: "hn-row-region" }, e.region));
   // PS-1: con el orden por mes de salida (o en "Rutas que te pasan cerca") la
@@ -3580,17 +3656,17 @@ function optDiscard(ui: UiState, code: string): void {
   optRefreshPanel(ui);
 }
 
-function optCompareText(job: OptJob): string {
+function optCompareText(ui: UiState, job: OptJob): string {
   const r = job.result!;
   const base = job.baseline!;
   const dEta = (job.baseline!.etaMs - r.etaMs) / 3600_000;
   const dNm = r.nm - base.nm;
   const parts = [
-    `${dEta >= 0 ? "−" : "+"}${knTexto(Math.abs(dEta))} h`,
-    `${dNm >= 0 ? "+" : "−"}${nmDecimal(Math.abs(dNm))}`,
+    `${dEta >= 0 ? "−" : "+"}${Math.abs(dEta).toFixed(1).replace(".", ",")} h`,
+    `${dNm >= 0 ? "+" : "−"}${dst(ui, Math.abs(dNm))}`,
   ];
   if (job.baseline!.windMax > 0 || r.windMax !== null) {
-    parts.push(`viento máx ${job.baseline!.windMax > 0 ? knTexto(job.baseline!.windMax) : "—"} → ${r.windMax !== null ? knTexto(r.windMax) : "—"} kn`);
+    parts.push(`viento máx ${job.baseline!.windMax > 0 ? spd(ui, job.baseline!.windMax, false) : "—"} → ${r.windMax !== null ? spd(ui, r.windMax, false) : "—"}`);
   }
   return parts.join(" · ");
 }
@@ -3668,12 +3744,12 @@ function optRender(
         el("p", { class: "hn-err" }, `No se pudo trazar la ruta: ${r.reason ?? "tramo sin paso"}.`),
       );
     } else {
-      panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
+      panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(ui, job)));
       const stats = el("div", { class: "hn-opt-stats" });
       stats.append(
-        el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${nm(r.nm)}`),
+        el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
         el("span", {}, `Ceñidas: ${r.tacks} bordos`),
-        el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`),
+        el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`),
       );
       panel.append(stats);
       if (job.beyondForecast) {
@@ -3878,7 +3954,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     el("div", { class: "hn-fact" }, el("div", { class: "hn-fact-k" }, k), el("div", { class: "hn-fact-v" }, v));
   facts.append(
     fact("Cuenca", e?.region || d.region || "—"),
-    fact("Millas", e ? rangeNm(e.nmMin, e.nmMax) : "—"),
+    fact("Millas", e ? rangeDist(ui, e.nmMin, e.nmMax) : "—"),
     fact("Variantes", String(e?.variantCount ?? d.variants.length)),
     fact("Mejor época", w.bestEs || "—"),
     fact("Ciclones", w.stormsEs || "—"),
@@ -3929,7 +4005,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
             "div",
             { class: "hn-variant-main" },
             el("div", { class: "hn-row-title" }, `${v.id} · ${v.from} → ${v.to}`),
-            el("div", { class: "hn-row-sub" }, `${nm(v.nm)}${v.coastal ? " · costera" : ""}`),
+            el("div", { class: "hn-row-sub" }, `${dst(ui, v.nm, false)}${v.coastal ? " · costera" : ""}`),
           ),
         );
         if (v.needsReview) item.append(el("span", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
@@ -3965,7 +4041,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
         const next = wps[i + 1];
         const pos = `${formatLat(wp.lat)}  ${formatLon(wp.lon)}`;
         detail.textContent = next
-          ? `${pos} · al siguiente (${next.name || "sin nombre"}): ${nmDecimal(haversineNm(wp.lat, wp.lon, next.lat, next.lon))}`
+          ? `${pos} · al siguiente (${next.name || "sin nombre"}): ${dst(ui, haversineNm(wp.lat, wp.lon, next.lat, next.lon))}`
           : `${pos} · último waypoint`;
         row.addEventListener("click", () => {
           const wasOn = item.classList.contains("on");
@@ -4029,22 +4105,22 @@ function updateRouteWind(ui: UiState, host: HTMLElement, d: RouteDetail): void {
   const route: ClimLineString = { type: "LineString", coordinates: g.coords };
   const cached = ui.clim.get(month);
   if (cached) {
-    host.textContent = routeWindText(summarizeRoute(cached, route), month);
+    host.textContent = routeWindText(ui, summarizeRoute(cached, route), month);
     return;
   }
   host.textContent = "Cargando viento medio en ruta…";
   void ensureClim(ui, month).then((clim) => {
-    host.textContent = clim ? routeWindText(summarizeRoute(clim, route), month) : "";
+    host.textContent = clim ? routeWindText(ui, summarizeRoute(clim, route), month) : "";
   });
 }
 
-function routeWindText(s: RouteWindSummary | null, month: number): string {
+function routeWindText(ui: UiState, s: RouteWindSummary | null, month: number): string {
   if (!s) return "";
-  const cur = s.currentKn.toFixed(1).replace(".", ",");
+  const cur = spd(ui, s.currentKn);
   const dir = s.currentFwd ? "a favor" : "en contra";
   return (
-    `Viento medio en ruta (${MONTH_NAME[month - 1] ?? ""}): ${Math.round(s.ws)} kn del ${s.dirLabel}, ` +
-    `constancia ${Math.round(s.st)} % · corriente ${dir} ${cur} kn · riesgo ciclónico: ${s.risk}`
+    `Viento medio en ruta (${MONTH_NAME[month - 1] ?? ""}): ${spd(ui, s.ws, false)} del ${s.dirLabel}, ` +
+    `constancia ${Math.round(s.st)} % · corriente ${dir} ${cur} · riesgo ciclónico: ${s.risk}`
   );
 }
 
@@ -4140,17 +4216,13 @@ function diasTexto(d: number): string {
   return `${d.toFixed(1).replace(".", ",")} ${Math.round(d) === 1 ? "día" : "días"}`;
 }
 
-function knTexto(kn: number): string {
-  return kn.toFixed(1).replace(".", ",");
-}
-
 function rumboTexto(deg: number): string {
   return String(Math.round(deg) % 360).padStart(3, "0");
 }
 
-function parte24(r: DailyReport): string {
+function parte24(ui: UiState, r: DailyReport): string {
   if (r.nm24h <= 0) return "Últimas 24 h: sin movimiento";
-  return `Últimas 24 h: ${nm(r.nm24h)} · ${knTexto(r.avgKn24h)} kn · rumbo medio ${rumboTexto(r.avgCogDeg24h)}°`;
+  return `Últimas 24 h: ${dst(ui, r.nm24h, false)} · ${spd(ui, r.avgKn24h)} · rumbo medio ${rumboTexto(r.avgCogDeg24h)}°`;
 }
 
 // Texto del parte diario (E9.4): fecha, posición, las tres líneas y la última
@@ -4168,11 +4240,11 @@ function parteDiarioTexto(ui: UiState, nowMs: number): string[] {
     return out;
   }
   const r = dailyReport(log, nowMs);
-  out.push(parte24(r));
-  out.push(`Total: ${nm(r.totalNm)} en ${duracionTexto(r.hours)}`);
+  out.push(parte24(ui, r));
+  out.push(`Total: ${dst(ui, r.totalNm, false)} en ${duracionTexto(r.hours)}`);
   const nav = activeNav(ui);
   if (nav && nav.remainingNm > 0 && r.daysToGo !== undefined) {
-    out.push(`Faltan ${nm(nav.remainingNm)} · ~${diasTexto(r.daysToGo)} a este ritmo`);
+    out.push(`Faltan ${dst(ui, nav.remainingNm, false)} · ~${diasTexto(r.daysToGo)} a este ritmo`);
   }
   const notes = log.notes ?? [];
   const lastNote = notes[notes.length - 1];
@@ -4239,7 +4311,7 @@ function noteRow(ui: UiState, n: Note): HTMLElement {
   return row;
 }
 
-function archiveRow(log: VoyageLog): HTMLElement {
+function archiveRow(ui: UiState, log: VoyageLog): HTMLElement {
   const row = el("div", { class: "hn-note-row" });
   const first = log.points[0];
   const last = log.points[log.points.length - 1];
@@ -4247,7 +4319,7 @@ function archiveRow(log: VoyageLog): HTMLElement {
   const main = el("div", { class: "hn-note-main" });
   main.append(
     el("div", { class: "hn-note-text" }, log.name),
-    el("div", { class: "hn-note-meta" }, `${fechas} · ${nm(voyageDistanceNm(log))}`),
+    el("div", { class: "hn-note-meta" }, `${fechas} · ${dst(ui, voyageDistanceNm(log), false)}`),
   );
   const exp = el("button", { class: "hn-btn", type: "button" }, "Exportar GPX");
   exp.addEventListener("click", () => {
@@ -4292,15 +4364,15 @@ function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[])
       const r = dailyReport(log, now);
       const nav = activeNav(ui);
       const nodes: HTMLElement[] = [
-        el("div", { class: "hn-parte-line" }, parte24(r)),
-        el("div", { class: "hn-parte-line" }, `Total: ${nm(r.totalNm)} en ${duracionTexto(r.hours)}`),
+        el("div", { class: "hn-parte-line" }, parte24(ui, r)),
+        el("div", { class: "hn-parte-line" }, `Total: ${dst(ui, r.totalNm, false)} en ${duracionTexto(r.hours)}`),
       ];
       if (nav && nav.remainingNm > 0 && r.daysToGo !== undefined) {
         nodes.push(
           el(
             "div",
             { class: "hn-parte-line" },
-            `Faltan ${nm(nav.remainingNm)} · ~${diasTexto(r.daysToGo)} a este ritmo`,
+            `Faltan ${dst(ui, nav.remainingNm, false)} · ~${diasTexto(r.daysToGo)} a este ritmo`,
           ),
         );
       }
@@ -4322,7 +4394,7 @@ function renderTravesia(ui: UiState, body: HTMLElement, cleanup: (() => void)[])
         counters.replaceChildren(el("p", { class: "hn-muted" }, "Sin puntos todavía. Empezá a grabar con el GPS."));
       } else {
         const grid = el("div", { class: "hn-nav-grid" });
-        grid.append(navCell("Puntos", String(log.points.length)), navCell("Recorrido", nm(voyageDistanceNm(log))));
+        grid.append(navCell("Puntos", String(log.points.length)), navCell("Recorrido", dst(ui, voyageDistanceNm(log), false)));
         counters.replaceChildren(grid);
       }
     }),
@@ -4451,7 +4523,7 @@ function renderArchive(ui: UiState, host: HTMLElement): void {
         host.replaceChildren(el("p", { class: "hn-muted" }, "Sin travesías archivadas todavía."));
         return;
       }
-      host.replaceChildren(...arr.map((l) => archiveRow(l)));
+      host.replaceChildren(...arr.map((l) => archiveRow(ui, l)));
     })
     .catch(() => {
       host.replaceChildren(el("p", { class: "hn-muted" }, "Sin travesías archivadas todavía."));
@@ -4671,10 +4743,10 @@ function appendPointWx(ui: UiState, wx: HTMLElement, clim: ClimMonth, lat: numbe
   if (!cell) {
     wx.append(el("p", { class: "hn-err" }, "Ese punto está en tierra."));
   } else {
-    wx.append(el("p", {}, `Viento medio ${cell.ws.toFixed(0)} kn del ${rumboDe(cell.wu, cell.wv)}`));
+    wx.append(el("p", {}, `Viento medio ${spd(ui, cell.ws, false)} del ${rumboDe(cell.wu, cell.wv)}`));
     wx.append(el("p", {}, `Constancia ${cell.cu.toFixed(0)} % · Ola ${cell.hs.toFixed(1)} m`));
     const curKn = Math.hypot(cell.cu, cell.cv);
-    if (curKn > 0.05) wx.append(el("p", {}, `Corriente ${curKn.toFixed(1)} kn hacia ${rumboDe(-cell.cu, -cell.cv)}`));
+    if (curKn > 0.05) wx.append(el("p", {}, `Corriente ${spd(ui, curKn)} hacia ${rumboDe(-cell.cu, -cell.cv)}`));
     if (cell.tc > 0) wx.append(el("p", {}, `Ciclones: ${cell.tc.toFixed(0)} por década`));
     if (cell.ice > 0) wx.append(el("p", {}, `Hielo: riesgo ${cell.ice.toFixed(0)}`));
   }
@@ -4730,7 +4802,7 @@ function appendPointForecast(ui: UiState, wx: HTMLElement, lat: number, lon: num
         const w = forecastWindField(used, null)(lat, lon, t);
         if (w) {
           const dir = POINT_CARDINALS[Math.round(w.dir / 22.5) % 16] ?? "—";
-          host.append(el("p", {}, `Pronóstico ${hourLabel(t)}: viento ${w.speed.toFixed(0)} kn del ${dir}`));
+          host.append(el("p", {}, `Pronóstico ${hourLabel(t)}: viento ${spd(ui, w.speed, false)} del ${dir}`));
         }
       } else if (empalmeConClimatología(used, t)) {
         host.append(el("p", { class: "hn-muted" }, "Más allá del horizonte del paquete: clima medio."));
@@ -4947,13 +5019,13 @@ function renderPointOptBody(ui: UiState, host: HTMLElement, code: string, bootEr
   const isos = r.isochrones.map((l) => lineFeature(l.coords as [number, number][]));
   setSource(ui.map, "wx-isochrones", featureCollection(isos));
   setSource(ui.map, "optroute", featureCollection([lineFeature(multiRouteCoords(r) as [number, number][])]));
-  if (job.baseline) host.append(el("p", { class: "hn-opt-compare" }, optCompareText(job)));
+  if (job.baseline) host.append(el("p", { class: "hn-opt-compare" }, optCompareText(ui, job)));
   const stats = el("div", { class: "hn-opt-stats" });
   stats.append(
-    el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${nm(r.nm)}`),
+    el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
     el("span", {}, `Ceñidas: ${r.tacks} bordos`),
   );
-  if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${nm(job.baseline.nm)}`));
+  if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`));
   host.append(stats);
   host.append(pointOptBtn("Aplicar", () => pointOptApply(ui, code)));
   host.append(pointOptBtn("Descartar", () => pointOptDiscard(ui, code)));
@@ -5016,4 +5088,94 @@ function waypointPoint(ui: UiState): void {
   goTo(ui, "rutas");
   copyToOwn(ctx, `Ruta ${ownRoutes().length + 1}`, [[pointLon, pointLat]], ["WP1"]);
   closePointSheet(ui);
+}
+
+// ------------------------------------------------------------- Ajustes (UX-N.4b)
+
+function renderAjustes(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): void {
+  body.append(el("h2", { class: "hn-h2" }, "Ajustes"));
+
+  // Visibilidad: qué elementos de la carta se ven. Todo arranca visible.
+  const visCard = el("div", { class: "hn-card" });
+  visCard.append(el("div", { class: "hn-card-title" }, "Visibilidad"));
+  const visBox = el("div");
+  visCard.append(visBox);
+  body.append(visCard);
+  cleanup.push(
+    effect(() => {
+      clear(visBox);
+      const v = ui.visibilidad();
+      const toggle = (label: string, key: keyof Visibility): HTMLElement => {
+        const row = el("div", { class: "hn-toggle-row" });
+        const t = el("button", {
+          class: "hn-toggle",
+          type: "button",
+          role: "switch",
+          "aria-checked": v[key] ? "true" : "false",
+          "aria-label": label,
+        });
+        t.addEventListener("click", () => ui.visibilidad.update((x) => ({ ...x, [key]: !x[key] })));
+        row.append(el("span", {}, label), t);
+        return row;
+      };
+      visBox.append(
+        toggle("MOB", "mob"),
+        toggle("FAB ◉", "fab"),
+        toggle("Nota de escala", "scaleNote"),
+        toggle("Retícula", "graticule"),
+        toggle("Balizas OSM online", "seamarksOnline"),
+      );
+    }),
+  );
+
+  // Unidades: defaults náuticos (kn / nm / m).
+  const unCard = el("div", { class: "hn-card" });
+  unCard.append(el("div", { class: "hn-card-title" }, "Unidades"));
+  const unBox = el("div");
+  unCard.append(unBox);
+  body.append(unCard);
+  const select = (options: string[], value: string, onChange: (v: string) => void): HTMLElement => {
+    const sel = el("select", { class: "hn-search hn-unit-select" });
+    for (const o of options) {
+      const opt = el("option", { value: o }, o);
+      if (o === value) opt.selected = true;
+      sel.append(opt);
+    }
+    sel.addEventListener("change", () => onChange(sel.value));
+    return sel;
+  };
+  cleanup.push(
+    effect(() => {
+      clear(unBox);
+      const u = ui.unidades();
+      const row = el("div", { class: "hn-unit-fields" });
+      row.append(
+        el(
+          "label",
+          { class: "hn-field" },
+          el("span", { class: "hn-field-label" }, "Velocidad"),
+          select(["kn", "km/h"], u.speed === "kmh" ? "km/h" : "kn", (v) =>
+            ui.unidades.update((x) => ({ ...x, speed: v === "km/h" ? "kmh" : "kn" })),
+          ),
+        ),
+        el(
+          "label",
+          { class: "hn-field" },
+          el("span", { class: "hn-field-label" }, "Distancia"),
+          select(["nm", "km"], u.distance, (v) => ui.unidades.update((x) => ({ ...x, distance: v as DistanceUnit }))),
+        ),
+        el(
+          "label",
+          { class: "hn-field" },
+          el("span", { class: "hn-field-label" }, "Profundidad"),
+          select(["m", "ft"], u.depth, (v) => ui.unidades.update((x) => ({ ...x, depth: v as DepthUnit }))),
+        ),
+      );
+      unBox.append(row);
+    }),
+  );
+
+  body.append(alarmsCard(ui, cleanup));
+  body.append(themeCard(ui, cleanup));
+  body.append(offlineCard(ui, cleanup));
 }
