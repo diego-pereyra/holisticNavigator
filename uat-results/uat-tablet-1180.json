@@ -6,7 +6,8 @@
       "taps": 0,
       "pasosFallidos": [
         "existe: barra de contexto",
-        "existe: FAB ◉"
+        "existe: FAB ◉",
+        "diagnóstico de arranque: \"Holistic Navigator\\ncarta base … · catálogo … · rutas …\\nbuild 354d5bc\""
       ],
       "steps": [
         {
@@ -26,67 +27,31 @@
           "found": false,
           "extra": "",
           "taps": 0
-        }
-      ],
-      "ms": 13416
-    },
-    {
-      "journey": "j1-clima-en-un-punto",
-      "taps": 5,
-      "pasosFallidos": [
-        "long-press en el mapa abre acciones",
-        "tab Aquí",
-        "descargar pronóstico",
-        "botón Tiempo (1.er toque: pilot chart)",
-        "botón Tiempo (2.do toque: pronóstico)",
-        "existe: deslizador de hora",
-        "botón Tiempo (apagar)"
-      ],
-      "steps": [
+        },
         {
-          "label": "long-press en el mapa abre acciones",
+          "label": "diagnóstico de arranque: \"Holistic Navigator\\ncarta base … · catálogo … · rutas …\\nbuild 354d5bc\"",
           "found": false,
           "extra": "",
           "taps": 0
-        },
-        {
-          "label": "tab Aquí",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 1
-        },
-        {
-          "label": "descargar pronóstico",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 2
-        },
-        {
-          "label": "botón Tiempo (1.er toque: pilot chart)",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 3
-        },
-        {
-          "label": "botón Tiempo (2.do toque: pronóstico)",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 4
-        },
-        {
-          "label": "existe: deslizador de hora",
-          "found": false,
-          "extra": "",
-          "taps": 4
-        },
-        {
-          "label": "botón Tiempo (apagar)",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 5
         }
       ],
-      "ms": 29431
+      "ms": 13382
+    },
+    {
+      "journey": "j1-clima-en-un-punto",
+      "taps": 0,
+      "pasosFallidos": [
+        "long-press abre la hoja de acciones"
+      ],
+      "steps": [
+        {
+          "label": "long-press abre la hoja de acciones",
+          "found": false,
+          "extra": "",
+          "taps": 0
+        }
+      ],
+      "ms": 4623
     },
     {
       "journey": "j2-seguir-ruta",
@@ -137,7 +102,7 @@
           "taps": 4
         }
       ],
-      "ms": 28373
+      "ms": 31350
     },
     {
       "journey": "j3-optimizar",
@@ -167,7 +132,7 @@
           "taps": 3
         }
       ],
-      "ms": 26024
+      "ms": 26022
     },
     {
       "journey": "j4-mob",
@@ -190,18 +155,17 @@
           "taps": 1
         }
       ],
-      "ms": 9027
+      "ms": 9017
     },
     {
-      "journey": "j5-pilot-chart-mes",
-      "taps": 5,
+      "journey": "j5-clima-y-mes",
+      "taps": 4,
       "pasosFallidos": [
         "Tiempo → pilot chart",
-        "existe: panel Capas",
+        "existe: panel de capas del clima",
         "apagar capa Olas",
-        "botón Tiempo (apagar)",
-        "tab Rutas",
-        "chip Salgo en {mes}"
+        "Tiempo (apagar)",
+        "chip Cuándo"
       ],
       "steps": [
         {
@@ -211,7 +175,7 @@
           "taps": 1
         },
         {
-          "label": "existe: panel Capas",
+          "label": "existe: panel de capas del clima",
           "found": false,
           "extra": "",
           "taps": 1
@@ -223,41 +187,35 @@
           "taps": 2
         },
         {
-          "label": "botón Tiempo (apagar)",
+          "label": "Tiempo (apagar)",
           "found": false,
           "extra": "no se encontró",
           "taps": 3
         },
         {
-          "label": "tab Rutas",
+          "label": "chip Cuándo",
           "found": false,
           "extra": "no se encontró",
           "taps": 4
-        },
-        {
-          "label": "chip Salgo en {mes}",
-          "found": false,
-          "extra": "no se encontró",
-          "taps": 5
         }
       ],
-      "ms": 23325
+      "ms": 19317
     },
     {
-      "journey": "j6-temas",
-      "taps": 0,
+      "journey": "j6-ajustes",
+      "taps": 1,
       "pasosFallidos": [
-        "existe: botón de tema"
+        "⚙ Ajustes"
       ],
       "steps": [
         {
-          "label": "existe: botón de tema",
+          "label": "⚙ Ajustes",
           "found": false,
-          "extra": "",
-          "taps": 0
+          "extra": "no se encontró",
+          "taps": 1
         }
       ],
-      "ms": 2501
+      "ms": 4001
     }
   ],
   "erroresConsola": [
@@ -266,5 +224,9 @@
   ],
   "erroresPagina": [],
   "http": [],
+  "recursosFallidos": [
+    "http://localhost:8087/holisticNavigator/app.css · net::ERR_EMPTY_RESPONSE",
+    "http://localhost:8087/holisticNavigator/main.js · net::ERR_EMPTY_RESPONSE"
+  ],
   "capturasFallidas": []
 }
