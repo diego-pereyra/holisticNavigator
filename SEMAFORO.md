@@ -33,3 +33,5 @@ isochrones.test.ts (solo si el test necesita exponer algo del split), web/public
    donde llega el pronóstico, rojo punteada desde ahí; "Ruta del mes" → todo rojo.
 6. npm test (en web/), bash scripts/build-web.sh, commit "E12.12: pilots en rojo
    punteada", push. Al terminar escribí "Status: DONE" como última línea.
+
+Status: DONE
