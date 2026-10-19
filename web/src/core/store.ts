@@ -1,6 +1,9 @@
 // Store reactivo mínimo (ADR-007, sin framework): señales con tres entradas:
 // signal, computed y effect. Auto-seguimiento de dependencias por lectura.
 
+import { haversineNm, type NavFix } from "./navigation.ts";
+import { evalAlarms, type AlarmSettings, type AlarmState } from "./alarms.ts";
+
 export interface ReadonlySignal<T> {
   (): T;
   subscribe(fn: (value: T) => void): () => void;
@@ -109,4 +112,62 @@ export function effect(fn: () => void): () => void {
     for (const d of deps) d.subs.delete(run);
     deps = new Set();
   };
+}
+
+// --- UX-N.3: modos Planificar / Navegar --------------------------------------
+// La UI decide cuándo y cómo suenan las alarmas (D3); acá vive la lógica pura
+// de transición entre modos y el gate de las alarmas de navegación.
+
+export type UiMode = "planificar" | "navegar";
+
+const MODE_WINDOW_MS = 120_000;
+const MODE_MIN_KN = 0.5;
+
+// SOG ≥ 0,5 kn sostenida por 2 minutos seguidos sobre la ventana de fijas.
+export function sustainedSog(
+  fixes: ReadonlyArray<{ lat: number; lon: number; t: number }>,
+  nowMs: number,
+): boolean {
+  const win = fixes.filter((f) => nowMs - f.t <= MODE_WINDOW_MS);
+  if (win.length < 2) return false;
+  const first = win[0]!;
+  const last = win[win.length - 1]!;
+  const span = last.t - first.t;
+  if (span < MODE_WINDOW_MS) return false;
+  return haversineNm(first.lat, first.lon, last.lat, last.lon) / (span / 3_600_000) >= MODE_MIN_KN;
+}
+
+// Transición automática: engancha con SOG sostenido y ruta activa; se
+// desengancha a los 2 minutos de estar parado. `enteredAtMs` protege el modo
+// forzado a mano: no se cae antes de los 2 minutos.
+export function uiModeAuto(
+  fixes: ReadonlyArray<{ lat: number; lon: number; t: number }>,
+  nowMs: number,
+  hasActiveRoute: boolean,
+  current: UiMode,
+  enteredAtMs: number,
+): UiMode {
+  if (!hasActiveRoute) return "planificar";
+  if (current === "navegar") {
+    if (nowMs - enteredAtMs >= MODE_WINDOW_MS && !sustainedSog(fixes, nowMs)) return "planificar";
+    return "navegar";
+  }
+  return sustainedSog(fixes, nowMs) ? "navegar" : "planificar";
+}
+
+// Gate de alarmas de navegación (XTE y llegada): solo evalúan en Navegar.
+// MOB y fondeo los decide la UI por su cuenta; evalAlarms no cambia.
+export function navAlarmGate(
+  mode: UiMode,
+  fix: NavFix | null,
+  s: AlarmSettings,
+  prev: AlarmState,
+): AlarmState {
+  if (mode !== "navegar") return { active: null, silencedFor: null };
+  return evalAlarms(fix, s, prev);
+}
+
+// Persistencia: valida el modo leído de hn.settings.
+export function normalizeUiMode(v: unknown): UiMode | null {
+  return v === "planificar" || v === "navegar" ? v : null;
 }

@@ -258,6 +258,28 @@ html[data-theme="red"] {
 .hn-ctx-wx.on {
   color: var(--hn-accent);
 }
+
+/* UX-N.3: chip Planificar / Navegar en la tira. Encendido (Navegar) con acento. */
+.hn-ctx-mode {
+  min-height: 32px;
+  padding: 4px 12px;
+  margin: 0 2px;
+  border-radius: 16px;
+  border: 1px solid transparent;
+  background: var(--hn-panel-2);
+  color: inherit;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.hn-ctx-mode:hover {
+  border-color: var(--hn-line);
+}
+.hn-ctx-mode.on {
+  color: var(--hn-accent);
+  border-color: var(--hn-accent);
+}
 .hn-dot {
   width: 8px;
   height: 8px;

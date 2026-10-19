@@ -27,7 +27,18 @@ const bootParams = readUrlParams();
 // importar GPX/KML/CSV, GPS/manual y bitácora.
 
 import { Marker, type Map as MlMap, type GeoJSONSource, type FilterSpecification, type MapMouseEvent } from "maplibre-gl";
-import { signal, computed, effect, untracked, type Signal } from "../core/store.ts";
+import {
+  effect,
+  navAlarmGate,
+  normalizeUiMode,
+  signal,
+  computed,
+  sustainedSog,
+  uiModeAuto,
+  untracked,
+  type Signal,
+  type UiMode,
+} from "../core/store.ts";
 import {
   filterEntries,
   monthScore,
@@ -86,7 +97,6 @@ import {
 } from "../core/routing/isochrones.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
-  evalAlarms,
   DEFAULT_ALARMS,
   anchorAlarm,
   anchorDistanceM,
@@ -179,6 +189,9 @@ interface Settings {
   wxLayers?: WxLayers;
   // E12.6: modo de ponderación del optimizador (Confort / Crucero / Regata).
   routingMode?: RoutingMode;
+  // UX-N.3: Planificar y Navegar (D3). Las alarmas de navegación solo suenan
+  // en Navegar.
+  uiMode?: UiMode;
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -273,6 +286,10 @@ interface UiState {
   forecast: Signal<ForecastPackage | null>;
   forecastHour: Signal<number>;
   navFixes: Fix[];
+  // UX-N.3: modo de la tira (Planificar / Navegar) y cuándo entró, para no
+  // desenganchar un Navegar forzado a mano antes de los 2 minutos.
+  mode: Signal<UiMode>;
+  modeEnteredAt: number;
   settings: Settings;
   zones?: ZoneHooks;
 }
@@ -339,7 +356,9 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     forecast: signal<ForecastPackage | null>(null),
     forecastHour: signal<number>(0),
     navFixes: [],
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE },
+    mode: signal<UiMode>("planificar"),
+    modeEnteredAt: Date.now(),
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE, uiMode: "planificar" },
     zones: deps.zones,
   };
 
@@ -574,6 +593,19 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     void keepAwake(on);
   });
 
+  // UX-N.3: Planificar y Navegar (D3). Engancha solo con SOG sostenido y ruta
+  // activa; se desengancha a los 2 minutos de parar. El chip de la tira fuerza
+  // cualquiera de los dos a mano.
+  effect(() => {
+    const current = ui.mode();
+    void ui.position();
+    const next = uiModeAuto(ui.navFixes, Date.now(), ui.active() !== null, current, ui.modeEnteredAt);
+    if (next !== current) {
+      ui.modeEnteredAt = Date.now();
+      ui.mode.set(next);
+    }
+  });
+
   // Fondeo y MOB sobreviven la recarga: se guardan al cambiar (no en el arranque,
   // para no pisar lo que `restore` todavía no leyó).
   ui.anchor.subscribe((a) => {
@@ -590,6 +622,11 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   });
   ui.redAtNight.subscribe((v) => {
     ui.settings.redAtNight = v;
+    saveSettings(ui);
+  });
+  // UX-N.3: el modo de la tira también se recuerda.
+  ui.mode.subscribe((m) => {
+    ui.settings.uiMode = m;
     saveSettings(ui);
   });
 
@@ -678,6 +715,11 @@ async function restore(ui: UiState): Promise<void> {
     }
     if (s.routingMode && ROUTING_MODES.some((m) => m.id === s.routingMode)) {
       ui.settings.routingMode = s.routingMode;
+    }
+    const mode = normalizeUiMode(s.uiMode);
+    if (mode) {
+      ui.mode.set(mode);
+      ui.modeEnteredAt = Date.now();
     }
   }
   const pos = readJson<Position | null>(position, null);
@@ -1628,7 +1670,17 @@ function renderContextBar(ui: UiState, bar: HTMLElement): void {
     wxBtn.setAttribute("aria-label", `Tiempo: ${WEATHER_LABEL[wxMode]}. Tocar para cambiar.`);
     wxBtn.addEventListener("click", () => cycleWeather(ui));
 
-    bar.append(where, when, wxBtn, themeBtn, chip);
+    // UX-N.3: chip Planificar / Navegar (D3). Tocar fuerza el otro modo.
+    const mode = ui.mode();
+    const modeBtn = el("button", { class: `hn-ctx-mode${mode === "navegar" ? " on" : ""}`, type: "button" }, mode === "navegar" ? "Navegar" : "Planificar");
+    modeBtn.title = `Modo ${mode === "navegar" ? "Navegar" : "Planificar"}. Tocar para cambiar.`;
+    modeBtn.setAttribute("aria-label", `Modo ${mode === "navegar" ? "Navegar" : "Planificar"}. Tocar para cambiar.`);
+    modeBtn.addEventListener("click", () => {
+      ui.modeEnteredAt = Date.now();
+      ui.mode.set(ui.mode() === "navegar" ? "planificar" : "navegar");
+    });
+
+    bar.append(where, when, wxBtn, themeBtn, modeBtn, chip);
   });
 }
 
@@ -2010,7 +2062,7 @@ function renderAqui(ui: UiState, body: HTMLElement, cleanup: (() => void)[]): vo
     }),
   );
 
-  body.append(alarmsCard(ui));
+  body.append(alarmsCard(ui, cleanup));
   body.append(anchorCard(ui, cleanup));
   body.append(offlineCard(ui, cleanup));
   body.append(themeCard(ui, cleanup));
@@ -2131,7 +2183,7 @@ function armFixOnMap(ui: UiState): void {
 }
 
 // Ajustes de alarmas (E9.2): dos umbrales numéricos, persistidos en hn.settings.
-function alarmsCard(ui: UiState): HTMLElement {
+function alarmsCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const card = el("div", { class: "hn-card" });
   card.append(el("div", { class: "hn-card-title" }, "Alarmas"));
   const row = el("div", { class: "hn-alarm-fields" });
@@ -2165,6 +2217,15 @@ function alarmsCard(ui: UiState): HTMLElement {
     el("label", { class: "hn-field" }, el("span", { class: "hn-field-label" }, "Radio de llegada (nm)"), arrival),
   );
   card.append(row);
+  // UX-N.3: en Planificar las alarmas de navegación no suenan; se avisa acá
+  // (no en el mapa) para no llenar la vista de bandas pasivas.
+  const pause = el("p", { class: "hn-muted" }, "Alarmas en pausa — modo Planificar");
+  cleanup.push(
+    effect(() => {
+      pause.hidden = ui.mode() !== "planificar";
+    }),
+  );
+  card.append(pause);
   return card;
 }
 
@@ -2641,21 +2702,11 @@ function renderNavStrip(ui: UiState, host: HTMLElement): void {
   });
 }
 
-// SOG ≥ 0,5 kn sostenida por 2 minutos seguidos sobre la ventana de fijas.
-function sustainedSog(fixes: Fix[], nowMs: number): boolean {
-  const win = fixes.filter((f) => nowMs - f.t <= 120_000);
-  if (win.length < 2) return false;
-  const first = win[0]!;
-  const last = win[win.length - 1]!;
-  const span = last.t - first.t;
-  if (span < 120_000) return false;
-  return haversineNm(first.lat, first.lon, last.lat, last.lon) / (span / 3_600_000) >= 0.5;
-}
-
 // Banda de alarma (E9.2/E9.3): fija arriba de la hoja. Cubre MOB (prioridad),
 // fondeo garreado y las alarmas de ruta (llegada/desvío). Al aparecer una alarma
 // nueva (no silenciada) suena y repite mientras siga activa; Silenciar la deja en
-// gris, sin sonido, hasta que cambie de tipo.
+// gris, sin sonido, hasta que cambie de tipo. UX-N.3 (D3): fondeo, llegada y
+// desvío solo evalúan en modo Navegar; MOB siempre.
 type AlarmKind = "mob" | "anchor" | "arrival" | "xte";
 
 function renderAlarmBand(ui: UiState): void {
@@ -2688,6 +2739,7 @@ function renderAlarmBand(ui: UiState): void {
     const anchor = ui.anchor();
     const pos = ui.position();
     const active = ui.active();
+    const mode = ui.mode();
     const nav = active ? activeNav(ui) : null;
 
     let kind: AlarmKind | null = null;
@@ -2701,11 +2753,11 @@ function renderAlarmBand(ui: UiState): void {
       message = `✖ Hombre al agua · ${nmDecimal(f.distanceNm)} · ${mmss(f.elapsedS)} desde la caída`;
       beeps = 2;
       intervalMs = 5_000;
-    } else if (anchor.active && pos && anchorAlarm(pos, anchor)) {
+    } else if (mode === "navegar" && anchor.active && pos && anchorAlarm(pos, anchor)) {
       kind = "anchor";
       message = `⚓ Garreando: ${Math.round(anchorDistanceM(pos, anchor))} m del fondeo`;
     } else if (nav) {
-      const next = evalAlarms(nav.fix, ui.settings.alarms, { active: null, silencedFor: null });
+      const next = navAlarmGate(mode, nav.fix, ui.settings.alarms, { active: null, silencedFor: null });
       if (next.active === "arrival") {
         kind = "arrival";
         message = `⚑ Llegando a ${nav.fix.nextName || "el waypoint"}`;
