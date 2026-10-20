@@ -274,3 +274,114 @@ test("E13.1 empaquetado binario sobrevive el viaje", async () => {
   assert.equal(encodeForecast(null), -32768);
   assert.equal(decodeForecast(-32768), null);
 });
+
+// --- E13.3: 16 días, 3-hourly de entrada y descarga robusta ------------------
+
+import {
+  FORECAST_DAYS,
+  FORECAST_DAYS_MAX,
+  FORECAST_TIMEOUT_MS,
+  ForecastHttpError,
+  forecastErrorMessage,
+  forecastUrl,
+  marineUrl,
+} from "./forecast.ts";
+
+test("E13.3 horizonte de 16 días en las constantes", () => {
+  assert.equal(FORECAST_DAYS, 16);
+  assert.equal(FORECAST_DAYS_MAX, 16);
+});
+
+test("E13.3 las dos URLs piden forecast_days=16 y temporal_resolution=hourly_3", () => {
+  const pts = [{ lat: 16, lon: -24 }, { lat: 13, lon: -59 }];
+  for (const url of [forecastUrl(pts, FORECAST_DAYS), marineUrl(pts, FORECAST_DAYS)]) {
+    const u = new URL(url);
+    assert.equal(u.searchParams.get("forecast_days"), "16");
+    assert.equal(u.searchParams.get("temporal_resolution"), "hourly_3");
+  }
+});
+
+test("E13.3 16 días a 3 h ⇒ 128 pasos", async () => {
+  // El servidor devuelve 3-hourly (como con temporal_resolution=hourly_3): un
+  // punto por paso, 128 pasos para 16 días.
+  const days16 = Array.from({ length: 16 * 8 }, (_, i) => START + i * 3 * 3600);
+  const fetch3h = (url: string): Promise<unknown> => {
+    const u = new URL(url);
+    const n = u.searchParams.get("latitude")!.split(",").length;
+    const names = u.searchParams.get("hourly")!.split(",");
+    return Promise.resolve(
+      Array.from({ length: n }, () => {
+        const hourly: Record<string, number[]> = { time: days16 };
+        for (const nm of names) hourly[nm] = days16.map(() => (nm.startsWith("wave") ? 1.8 : 12.5));
+        return { hourly };
+      }),
+    );
+  };
+  const pkg = await fetchForecast([-20, 20, -18, 22], 3, FORECAST_DAYS, {
+    id: "e13-3",
+    marginNm: 0,
+    now: () => START * 1000,
+    fetchJson: fetch3h,
+  });
+  assert.equal(pkg.times.length, 128, "128 pasos de 3 h cubren los 16 días");
+  assert.equal(pkg.times[127]! - pkg.times[0]!, 127 * 3 * 3600 * 1000);
+});
+
+test("E13.3 reintenta un bloque que falla una vez (sale a la segunda)", async () => {
+  // `fetchJson` falla la primera vez por bloque (viento y olas) y después anda.
+  const seen = new Set<string>();
+  let calls = 0;
+  const flaky = (url: string): Promise<unknown> => {
+    calls++;
+    const key = new URL(url).pathname + new URL(url).searchParams.get("hourly")!.slice(0, 5);
+    if (!seen.has(key)) {
+      seen.add(key);
+      return Promise.reject(new Error("tirón de red"));
+    }
+    return Promise.resolve([{ hourly: { time: Array.from({ length: 24 }, (_, i) => START + i * 3600) } }]);
+  };
+  // Con un solo punto la grilla es 1×1: 1 bloque de viento + 1 de olas = 2 keys.
+  const pkg = await fetchForecast([-20, 20, -19.5, 20.5], 3, 1, {
+    id: "retry",
+    marginNm: 0,
+    now: () => START * 1000,
+    fetchJson: flaky,
+  });
+  assert.equal(pkg.id, "retry");
+  assert.ok(calls >= 4, `esperaba reintentos (calls=${calls})`);
+});
+
+test("E13.3 error honesto: HTTP y red dicen qué falló", () => {
+  assert.equal(forecastErrorMessage(new ForecastHttpError("viento", 500)), "error de viento · HTTP 500");
+  assert.equal(forecastErrorMessage(new ForecastHttpError("olas", 429)), "error de olas · HTTP 429");
+  const redErr = Object.assign(new Error("Failed to fetch"), { kind: "olas" as const });
+  assert.equal(forecastErrorMessage(redErr), "sin conexión · olas");
+  assert.equal(forecastErrorMessage(new Error("Failed to fetch")), "sin conexión · viento");
+});
+
+test("E13.3 timeout por intento configurado a 30 s", () => {
+  assert.equal(FORECAST_TIMEOUT_MS, 30_000);
+});
+
+test("E13.3 mock mudo: 3 intentos y error 'sin conexión · viento'", async () => {
+  let calls = 0;
+  const mute = (): Promise<unknown> => {
+    calls++;
+    return Promise.reject(new Error("Failed to fetch"));
+  };
+  await assert.rejects(
+    fetchForecast([-20, 20, -19.5, 20.5], 3, 1, {
+      id: "mudo",
+      marginNm: 0,
+      now: () => START * 1000,
+      fetchJson: mute,
+    }),
+    (err: unknown) => {
+      assert.equal(forecastErrorMessage(err), "sin conexión · viento");
+      return true;
+    },
+  );
+  // 3 intentos (1 + 2 reintentos) por bloque antes de rendirse. Viento y olas
+  // corren en paralelo, así que el total es >= 3.
+  assert.ok(calls >= 3, `esperaba >= 3 intentos, hubo ${calls}`);
+});

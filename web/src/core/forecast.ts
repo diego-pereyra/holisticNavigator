@@ -44,9 +44,11 @@ export const FORECAST_MARGIN_NM = 300;
 export const FORECAST_POINTS_MAX = 1500;
 export const FORECAST_CHUNK = 200;
 export const FORECAST_STEP_HOURS = 3;
-export const FORECAST_DAYS = 7;
-
-const FORECAST_DAYS_MAX = 16;
+// E13.3 — 16 días es el techo operacional de Open-Meteo (y del viento que tiene
+// sentido para planificar). Se pide directo en pasos de 3 h con
+// temporal_resolution (un tercio del peso horario): 16 × 128 = 128 pasos.
+export const FORECAST_DAYS = 16;
+export const FORECAST_DAYS_MAX = 16;
 const FORECAST_HOST = "https://api.open-meteo.com/v1/forecast";
 const MARINE_HOST = "https://marine-api.open-meteo.com/v1/marine";
 
@@ -242,6 +244,8 @@ export function forecastUrl(points: { lat: number; lon: number }[], days: number
   p.set("longitude", points.map((x) => round4(x.lon)).join(","));
   p.set("hourly", "wind_speed_10m,wind_direction_10m,wind_gusts_10m,pressure_msl");
   p.set("forecast_days", String(days));
+  // E13.3 — 3-hourly de entrada: menos peso y menos pasos que pedir horario.
+  p.set("temporal_resolution", "hourly_3");
   p.set("timeformat", "unixtime");
   p.set("windspeed_unit", "kn");
   return `${FORECAST_HOST}?${p.toString()}`;
@@ -256,6 +260,8 @@ export function marineUrl(points: { lat: number; lon: number }[], days: number):
     "wave_height,wave_direction,wave_period,ocean_current_velocity,ocean_current_direction",
   );
   p.set("forecast_days", String(days));
+  // E13.3 — 3-hourly de entrada (ver forecastUrl).
+  p.set("temporal_resolution", "hourly_3");
   p.set("timeformat", "unixtime");
   return `${MARINE_HOST}?${p.toString()}`;
 }
@@ -279,10 +285,92 @@ function asArray(res: unknown): OmLocation[] {
   return [];
 }
 
+// E13.3 — robustez de la descarga. Un tirón lento de la red móvil no puede
+// matar toda la travesía: cada bloque se intenta hasta 3 veces (2 reintentos),
+// con timeout propio por intento. Los cuerpos de error traen detalle (red vs
+// HTTP) para el mensaje honesto de la ficha.
+export const FORECAST_TIMEOUT_MS = 30_000;
+export const FORECAST_RETRY_WAITS_MS = [1_000, 4_000];
+export const FORECAST_PARALLEL = 2;
+
+export type ForecastFetchKind = "viento" | "olas";
+
+// Marca el tipo de dato que falló, para que el mensaje diga "viento" u "olas".
+export class ForecastHttpError extends Error {
+  readonly kind: ForecastFetchKind;
+  readonly status: number;
+  constructor(kind: ForecastFetchKind, status: number) {
+    super(`HTTP ${status}`);
+    this.name = "ForecastHttpError";
+    this.kind = kind;
+    this.status = status;
+  }
+}
+
+// Un intento con timeout. El label distingue viento de olas en el error.
+async function fetchOnce(url: string, kind: ForecastFetchKind, timeoutMs: number): Promise<Response> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: ctrl.signal });
+    if (!res.ok) throw new ForecastHttpError(kind, res.status);
+    return res;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Hasta 3 intentos, con esperas de 1 s y 4 s. Red (fetch rechaza / timeout) o
+// HTTP 5xx se reintentan; un 4xx es definitivo (no tiene sentido insistir con
+// la misma URL).
+async function retryJson(
+  fetchJson: (url: string) => Promise<unknown>,
+  url: string,
+  kind: ForecastFetchKind,
+): Promise<unknown> {
+  let last: unknown;
+  for (let attempt = 0; attempt <= FORECAST_RETRY_WAITS_MS.length; attempt++) {
+    try {
+      return await fetchJson(url);
+    } catch (err) {
+      last = err;
+      if (err instanceof ForecastHttpError && err.status >= 400 && err.status < 500) throw err;
+      const wait = FORECAST_RETRY_WAITS_MS[attempt];
+      if (wait === undefined) break;
+      await sleep(wait);
+    }
+  }
+  throw rethrowKind(last, kind);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function defaultJson(url: string): Promise<unknown> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`pronóstico: HTTP ${res.status}`);
+  const res = await fetchOnce(url, "viento", FORECAST_TIMEOUT_MS);
   return res.json();
+}
+
+// Reetiqueta el error de un bloque con el dato que falló, sin perder el motivo
+// (red o HTTP con código). El mensaje de la ficha lo usa tal cual.
+function rethrowKind(err: unknown, kind: ForecastFetchKind): never {
+  if (err instanceof ForecastHttpError) throw err;
+  const e = err instanceof Error ? err : new Error(String(err));
+  const tagged = new Error(e.message);
+  tagged.name = kind === "olas" ? "ForecastMarineError" : "ForecastWindError";
+  (tagged as { kind?: ForecastFetchKind }).kind = kind;
+  throw tagged;
+}
+
+// E13.3 — mensaje honesto: dice QUÉ falló (viento u olas) y si fue red o HTTP
+// (con código). Es el texto que ve Diego en la ficha.
+export function forecastErrorMessage(err: unknown): string {
+  const kind = (err as { kind?: ForecastFetchKind } | null)?.kind;
+  const name = err instanceof Error ? err.name : "";
+  const what = kind ?? (name === "ForecastMarineError" ? "olas" : "viento");
+  if (err instanceof ForecastHttpError) return `error de ${what} · HTTP ${err.status}`;
+  return `sin conexión · ${what}`;
 }
 
 export async function fetchForecast(
@@ -302,24 +390,31 @@ export async function fetchForecast(
   const parts = chunks(grid.points, FORECAST_CHUNK);
   const total = parts.length * 2;
   let done = 0;
-  const bump = (): void => {
-    done++;
-    hooks.onProgress?.(total === 0 ? 1 : done / total);
-  };
 
   const forecastRes: OmLocation[][] = [];
   const marineRes: OmLocation[][] = [];
-  for (const part of parts) {
-    forecastRes.push(asArray(await fetchJson(forecastUrl(part, clampedDays))));
-    bump();
-    marineRes.push(asArray(await fetchJson(marineUrl(part, clampedDays))));
-    bump();
+  // E13.3 — de a 2 bloques en paralelo: menos espera total y, si uno falla, el
+  // mensaje sabe SI fue viento o olas.
+  for (let i = 0; i < parts.length; i += FORECAST_PARALLEL) {
+    const group = parts.slice(i, i + FORECAST_PARALLEL);
+    const fc = group.map((part) => retryJson(fetchJson, forecastUrl(part, clampedDays), "viento").then(asArray));
+    const mc = group.map((part) => retryJson(fetchJson, marineUrl(part, clampedDays), "olas").then(asArray));
+    const [fcRes, mcRes] = await Promise.all([Promise.all(fc), Promise.all(mc)]);
+    forecastRes.push(...fcRes);
+    marineRes.push(...mcRes);
+    done += group.length * 2;
+    hooks.onProgress?.(total === 0 ? 1 : done / total);
   }
 
   const allTimes: number[] = forecastRes[0]?.[0]?.hourly?.["time"] ?? [];
   const maxSteps = Math.floor((clampedDays * 24) / stepHours);
+  // E13.3 — el servidor ahora entrega 3-hourly directo, pero el submuestreo
+  // cliente queda como red de seguridad (si un día vuelve a mandar horario).
+  // Se mide el paso REAL de la respuesta, no se asume.
+  const serverStepH = allTimes.length > 1 ? (allTimes[1]! - allTimes[0]!) / 3600 : stepHours;
+  const stride = Math.max(1, Math.round(stepHours / Math.max(1, serverStepH)));
   const idx: number[] = [];
-  for (let i = 0; i < allTimes.length && idx.length < maxSteps; i += stepHours) idx.push(i);
+  for (let i = 0; i < allTimes.length && idx.length < maxSteps; i += stride) idx.push(i);
   const times = idx.map((i) => (allTimes[i] ?? 0) * 1000);
 
   const count = grid.cols * grid.rows * times.length;

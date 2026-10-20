@@ -7,6 +7,8 @@
 // `hn.forecast.index` permite listarlas todas y borrarlas por fila.
 
 import {
+  FORECAST_DAYS,
+  FORECAST_STEP_HOURS,
   forecastBytes,
   forecastKind,
   fetchForecast,
@@ -113,7 +115,7 @@ export async function downloadForecast(
   bbox: BBox,
   onProgress?: (ratio: number) => void,
 ): Promise<ForecastPackage> {
-  const pkg = await fetchForecast(bbox, 3, 7, { id, onProgress });
+  const pkg = await fetchForecast(bbox, FORECAST_STEP_HOURS, FORECAST_DAYS, { id, onProgress });
   await storeForecast(store, pkg);
   return pkg;
 }

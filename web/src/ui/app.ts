@@ -62,6 +62,7 @@ import {
   bboxOfTrack,
   empalmeConClimatología,
   forecastBytes,
+  forecastErrorMessage,
   forecastIdPoint,
   forecastIdView,
   forecastOwnerName,
@@ -1939,10 +1940,10 @@ function renderWeatherLegend(
             ui.forecast.set(p);
             ui.forecastHour.set(nearestSlot(p, Date.now()));
           })
-          .catch(() => {
+          .catch((err) => {
             btn.disabled = false;
             btn.textContent = "Reintentar";
-            status.textContent = "error · sin conexión";
+            status.textContent = forecastErrorMessage(err);
           });
       });
       host.append(note, btn, status);
@@ -1964,7 +1965,7 @@ function renderWeatherLegend(
       el(
         "div",
         { class: "hn-wx-note" },
-        beyond ? "clima medio · más allá del horizonte de 7 días" : "flechas = dirección de la ola",
+        beyond ? "clima medio · más allá del horizonte de 16 días" : "flechas = dirección de la ola",
       ),
       el("div", { class: "hn-wx-src" }, "Open-Meteo · CC BY 4.0"),
     );
@@ -2759,11 +2760,11 @@ function routeForecastBlock(
         showIdle();
         onPkg?.(pkg);
       })
-      .catch(() => {
+      .catch((err) => {
         busy = false;
         btn.disabled = false;
         btn.textContent = "Reintentar";
-        info.textContent = "error · sin conexión";
+        info.textContent = forecastErrorMessage(err);
       });
   });
 }
@@ -5019,10 +5020,10 @@ function appendPointForecast(ui: UiState, wx: HTMLElement, lat: number, lon: num
               ui.forecastHour.set(nearestSlot(pkg, Date.now()));
               render();
             })
-            .catch(() => {
+            .catch((err) => {
               btn.disabled = false;
               btn.textContent = "Reintentar";
-              status.textContent = "error · sin conexión";
+              status.textContent = forecastErrorMessage(err);
             });
         });
         host.append(btn, status);
