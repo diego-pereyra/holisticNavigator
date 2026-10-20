@@ -37,3 +37,5 @@ web/public/app.css (solo si hace falta).
    con el pronóstico de la ruta descargado → el número baja a lo real y la edad se ve.
 7. npm test (en web/), bash scripts/build-web.sh, commit "E12.13: duración estimada en la
    ficha", push. Al terminar escribí "Status: DONE" como última línea.
+
+Status: DONE
