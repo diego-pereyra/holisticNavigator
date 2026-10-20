@@ -45,4 +45,4 @@ web/public/app.css (solo leyenda).
 8. npm test (en web/), bash scripts/build-web.sh, commit "E13.5: clima elegante (viento y
    corrientes como ríos)", push. Al terminar escribí "Status: DONE" como última línea.
 
-Status: ready
+Status: DONE
