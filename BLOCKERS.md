@@ -280,3 +280,26 @@ servido por esa rama (200/206) y el hilo cerraba la conexión sin responder →
 **Estado.** El runner del `uat` ya midió de verdad (el run sobre el commit con el fix pasó verde
 y sin crash del arnés). Queda para Claude el re-score de `docs/07 §5` con la evidencia y las
 capturas del run; el `9/10` se mide contra ese resultado, no contra los runs rotos previos.
+
+## E13.4 · El hook re-emite la tarea recién cerrada (carrera al vaciar la cola)
+
+**Qué falla.** Con E13.4 ya implementada, commiteada y pusheada
+(`42d8aa7 E13.4: el 429 del pronóstico…`), escribí `Status: DONE` (`98fce55`) y pusheé.
+El hook detectó el done y en **un mismo commit** (`b7d3c92`) movió
+`queue/E13.4-el-429-del-pronostico.md` a `queue/done/` y volvió a cargar ese
+mismo archivo en `SEMAFORO.md` como "siguiente tarea" (que ahora dice
+`Status: ready`). Secuencia: el arquitecto había dejado E13.4 en `queue/` durante
+un `ESPERAR`; el hook la cargó en SEMAFORO (`c709d53`) **sin moverla a `done/`**
+porque todavía no estaba cerrada; al llegar el DONE, el paso "cargar la
+siguiente de la cola" encontró ese mismo archivo (aún en `queue/`) y lo
+re-cargó.
+
+**Efecto.** E13.4 queda marcada como pendiente aunque ya está hecha (y pusheada);
+la cola quedó vacía. Riesgo de que se reimplemente al leer SEMAFORO.
+
+**Qué propongo.** En `scripts/architect-hook.sh`, mover la tarea a `queue/done/`
+**antes** de elegir la siguiente, y excluir de "la siguiente" cualquier archivo
+que se acabe de cerrar (comparar por nombre). Alternativa rápida para desbloquear:
+que el arquitecto limpie `SEMAFORO.md` (o confirme que E13.4 no se repite).
+
+**Estado.** No reintento la tarea (ya está hecha). Paro y espero indicación.
