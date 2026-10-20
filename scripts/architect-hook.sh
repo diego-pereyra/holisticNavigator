@@ -28,6 +28,9 @@ DONE_RE='^status: *done *$'
 
 log() { echo "[$(date '+%F %T')] $*" >> "$LOG"; }
 log "hook iniciado (pid $$)"
+# Toda muerte queda registrada (con código de salida) para dejar de perder
+# hooks en silencio.
+trap 'log "hook murió (exit $?)"' EXIT
 
 sem_done() { tail -3 SEMAFORO.md 2>/dev/null | grep -qiE "$DONE_RE"; }
 sem_esperar() { head -1 SEMAFORO.md 2>/dev/null | grep -q '^ESPERAR'; }
