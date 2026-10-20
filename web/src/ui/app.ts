@@ -1980,10 +1980,10 @@ function renderWeatherLegend(
     const windU = ui.unidades().speed;
     host.append(
       wxRamp(WX_WIND_STOPS, WX_WIND_COLORS, (v) => (windU === "kmh" ? String(Math.round(v * 1.852)) : String(v))),
-      el("div", { class: "hn-wx-note" }, `${windU === "kmh" ? "km/h" : "nudos"} · líneas finas = ríos de viento`),
+      el("div", { class: "hn-wx-note" }, `${windU === "kmh" ? "km/h" : "nudos"} · flechitas finas`),
     );
   }
-  if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: ríos azules gruesos"));
+  if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: rayas azules finas"));
   if (layers.windField) host.append(el("div", { class: "hn-wx-note" }, "fondo: color por viento (tenue)"));
   if (layers.cyclone) host.append(el("div", { class: "hn-wx-note" }, "rayado = ciclones"));
   if (layers.ice) host.append(el("div", { class: "hn-wx-note" }, "hielo"));

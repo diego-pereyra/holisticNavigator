@@ -13,7 +13,6 @@ import {
   type ForecastPackage,
 } from "../core/forecast.ts";
 import { initialBearingDeg } from "../core/navigation.ts";
-import { streamlines, type StreamField } from "../core/streamlines.ts";
 
 export type WeatherMode = "off" | "pilot" | "forecast";
 
@@ -59,15 +58,19 @@ export const WX_FIELD_COLOR: ExpressionSpecification = [
 // celda. La rejilla de siembra va en PÍXELES de pantalla, así a cualquier zoom
 // el trazo tiene el mismo aire. Dos idiomas: el viento fino y multicolor, la
 // corriente gruesa y de un solo azul, por debajo.
+// E13.6 — Viento y corriente como flechitas discretas: espaciado por píxeles.
 export const WX_WIND_SPACING_PX = 80;
 export const WX_CURRENT_SPACING_PX = 120;
 export const WX_WAVE_SPACING_PX = 100;
-// Umbrales: las calmas no son ríos.
+// Umbrales: las calmas no se dibujan.
 export const WX_WIND_MIN_KN = 2;
 export const WX_CURRENT_MIN_KN = 0.5;
+// Largo FIJO del segmento (en grados): el color dice la intensidad, no el largo.
+export const WX_WIND_LEN_DEG = 0.4;
+export const WX_CURRENT_LEN_DEG = 0.35;
 
-// E13.5 — Viento fino: 1,25 px fijos, color por la rampa y opacidad por la
-// constancia de la pilot chart (0,15→0,95); en pronóstico queda firme.
+// E13.6 — Viento fino: 1,25 px fijos, color por la rampa y opacidad por la
+// constancia de la pilot chart (0,15→0,95); en pronóstico queda firme (0,85).
 export const WX_WIND_LINE_WIDTH = 1.25;
 export const WX_WIND_LINE_OPACITY: ExpressionSpecification = [
   "interpolate",
@@ -78,31 +81,22 @@ export const WX_WIND_LINE_OPACITY: ExpressionSpecification = [
   50,
   0.5,
   100,
-  0.95,
+  0.85,
 ];
-// E13.5 — las líneas de viento son de ancho fijo (ya no escalan con la fuerza).
+// E13.6 — flechas finas de ancho fijo (ya no escalan con la fuerza).
 export const WX_ARROW_WIDTH = WX_WIND_LINE_WIDTH;
 export const WX_ARROW_OPACITY = WX_WIND_LINE_OPACITY;
 
 export const WX_CURRENT_COLOR = "#2e9bff";
-// E13.5 — Corriente gruesa, ancho ∝ velocidad, sólida (ya no rayada).
-export const WX_CURRENT_WIDTH: ExpressionSpecification = [
-  "interpolate",
-  ["linear"],
-  ["get", "mag"],
-  0,
-  2,
-  2,
-  3,
-  4,
-  4.2,
-];
+// E13.6 — Corriente también fina y sólida (el dash a tamaño chico era ruido).
+export const WX_CURRENT_WIDTH = WX_WIND_LINE_WIDTH;
+export const WX_CURRENT_OPACITY = 0.8;
 
 // E13.6 — Punta de flecha: triángulo con el ápice en el extremo del vector y las
-// dos alas atrás, perpendiculares a la dirección. Medidas como fracción del largo
-// del vector, para que la punta escale con la flecha.
-export const WX_HEAD_BACK = 0.36;
-export const WX_HEAD_HALF = 0.22;
+// dos alas atrás, perpendiculares a la dirección. Cabeza chica (~15 % del largo)
+// para no engordar la flechita.
+export const WX_HEAD_BACK = 0.16;
+export const WX_HEAD_HALF = 0.1;
 
 // E13.7 — La punta es la misma para viento, corriente y olas; cambia la
 // proporción (`back` = avance de las alas sobre el largo, `half` = media
@@ -115,10 +109,10 @@ export interface HeadShape {
 }
 
 export const WX_HEAD_WIND: HeadShape = { back: WX_HEAD_BACK, half: WX_HEAD_HALF, maxDeg: Infinity };
-// Corriente: ~20 % del largo (antes ~35 %), discreta, como una punta y no cometa.
-export const WX_HEAD_CURRENT: HeadShape = { back: 0.2, half: 0.12, maxDeg: 0.3 };
+// Corriente: punta más chica todavía, discreta.
+export const WX_HEAD_CURRENT: HeadShape = { back: 0.12, half: 0.08, maxDeg: 0.3 };
 // Olas: punta intermedia, mismo tope absoluto.
-export const WX_HEAD_WAVE: HeadShape = { back: 0.3, half: 0.18, maxDeg: 0.3 };
+export const WX_HEAD_WAVE: HeadShape = { back: 0.14, half: 0.09, maxDeg: 0.3 };
 
 
 export const WX_CYCLONE_COLOR = "#C62828";
@@ -270,7 +264,7 @@ export function initWeatherLayers(map: MlMap): void {
     paint: {
       "line-color": WX_CURRENT_COLOR,
       "line-width": WX_CURRENT_WIDTH,
-      "line-opacity": 0.95,
+      "line-opacity": WX_CURRENT_OPACITY,
     },
   });
   map.addLayer({
@@ -278,7 +272,7 @@ export function initWeatherLayers(map: MlMap): void {
     type: "fill",
     source: "wx-current-head",
     minzoom: 3,
-    paint: { "fill-color": WX_CURRENT_COLOR, "fill-opacity": 0.95 },
+    paint: { "fill-color": WX_CURRENT_COLOR, "fill-opacity": WX_CURRENT_OPACITY },
   });
   map.addLayer({
     id: "wx-arrows",
@@ -342,14 +336,11 @@ export function clearWeather(map: MlMap): void {
 
 // Repinta el mes: reemplaza la data de las capas con las celdas de mar visibles.
 export function updateWeather(map: MlMap, clim: ClimMonth, _month = 0): void {
-  const stride = weatherStride(map.getZoom());
-  const b = map.getBounds();
-  const viewport: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
-  applyWindLayers(
-    map,
-    buildCellFeatures(climateSamples(map, clim), stride),
-    buildStreamFeatures(map, viewport, climateStreamField(clim), climateCurrentField(clim)),
-  );
+  const areaStride = weatherStride(map.getZoom());
+  const wS = climateSamples(map, clim, pxStride(map, 1, WX_WIND_SPACING_PX));
+  const cS = climateSamples(map, clim, pxStride(map, 1, WX_CURRENT_SPACING_PX));
+  const aS = climateSamples(map, clim, areaStride);
+  applyWindLayers(map, buildWeatherFeatures(aS, areaStride, wS, cS));
   // Las del pronóstico quedan apagadas en modo pilot chart.
   setData(map, "wx-isobars", []);
   setData(map, "wx-isobar-labels", []);
@@ -564,18 +555,13 @@ export function updateForecastWeather(
   pkg: ForecastPackage,
   timeMs: number,
 ): boolean {
-  const stride = weatherStride(map.getZoom());
-  const b = map.getBounds();
-  const viewport: [number, number, number, number] = [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()];
+  const areaStride = weatherStride(map.getZoom());
   if (timeMs > forecastLastTime(pkg)) {
     // Fuera del horizonte: viento y corriente desde la climatología del mes.
-    applyWindLayers(
-      map,
-      clim ? buildCellFeatures(climateSamples(map, clim), stride) : EMPTY_CELL,
-      clim
-        ? buildStreamFeatures(map, viewport, climateStreamField(clim), climateCurrentField(clim))
-        : EMPTY_STREAMS,
-    );
+    const wS = clim ? climateSamples(map, clim, pxStride(map, 1, WX_WIND_SPACING_PX)) : [];
+    const cS = clim ? climateSamples(map, clim, pxStride(map, 1, WX_CURRENT_SPACING_PX)) : [];
+    const aS = clim ? climateSamples(map, clim, areaStride) : [];
+    applyWindLayers(map, clim ? buildWeatherFeatures(aS, areaStride, wS, cS) : EMPTY_CELL_ARROWS);
     setData(map, "wx-isobars", []);
     setData(map, "wx-isobar-labels", []);
     setData(map, "wx-waves", clim ? climateWaves(map, clim) : []);
@@ -583,25 +569,14 @@ export function updateForecastWeather(
     setData(map, "wx-waves-head", []);
     return true;
   }
-// E13.5 — paso de olas en celdas para que la flecha caiga cada ~100 px.
-function waveCellStride(map: MlMap, cellDeg: number): number {
-  if (cellDeg <= 0) return 1;
-  const want = (WX_WAVE_SPACING_PX * degPerPx(map)) / cellDeg;
-  return Math.max(1, Math.round(want));
-}
 
   const index = nearestForecastIndex(pkg, timeMs);
-  const waveStride = waveCellStride(map, 0.5);
-  applyWindLayers(
-    map,
-    buildCellFeatures(forecastWindSamples(pkg, index, stride), stride),
-    buildStreamFeatures(
-      map,
-      viewport,
-      forecastStreamField(pkg, index, "wind"),
-      forecastStreamField(pkg, index, "current"),
-    ),
-  );
+  const cellDeg = pkg.cols > 1 ? Math.abs(pkg.bbox[2] - pkg.bbox[0]) / (pkg.cols - 1) : 0.5;
+  const waveStride = pxStride(map, cellDeg, WX_WAVE_SPACING_PX);
+  const wS = forecastWindSamples(pkg, index, pxStride(map, cellDeg, WX_WIND_SPACING_PX));
+  const cS = forecastWindSamples(pkg, index, pxStride(map, cellDeg, WX_CURRENT_SPACING_PX));
+  const aS = forecastWindSamples(pkg, index, areaStride);
+  applyWindLayers(map, buildWeatherFeatures(aS, areaStride, wS, cS));
   setData(map, "wx-isobars", isobars(pkg, index));
   setData(map, "wx-isobar-labels", isobarLabels(pkg, index));
   setData(map, "wx-waves", waveArrows(pkg, index, waveStride));
@@ -728,12 +703,20 @@ function setData(map: MlMap, id: string, features: object[]): void {
 
 type Pt = [number, number];
 
-// Muestra de una celda para el fondo (tinte), los ciclones y el hielo. El
-// viento y la corriente ya no salen de acá: son líneas de flujo (E13.5).
+// Muestra de una celda: fondo (tinte), viento, corriente, ciclón e hielo.
+// `dirX/dirY` y `cdirX/cdirY` son vectores unitarios hacia donde VA el flujo;
+// `wmag`/`cmag` son las magnitudes (para no dibujar calmas).
 interface WxSample {
   lon: number;
   lat: number;
   ws: number;
+  st: number;
+  wmag: number;
+  dirX: number;
+  dirY: number;
+  cmag: number;
+  cdirX: number;
+  cdirY: number;
   tc: number;
   ice: number;
 }
@@ -744,34 +727,26 @@ interface CellFeatures {
   ice: object[];
 }
 
-interface StreamFeatures {
+interface ArrowFeatures {
   wind: object[];
   windHeads: object[];
   current: object[];
   currentHeads: object[];
 }
 
-const EMPTY_CELL: CellFeatures = { field: [], cyclone: [], ice: [] };
-const EMPTY_STREAMS: StreamFeatures = { wind: [], windHeads: [], current: [], currentHeads: [] };
+const EMPTY_CELL_ARROWS: CellFeatures & ArrowFeatures = {
+  field: [],
+  cyclone: [],
+  ice: [],
+  wind: [],
+  windHeads: [],
+  current: [],
+  currentHeads: [],
+};
 
-// Celdas de fondo, ciclones y hielo (una caja por muestra visible).
-function buildCellFeatures(samples: WxSample[], stride: number): CellFeatures {
-  const field: object[] = [];
-  const cyclone: object[] = [];
-  const ice: object[] = [];
-  const half = stride / 2;
-  for (const s of samples) {
-    const box = boxRing(s.lon, s.lat, half);
-    field.push(polygonFeature(box, { ws: round1(s.ws) }));
-    if (s.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(s.tc) }));
-    if (s.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(s.ice) }));
-  }
-  return { field, cyclone, ice };
-}
-
-// Grados de longitud por píxel de pantalla: la rejilla de siembra en píxeles se
-// traduce a grados con esto. Se toma de los límites visibles y el ancho del
-// canvas; si el mapa todavía no tiene canvas, se cae a 1024 px.
+// Grados de longitud por píxel de pantalla: traduce el espaciado en píxeles a
+// grados. Se toma de los límites visibles y el ancho del canvas; si el mapa
+// todavía no tiene canvas, se cae a 1024 px.
 function degPerPx(map: MlMap): number {
   const b = map.getBounds();
   const spanDeg = Math.abs(b.getEast() - b.getWest());
@@ -781,94 +756,72 @@ function degPerPx(map: MlMap): number {
   return spanDeg > 0 ? spanDeg / px : 0.05;
 }
 
-// Polilíneas → features de línea (con `ws`/`st` o `mag`) y su punta en el
-// extremo, con la dirección del último tramo.
-function streamToFeatures(
-  lines: [number, number][][],
-  props: (first: [number, number]) => Record<string, unknown>,
-  headShape: HeadShape,
-): { lines: object[]; heads: object[] } {
-  const lineOut: object[] = [];
-  const headOut: object[] = [];
-  for (const coords of lines) {
-    if (coords.length < 2) continue;
-    const p = props(coords[0]!);
-    lineOut.push(lineFeature(coords, p));
-    const tip = coords[coords.length - 1]!;
-    const prev = coords[coords.length - 2]!;
-    const dx = tip[0] - prev[0];
-    const dy = tip[1] - prev[1];
-    const len = Math.hypot(dx, dy);
-    if (len > 0) headOut.push(headFeature(tip, dx / len, dy / len, len, p, headShape));
+// E13.6 — flechitas discretas: celdas muestreadas cada `spacingPx` de pantalla
+// (viento ~80 px, corriente ~120 px). A cualquier zoom cae la misma cantidad.
+function pxStride(map: MlMap, cellDeg: number, spacingPx: number): number {
+  if (cellDeg <= 0) return 1;
+  return Math.max(1, Math.round((spacingPx * degPerPx(map)) / cellDeg));
+}
+
+// Celdas de fondo/ciclón/hielo (desde `area`), flechas de viento (desde `wind`)
+// y rayas de corriente (desde `current`). Cada capa tiene su propio espaciado en
+// píxeles, así que se muestrean por separado. La flecha y la raya llevan su punta
+// (triángulo) en el extremo.
+function buildWeatherFeatures(
+  area: WxSample[],
+  areaStride: number,
+  wind: WxSample[],
+  current: WxSample[],
+): CellFeatures & ArrowFeatures {
+  const field: object[] = [];
+  const windLines: object[] = [];
+  const windHeads: object[] = [];
+  const currentLines: object[] = [];
+  const currentHeads: object[] = [];
+  const cyclone: object[] = [];
+  const ice: object[] = [];
+  const half = areaStride / 2;
+  for (const s of area) {
+    const box = boxRing(s.lon, s.lat, half);
+    field.push(polygonFeature(box, { ws: round1(s.ws) }));
+    if (s.tc >= 1) cyclone.push(polygonFeature(box, { tc: round1(s.tc) }));
+    if (s.ice >= 15) ice.push(polygonFeature(box, { ice: Math.round(s.ice) }));
   }
-  return { lines: lineOut, heads: headOut };
+  for (const s of wind) {
+    if (s.wmag < WX_WIND_MIN_KN) continue; // calma
+    const len = WX_WIND_LEN_DEG; // largo FIJO: el color dice la intensidad
+    const tip: Pt = [s.lon + s.dirX * len, s.lat + s.dirY * len];
+    const props = { ws: round1(s.ws), st: Math.round(s.st) };
+    windLines.push(segmentFeature([s.lon, s.lat], tip, props));
+    windHeads.push(headFeature(tip, s.dirX, s.dirY, len, props, WX_HEAD_WIND));
+  }
+  for (const s of current) {
+    if (s.cmag < WX_CURRENT_MIN_KN) continue; // calma
+    const len = WX_CURRENT_LEN_DEG;
+    const tip: Pt = [s.lon + s.cdirX * len, s.lat + s.cdirY * len];
+    const props = { mag: round2(s.cmag) };
+    currentLines.push(segmentFeature([s.lon, s.lat], tip, props));
+    currentHeads.push(headFeature(tip, s.cdirX, s.cdirY, len, props, WX_HEAD_CURRENT));
+  }
+  return {
+    field,
+    cyclone,
+    ice,
+    wind: windLines,
+    windHeads,
+    current: currentLines,
+    currentHeads,
+  };
 }
 
-// Viento y corriente de la vista como líneas de flujo. `field.at` devuelve la
-// dirección y magnitud; los umbrales dejan fuera las calmas.
-function buildStreamFeatures(
-  map: MlMap,
-  viewport: [number, number, number, number],
-  windField: StreamField,
-  currentField: StreamField,
-): StreamFeatures {
-  const scale = degPerPx(map);
-  const [west, south, east, north] = viewport;
-  // Paso de integración como media celda de la rejilla del pronóstico (0,5°),
-  // acotado para que no se corte el trazo en la pilot chart (1°).
-  const stepDeg = clamp(scale * 40, 0.25, 1);
-  const rng = () => hash01(seedCounter++);
-  const windLines = streamlines(windField, [west, south, east, north], WX_WIND_SPACING_PX, scale, {
-    minMag: WX_WIND_MIN_KN,
-    stepDeg,
-    maxSteps: 24,
-    rng,
-  });
-  const currentLines = streamlines(
-    currentField,
-    [west, south, east, north],
-    WX_CURRENT_SPACING_PX,
-    scale,
-    { minMag: WX_CURRENT_MIN_KN, stepDeg, maxSteps: 24, rng },
-  );
-  const wind = streamToFeatures(
-    windLines,
-    (first) => {
-      const v = windField.at(first[0], first[1]);
-      return { ws: round1(v?.mag ?? 0), st: 100 };
-    },
-    WX_HEAD_WIND,
-  );
-  const current = streamToFeatures(
-    currentLines,
-    (first) => {
-      const v = currentField.at(first[0], first[1]);
-      return { mag: round2(v?.mag ?? 0) };
-    },
-    WX_HEAD_CURRENT,
-  );
-  return { wind: wind.lines, windHeads: wind.heads, current: current.lines, currentHeads: current.heads };
-}
-
-// Contador y hash deterministas: las mismas semillas dan las mismas líneas en
-// cada repintado (si no, la pantalla herviría al mover la hora).
-let seedCounter = 1;
-function hash01(n: number): number {
-  let x = (n * 2654435761) >>> 0;
-  x ^= x >>> 15;
-  x = (x * 2246822519) >>> 0;
-  x ^= x >>> 13;
-  return (x >>> 0) / 4294967296;
-}
-
-function applyWindLayers(map: MlMap, cells: CellFeatures, streams: StreamFeatures): void {
-  setData(map, "wx-field", cells.field);
-  setData(map, "wx-arrows", streams.wind);
-  setData(map, "wx-arrows-head", streams.windHeads);
-  setData(map, "wx-current", streams.current);
-  setData(map, "wx-current-head", streams.currentHeads);
-  setData(map, "wx-cyclone", cells.cyclone);
-  setData(map, "wx-ice", cells.ice);
+function applyWindLayers(map: MlMap, f: CellFeatures & ArrowFeatures): void {
+  setData(map, "wx-field", f.field);
+  setData(map, "wx-arrows", f.wind);
+  setData(map, "wx-arrows-head", f.windHeads);
+  setData(map, "wx-current", f.current);
+  setData(map, "wx-current-head", f.currentHeads);
+  setData(map, "wx-cyclone", f.cyclone);
+  setData(map, "wx-ice", f.ice);
 }
 
 // Refuerza las propiedades que dependen de la data (por si el estilo se recargó).
@@ -887,10 +840,9 @@ function paintWindLayers(map: MlMap): void {
   map.setPaintProperty("wx-ice", "fill-color", WX_ICE_COLOR);
 }
 
-// Celdas de mar visibles en la vista actual, muestreadas según el zoom: fuente
-// común del pilot chart y del empalme climatológico del pronóstico.
-function climateSamples(map: MlMap, clim: ClimMonth): WxSample[] {
-  const stride = weatherStride(map.getZoom());
+// Celdas de mar visibles en la vista actual, muestreadas cada `stride` celdas
+// (la pilot chart tiene celdas de 1°).
+function climateSamples(map: MlMap, clim: ClimMonth, stride: number): WxSample[] {
   const b = map.getBounds();
   const west = b.getWest();
   const east = b.getEast();
@@ -908,15 +860,30 @@ function climateSamples(map: MlMap, clim: ClimMonth): WxSample[] {
       if (!lonInBounds(lon, west, east, half)) continue;
       const cell = getCell(clim, lat, lon);
       if (cell === null) continue;
-      out.push({ lon, lat, ws: cell.ws, tc: cell.tc, ice: cell.ice });
+      const wmag = Math.hypot(cell.wu, cell.wv);
+      const cmag = Math.hypot(cell.cu, cell.cv);
+      out.push({
+        lon,
+        lat,
+        ws: cell.ws,
+        st: cell.st,
+        wmag,
+        dirX: wmag > 0 ? cell.wu / wmag : 0,
+        dirY: wmag > 0 ? cell.wv / wmag : 0,
+        cmag,
+        cdirX: cmag > 0 ? cell.cu / cmag : 0,
+        cdirY: cmag > 0 ? cell.cv / cmag : 0,
+        tc: cell.tc,
+        ice: cell.ice,
+      });
     }
   }
   return out;
 }
 
-// Viento y corriente del paquete de pronóstico. La dirección del API es de dónde
-// VIENE el viento, así que la flecha apunta hacia donde VA (dir + 180), como en
-// `waveArrows`. El pronóstico es determinista: `st: 100` (opacidad plena).
+// Viento y corriente del paquete de pronóstico, muestreados cada `stride`
+// celdas. La dirección del API es de dónde VIENE el viento, así que la flecha
+// apunta hacia donde VA (dir + 180), como en `waveArrows`. `st: 100`.
 function forecastWindSamples(pkg: ForecastPackage, index: number, stride: number): WxSample[] {
   const { cols, rows, bbox } = pkg;
   const step = pkg.times.length;
@@ -931,91 +898,28 @@ function forecastWindSamples(pkg: ForecastPackage, index: number, stride: number
       const speed = decodeForecast(pkg.vars.wind_speed[p] ?? FORECAST_MISSING);
       const dir = decodeForecast(pkg.vars.wind_direction[p] ?? FORECAST_MISSING);
       if (speed === null || dir === null) continue; // sin dato (tierra)
-      out.push({ lon: bbox[0] + c * dx, lat: bbox[1] + r * dy, ws: speed, tc: 0, ice: 0 });
+      const to = ((dir + 180) * Math.PI) / 180;
+      const cvel = decodeForecast(pkg.vars.current_velocity[p] ?? FORECAST_MISSING);
+      const cdir = decodeForecast(pkg.vars.current_direction[p] ?? FORECAST_MISSING);
+      const cmag = cvel ?? 0;
+      const cAng = ((cdir ?? 0) * Math.PI) / 180;
+      out.push({
+        lon: bbox[0] + c * dx,
+        lat: bbox[1] + r * dy,
+        ws: speed,
+        st: 100,
+        wmag: speed,
+        dirX: speed > 0 ? Math.sin(to) : 0,
+        dirY: speed > 0 ? Math.cos(to) : 0,
+        cmag,
+        cdirX: cmag > 0 ? Math.sin(cAng) : 0,
+        cdirY: cmag > 0 ? Math.cos(cAng) : 0,
+        tc: 0,
+        ice: 0,
+      });
     }
   }
   return out;
-}
-
-// StreamField del viento y la corriente climatológicos: dirección hacia donde
-// VA (la pilot chart guarda componentes u/v) y magnitud en nudos.
-function climateStreamField(clim: ClimMonth): StreamField {
-  return {
-    at: (lon, lat) => {
-      const cell = getCell(clim, lat, lon);
-      if (cell === null) return null;
-      const wmag = Math.hypot(cell.wu, cell.wv);
-      return { dx: wmag > 0 ? cell.wu / wmag : 0, dy: wmag > 0 ? cell.wv / wmag : 0, mag: cell.ws };
-    },
-  };
-}
-
-function climateCurrentField(clim: ClimMonth): StreamField {
-  return {
-    at: (lon, lat) => {
-      const cell = getCell(clim, lat, lon);
-      if (cell === null) return null;
-      const cmag = Math.hypot(cell.cu, cell.cv);
-      return { dx: cmag > 0 ? cell.cu / cmag : 0, dy: cmag > 0 ? cell.cv / cmag : 0, mag: cmag };
-    },
-  };
-}
-
-// StreamField del pronóstico: viento/corriente del paso `index`, interpolación
-// bilineal sobre la grilla. La dirección del API es de dónde VIENE, así que el
-// vector apunta hacia donde VA (dir + 180).
-function forecastStreamField(
-  pkg: ForecastPackage,
-  index: number,
-  which: "wind" | "current",
-): StreamField {
-  const { cols, rows, bbox } = pkg;
-  const step = pkg.times.length;
-  if (step === 0 || cols < 1 || rows < 1) return { at: () => null };
-  const dx = cols > 1 ? (bbox[2] - bbox[0]) / (cols - 1) : 0;
-  const dy = rows > 1 ? (bbox[3] - bbox[1]) / (rows - 1) : 0;
-  const sample = (c: number, r: number): { a: number | null; b: number | null } => {
-    const p = (r * cols + c) * step + index;
-    if (which === "wind") {
-      return {
-        a: decodeForecast(pkg.vars.wind_speed[p] ?? FORECAST_MISSING),
-        b: decodeForecast(pkg.vars.wind_direction[p] ?? FORECAST_MISSING),
-      };
-    }
-    return {
-      a: decodeForecast(pkg.vars.current_velocity[p] ?? FORECAST_MISSING),
-      b: decodeForecast(pkg.vars.current_direction[p] ?? FORECAST_MISSING),
-    };
-  };
-  return {
-    at: (lon, lat) => {
-      if (dx <= 0 || dy <= 0) return null;
-      const fx = clamp((lon - bbox[0]) / dx, 0, cols - 1);
-      const fy = clamp((lat - bbox[1]) / dy, 0, rows - 1);
-      const c = Math.min(cols - 1, Math.floor(fx));
-      const r = Math.min(rows - 1, Math.floor(fy));
-      const cc = Math.min(cols - 1, c + 1);
-      const rr = Math.min(rows - 1, r + 1);
-      const s00 = sample(c, r);
-      const s10 = sample(cc, r);
-      const s01 = sample(c, rr);
-      const s11 = sample(cc, rr);
-      if (s00.a === null || s10.a === null || s01.a === null || s11.a === null) return null;
-      const mag = (s00.a + s10.a + s01.a + s11.a) / 4;
-      // Dirección: solo el lado del viento se invierte (de dónde viene → va).
-      const dirs = [s00.b, s10.b, s01.b, s11.b];
-      if (dirs.some((d) => d === null)) return null;
-      let a = 0;
-      let b = 0;
-      for (const d of dirs) {
-        const ang = (((d as number) + (which === "wind" ? 180 : 0)) * Math.PI) / 180;
-        a += Math.sin(ang);
-        b += Math.cos(ang);
-      }
-      const d = Math.hypot(a, b);
-      return { dx: d > 0 ? a / d : 0, dy: d > 0 ? b / d : 0, mag };
-    },
-  };
 }
 
 

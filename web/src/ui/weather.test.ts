@@ -31,6 +31,7 @@ import {
   WX_ISOBAR_COLOR,
   WX_WAVE_COLOR,
   WX_WAVE_COLORS,
+  WX_WIND_LINE_WIDTH,
 } from "./weather.ts";
 
 interface PaintCall {
@@ -285,21 +286,22 @@ test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
   const waveArrowsN = m.data.get("wx-waves")!.features.length;
   assert.equal(m.data.get("wx-waves-head")?.features.length, waveArrowsN, "una punta por ola");
 
-  // Viento del E (90°): las líneas de flujo van hacia el O y llevan st:100.
+  // Viento del E (90°): la flechita va hacia el O y lleva st:100.
   const wl = windLines[0] as {
     properties: { ws: number; st: number };
     geometry: { type: string; coordinates: [number, number][] };
   };
-  assert.equal(wl.geometry.type, "LineString", "viento = polilínea");
+  assert.equal(wl.geometry.type, "LineString", "viento = segmento");
+  assert.equal(wl.geometry.coordinates.length, 2, "flechita de dos puntos");
   assert.equal(wl.properties.st, 100, "opacidad plena en pronóstico");
   assert.equal(wl.properties.ws, 15);
   const wc = wl.geometry.coordinates;
-  assert.ok(wc[wc.length - 1]![0] < wc[0]![0], "el viento viene del E, fluye hacia el O");
+  assert.ok(wc[1]![0] < wc[0]![0], "el viento viene del E, fluye hacia el O");
 
-  // Corriente hacia el N (0°): las líneas van hacia el norte.
+  // Corriente hacia el N (0°): la raya va hacia el norte.
   const cl = curLines[0] as { geometry: { coordinates: [number, number][] } };
   const cc = cl.geometry.coordinates;
-  assert.ok(cc[cc.length - 1]![1] > cc[0]![1], "la corriente fluye hacia el norte");
+  assert.ok(cc[1]![1] > cc[0]![1], "la corriente fluye hacia el norte");
 
   // Fuera del horizonte, el viento y la corriente salen de la climatología.
   const beyond = updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3600_000);
@@ -365,11 +367,14 @@ test("E13.2 rampa de olas y constante de isobaras", () => {
   assert.equal(WX_ISOBAR_COLOR, "#e6eef7");
 });
 
-test("E13.5 corrientes gruesas y legibles", () => {
-  // La rampa va de 2 a 4,2 px (mag 0 → 2 → 4): visible sin lupa.
-  const steps = (WX_CURRENT_WIDTH as unknown as (string | number)[]).filter((x) => typeof x === "number");
-  assert.deepEqual(steps, [0, 2, 2, 3, 4, 4.2]);
+test("E13.6 corrientes finas y discretas", () => {
+  // Fina y sólida: el ancho ya no escala con la velocidad.
+  assert.equal(WX_CURRENT_WIDTH, WX_WIND_LINE_WIDTH, "mismo grosor fino que el viento");
   assert.equal(WX_CURRENT_COLOR, "#2e9bff");
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  assert.equal(m.layers.get("wx-current")?.paint?.["line-color"], WX_CURRENT_COLOR);
+  assert.equal((m.layers.get("wx-current")?.paint as Record<string, unknown>)["line-dasharray"], undefined, "sin guiones");
 });
 
 // --- E13.6/E13.7: punta de flecha (viento, corriente y olas) ----------
@@ -424,8 +429,8 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
   const wa = arrow.geometry.coordinates;
   checkHead(
     windHead.geometry.coordinates[0]!,
-    wa[wa.length - 2]!,
-    wa[wa.length - 1]!,
+    wa[0]!,
+    wa[1]!,
     WX_HEAD_WIND,
   );
 
@@ -438,8 +443,8 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
   const ca = cur.geometry.coordinates;
   checkHead(
     curHead.geometry.coordinates[0]!,
-    ca[ca.length - 2]!,
-    ca[ca.length - 1]!,
+    ca[0]!,
+    ca[1]!,
     WX_HEAD_CURRENT,
   );
 });
@@ -496,8 +501,49 @@ test("E13.7 las olas de climatología no llevan punta (sin dirección)", () => {
 test("E13.7 la punta de corriente es más chica que la de viento", () => {
   assert.ok(WX_HEAD_CURRENT.back < WX_HEAD_WIND.back, "las alas van menos atrás");
   assert.ok(WX_HEAD_CURRENT.half < WX_HEAD_WIND.half, "alas más angostas");
-  assert.ok(Math.abs(WX_HEAD_CURRENT.back - 0.2) < 1e-9, "~20 % del largo, no ~35 %");
+  assert.ok(Math.abs(WX_HEAD_CURRENT.back - 0.12) < 1e-9, "~12 % del largo, punta chica");
   assert.ok(WX_HEAD_CURRENT.maxDeg < Infinity, "con tope absoluto en grados");
   assert.ok(WX_HEAD_WAVE.back > 0 && WX_HEAD_WAVE.back < WX_HEAD_WIND.back, "olas: punta intermedia");
+});
+
+// --- E13.6: flechitas discretas, finas y de largo fijo ------------------
+
+test("E13.6 el viento va fino (1,25 px) y el color no engorda el trazo", () => {
+  assert.equal(WX_WIND_LINE_WIDTH, 1.25);
+  assert.equal(WX_ARROW_WIDTH, WX_WIND_LINE_WIDTH, "ancho fijo, no escala con la fuerza");
+  const m = mockMap(4);
+  initWeatherLayers(m.map);
+  assert.equal(m.layers.get("wx-arrows")?.paint?.["line-width"], WX_ARROW_WIDTH);
+});
+
+test("E13.6 la flechita de viento tiene largo fijo (no depende de la velocidad)", () => {
+  const pkg = fcPackage(4);
+  const slow = { ...pkg, vars: { ...pkg.vars, wind_speed: new Int16Array(pkg.vars.wind_speed.length).fill(50) } };
+  const fast = { ...pkg, vars: { ...pkg.vars, wind_speed: new Int16Array(pkg.vars.wind_speed.length).fill(400) } };
+  const lenOf = (p: ForecastPackage): number => {
+    const m = mockMap(4);
+    initWeatherLayers(m.map);
+    updateForecastWeather(m.map, null, p, slotTime(p, 1));
+    const a = m.data.get("wx-arrows")!.features[0] as { geometry: { coordinates: [number, number][] } };
+    const [x0, y0] = a.geometry.coordinates[0]!;
+    const [x1, y1] = a.geometry.coordinates[1]!;
+    return Math.hypot(x1 - x0, y1 - y0);
+  };
+  const l1 = lenOf(slow);
+  const l2 = lenOf(fast);
+  assert.ok(Math.abs(l1 - l2) < 1e-9, `mismo largo a 5 y 40 kn: ${l1} vs ${l2}`);
+  assert.ok(Math.abs(l1 - 0.4) < 1e-9, `largo fijo ~0,4°: ${l1}`);
+});
+
+test("E13.6 las flechitas caen cada ~80 px a cualquier zoom", () => {
+  const countAt = (zoom: number): number => {
+    const m = mockMap(zoom);
+    initWeatherLayers(m.map);
+    updateWeather(m.map, miniClim(), 1);
+    return m.data.get("wx-arrows")?.features.length ?? 0;
+  };
+  // A más zoom el mismo encuadre en grados=menos, pero el canvas fijo: menos celdas.
+  assert.ok(countAt(3) >= countAt(6), "a más zoom, menos flechitas (mismo espaciado en px)");
+  assert.ok(countAt(4) > 0, "siempre hay flechitas");
 });
 
