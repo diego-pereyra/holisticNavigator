@@ -35,4 +35,4 @@ VUELVEN LAS FLECHAS — discretas:
 7. npm test (en web/), bash scripts/build-web.sh, commit "E13.6: flechitas discretas
    (adiós ríos)", push. Al terminar escribí "Status: DONE" como última línea.
 
-Status: ready
+Status: DONE
