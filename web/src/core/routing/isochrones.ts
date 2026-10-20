@@ -14,8 +14,8 @@ import { haversineNm, initialBearingDeg, type LonLat } from "../navigation.ts";
 import { formatLat, formatLon } from "../coords.ts";
 import { boatSpeed, type Polar } from "./polar.ts";
 import type { Landmask } from "./landmask.ts";
-import type { WindField } from "./windfield.ts";
-import type { ForecastPackage } from "../forecast.ts";
+import { climateWindField, forecastWindField, type WindField } from "./windfield.ts";
+import { bboxCovers, type ForecastPackage } from "../forecast.ts";
 import type { ClimMonth } from "../clim.ts";
 
 export interface IsoConfig {
@@ -1289,4 +1289,42 @@ export function traverseRoute(
     t += (legNm / speed) * 3600_000;
   }
   return { etaMs: t, windMax, nm };
+}
+
+// E12.13 — duración estimada de un trazado: la antesala de "Optimizar", no su
+// competencia. Elige el campo de viento que va a regir de verdad — el paquete
+// propio de la ruta si su caja cubre el trazado entero (UX-N.5b), si no la
+// climatología del mes de planificación — y lo pasa a `traverseRoute` sin tocar
+// el motor. Devuelve además CON QUÉ viento calculó, para que el rótulo de la
+// ficha nunca mienta.
+export interface RouteEstimate {
+  startMs: number;
+  etaMs: number;
+  nm: number;
+  windMaxKn: number;
+  windSource: "clima" | "pronostico";
+}
+
+export function estimateRouteDuration(input: {
+  coords: LonLat[];
+  clim: ClimMonth | null;
+  pkg: ForecastPackage | null;
+  polar: Polar;
+  startMs: number;
+}): RouteEstimate {
+  const { coords, clim, pkg, polar, startMs } = input;
+  const usePkg = pkg !== null && pkgCoversTrack(pkg, coords);
+  const wind: WindField | null = usePkg && pkg ? forecastWindField(pkg, clim) : clim ? climateWindField(clim) : null;
+  if (!wind) return { startMs, etaMs: startMs, nm: 0, windMaxKn: 0, windSource: "clima" };
+  const r = traverseRoute(coords, startMs, wind, polar);
+  return { startMs, etaMs: r.etaMs, nm: r.nm, windMaxKn: r.windMax, windSource: usePkg ? "pronostico" : "clima" };
+}
+
+// E12.13 — el paquete propio cubre el trazado si su caja contiene todos sus
+// puntos (bordes incluidos). Sin esto, el paquete de otra caja se colaría en el
+// rótulo como "pronóstico" sin datos que lo respalden.
+function pkgCoversTrack(pkg: ForecastPackage, coords: LonLat[]): boolean {
+  if (coords.length < 2) return false;
+  for (const [lon, lat] of coords) if (!bboxCovers(pkg.bbox, lat, lon)) return false;
+  return true;
 }

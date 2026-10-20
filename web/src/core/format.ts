@@ -56,6 +56,20 @@ export function formatDepth(m: number | null | undefined, units: Units = DEFAULT
   return `${Math.round(ft).toLocaleString("es-AR")} ft`;
 }
 
+// E12.13 — duración estimada de una travesía, en días de navegación. Se
+// redondea a media jornada (21,2 → "21"; 20,5 → "20,5") porque así se cuenta un
+// día de navegación; un viaje que no llega a media se muestra con décimas para
+// no decir "0 días". El "≈" va siempre: es un estimado de planificación, no
+// una ETA.
+export function formatDuration(ms: number | null | undefined): string {
+  if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
+  const days = ms / 86_400_000;
+  const half = Math.round(days * 2) / 2;
+  const r = days > 0 && half === 0 ? Math.max(0.1, Math.round(days * 10) / 10) : half;
+  const txt = Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ",");
+  return `≈ ${txt} ${r === 1 ? "día" : "días"}`;
+}
+
 // --- UX-N.4b: visibilidad y persistencia ------------------------------------
 
 export interface Visibility {

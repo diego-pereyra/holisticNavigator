@@ -94,12 +94,14 @@ import { forecastHorizon, forecastWindField, horizonNotice } from "../core/routi
 import {
   DEFAULT_ROUTING_MODE,
   ROUTING_MODES,
+  estimateRouteDuration,
   multiRouteCoords,
   multiRouteSplit,
   routingModeConfig,
   type IsoBaseline,
   type IsoMultiResult,
   type IsoWorkerResponse,
+  type RouteEstimate,
   type RoutingMode,
 } from "../core/routing/isochrones.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
@@ -152,6 +154,7 @@ import {
   formatSpeed,
   formatDistance,
   formatDepth,
+  formatDuration,
   applyUnits,
   applyVisibility,
   measureLegs,
@@ -274,6 +277,12 @@ let measure: MeasureState | null = null;
 // Fichas ya cargadas: permiten volver a armarlas al cambiar de variante sin
 // mostrar "Cargando…" otra vez (W4.5).
 const fichaCache = new Map<string, RouteDetail>();
+
+// E12.13 — duración estimada por (código, variante, mes) mientras la ficha esté
+// abierta. `traverseRoute` ya corre en cada optimización, así que no hace falta
+// repetirlo en cada repintado: solo se invalida cuando cambia el paquete
+// propio de la ruta (su `fetchedAt`). Se vacía al cerrar la ficha.
+const durCache = new Map<string, { stamp: number; startMs: number; est: RouteEstimate }>();
 
 interface ActiveRoute {
   code: string;
@@ -2688,7 +2697,15 @@ function pilotChartsRow(_ui: UiState): HTMLElement {
 // UX-N.5b — bloque de pronóstico de la ficha de una ruta. Regla de Diego: el
 // pronóstico vive EN la ficha de su ruta. Muestra el estado de SU paquete
 // ("hace 4 h") o "Sin pronóstico · [Descargar]", y lo baja/actualiza desde acá.
-function routeForecastBlock(ui: UiState, code: string, host: HTMLElement): void {
+// E12.13: `onPkg` se avisa cada vez que el paquete de esta ruta cambia (al
+// cargarlo de la caché o al terminar la descarga), porque la duración estimada
+// de la ficha depende de él.
+function routeForecastBlock(
+  ui: UiState,
+  code: string,
+  host: HTMLElement,
+  onPkg?: (pkg: ForecastPackage | null) => void,
+): void {
   const row = el("div", { class: "hn-offline-row hn-fc-route-row" });
   const info = el("span", { class: "hn-offline-info" }, "…");
   const action = el("span", { class: "hn-offline-action" });
@@ -2716,6 +2733,7 @@ function routeForecastBlock(ui: UiState, code: string, host: HTMLElement): void 
   void loadForecast(ui.store, code).then((p) => {
     pkg = p;
     showIdle();
+    onPkg?.(pkg);
   });
 
   btn.addEventListener("click", () => {
@@ -2738,6 +2756,7 @@ function routeForecastBlock(ui: UiState, code: string, host: HTMLElement): void 
         // Si esta ruta es la que está cargada en el mapa, se refresca con la nueva.
         if (ui.forecast()?.id === code) ui.forecast.set(p);
         showIdle();
+        onPkg?.(pkg);
       })
       .catch(() => {
         busy = false;
@@ -3469,6 +3488,8 @@ function closeFicha(ui: UiState): void {
   ui.sheet.set("half");
   clearWpMarker(ui);
   drawSelected(ui, null, null);
+  // E12.13: la caché de duración vive mientras la ficha esté abierta.
+  durCache.clear();
 }
 
 function clearWpMarker(ui: UiState): void {
@@ -4116,17 +4137,26 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   // E8.3: bajo "Cuándo", el dato de pilot chart que el libro no puede dar.
   const wxLine = el("div", { class: "hn-wx-line hn-muted" });
   const refreshWx = (): void => updateRouteWind(ui, wxLine, d);
+  // E12.13: la antesala de "Optimizar" — cuánto demora este trazado con este
+  // viento y esta polar.
+  const durLine = el("div", { class: "hn-wx-line hn-muted" });
+  const refreshDur = (): void => updateRouteDuration(ui, durLine, d);
   host.append(
     monthStrip(ui, d, () => {
       verdict.textContent = monthVerdictText(d, ui.month());
       refreshWx();
+      refreshDur();
     }),
   );
   host.append(facts);
   host.append(wxLine);
+  host.append(durLine);
   refreshWx();
+  refreshDur();
   // UX-N.5b: el pronóstico de esta ruta vive acá, junto al viento, sin scrollear.
-  routeForecastBlock(ui, d.code, host);
+  // E12.13: cuando el paquete llega (o se recarga) cambia la edad del rótulo de
+  // duración, así que se rearma con el nuevo.
+  routeForecastBlock(ui, d.code, host, refreshDur);
 
   if (d.needsReview) {
     host.append(el("p", { class: "hn-info" }, "Trazado orientativo: en tramos costeros faltan waypoints intermedios. Verificá con tu carta."));
@@ -4276,6 +4306,56 @@ function routeWindText(ui: UiState, s: RouteWindSummary | null, month: number): 
   return (
     `Viento medio en ruta (${MONTH_NAME[month - 1] ?? ""}): ${spd(ui, s.ws, false)} del ${s.dirLabel}, ` +
     `constancia ${Math.round(s.st)} % · corriente ${dir} ${cur} · riesgo ciclónico: ${s.risk}`
+  );
+}
+
+// E12.13 — "Duración estimada": cuánto demora el trazado elegido con el clima
+// del mes o el pronóstico propio de la ruta, y con la polar genérica. Es un
+// estimado de planificación (la antesala de "Optimizar"), y lo dice: siempre
+// aparece con qué viento se calculó y con qué polar.
+function updateRouteDuration(ui: UiState, host: HTMLElement, d: RouteDetail): void {
+  const month = ui.month();
+  const variant = ui.variant();
+  const g = selectedGeometry(ui, d.code);
+  if (!g || g.coords.length < 2) {
+    host.textContent = "";
+    return;
+  }
+  const key = `${d.code}|${variant}|${month}`;
+  const ageOf = (pkg: ForecastPackage | null): string => (pkg ? getForecastAge(pkg) : "");
+  const show = (pkg: ForecastPackage | null): void => {
+    const stamp = pkg?.fetchedAt ?? 0;
+    const hit = durCache.get(key);
+    if (hit && hit.stamp === stamp) {
+      host.textContent = durationLineText(ui, hit.est, month, ageOf(pkg));
+      return;
+    }
+    const startMs = Date.now();
+    const est = estimateRouteDuration({ coords: g.coords, clim: ui.clim.get(month) ?? null, pkg, polar: genericPolar(), startMs });
+    durCache.set(key, { stamp, startMs, est });
+    host.textContent = durationLineText(ui, est, month, ageOf(pkg));
+  };
+  const cached = durCache.get(key);
+  if (cached) host.textContent = durationLineText(ui, cached.est, month, "…");
+  else host.textContent = "Estimando duración…";
+  void Promise.all([ensureClim(ui, month), loadForecast(ui.store, d.code)]).then(([, pkg]) => {
+    // La ficha pudo cerrarse o cambiar de mes/variante mientras cargaba.
+    if (!host.isConnected || ui.month() !== month || ui.variant() !== variant) return;
+    show(pkg);
+  });
+}
+
+function durationLineText(ui: UiState, est: RouteEstimate, month: number, pkgAge: string): string {
+  const etaMs = est.etaMs - est.startMs;
+  if (!(est.nm > 0) || !(etaMs > 0)) return "";
+  const avgKn = est.nm / (etaMs / 3_600_000);
+  const source =
+    est.windSource === "pronostico"
+      ? `con el pronóstico descargado (${pkgAge})`
+      : `clima de ${MONTH_NAME[month - 1] ?? ""}`;
+  return (
+    `Duración estimada: ${formatDuration(etaMs)} · ${spd(ui, avgKn)} medios · ` +
+    `viento máx ${spd(ui, est.windMaxKn, false)} — ${source} (polar 40 pies)`
   );
 }
 

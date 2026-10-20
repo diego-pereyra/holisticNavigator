@@ -118,7 +118,7 @@ test("medir: rumbo hacia el norte y hacia el oeste", () => {
   assert.ok(Math.abs(west.legs[0]!.bearingDeg - 270) < 0.5);
 });
 
-import { navToWpLine } from "./format.ts";
+import { navToWpLine, formatDuration } from "./format.ts";
 
 test("nav-to-wp: solo con ruta activa, posición y destino", () => {
   const pos = { lat: 10, lon: 20 };
@@ -127,4 +127,25 @@ test("nav-to-wp: solo con ruta activa, posición y destino", () => {
   assert.equal(navToWpLine(false, pos, next), null, "sin ruta activa");
   assert.equal(navToWpLine(true, null, next), null, "sin posición");
   assert.equal(navToWpLine(true, pos, null), null, "sin waypoint destino");
+});
+
+const DAY = 86_400_000;
+
+test("E12.13 formatDuration: días enteros y medias jornadas", () => {
+  assert.equal(formatDuration(21 * DAY), "≈ 21 días");
+  assert.equal(formatDuration(20.5 * DAY), "≈ 20,5 días");
+  assert.equal(formatDuration(21.2 * DAY), "≈ 21 días");
+  assert.equal(formatDuration(21 * DAY + 2 * 3_600_000), "≈ 21 días");
+});
+
+test("E12.13 formatDuration: un día y travesías cortas", () => {
+  assert.equal(formatDuration(DAY), "≈ 1 día");
+  assert.equal(formatDuration(0.2 * DAY), "≈ 0,2 días");
+  assert.equal(formatDuration(0), "≈ 0 días");
+});
+
+test("E12.13 formatDuration: sin dato", () => {
+  assert.equal(formatDuration(null), "—");
+  assert.equal(formatDuration(undefined), "—");
+  assert.equal(formatDuration(NaN), "—");
 });

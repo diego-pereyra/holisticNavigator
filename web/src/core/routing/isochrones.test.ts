@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
 
 import { genericPolar } from "./polar.ts";
 import {
   detectManeuver,
+  estimateRouteDuration,
   multiRouteCoords,
   multiRouteSplit,
   routeOptimal,
@@ -16,7 +18,9 @@ import {
   type RoutingMode,
 } from "./isochrones.ts";
 import type { Landmask } from "./landmask.ts";
-import type { WindField } from "./windfield.ts";
+import { climateWindField, type WindField } from "./windfield.ts";
+import { CLIM_SCALES, type ClimMonth } from "../clim.ts";
+import { FORECAST_MISSING, type ForecastPackage } from "../forecast.ts";
 import type { LonLat } from "../navigation.ts";
 
 function uniform(dir: number, speed: number): WindField {
@@ -527,4 +531,113 @@ test("E12.12 corte en el último waypoint → dos tramos válidos y continuos", 
   assert.equal(parts[1]!.clima, true);
   assert.equal(parts[1]!.coords.length, 2, "el tramo rojo conserva 2 puntos");
   assert.deepEqual(parts[0]!.coords.at(-1), parts[1]!.coords[0], "comparten el corte");
+});
+
+// --- E12.13: duración estimada con el viento que va a regir de verdad --------
+
+const DAY_MS = 86_400_000;
+
+function octClim(): ClimMonth {
+  const bytes = readFileSync(new URL("../../../public/clim/m10.bin", import.meta.url));
+  return {
+    grid: [360, 180],
+    origin: [-180, -90],
+    fields: 9,
+    scales: CLIM_SCALES,
+    data: new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength),
+  };
+}
+
+// Canarias → Barbados, el tramo de la prueba de Diego (AN12 en octubre).
+const CANARIAS_BARBADOS: [number, number][] = [
+  [-15.5, 28],
+  [-30, 22],
+  [-45, 17],
+  [-59.5, 13],
+];
+const T0 = Date.UTC(2026, 9, 18);
+
+// Paquete sintético de 30 días con viento uniforme. `cols`/`rows` >= 2 para que
+// la interpolación bilineal de `sampleUV` tenga de qué agarrarse.
+function pkgUniforme(bbox: [number, number, number, number], windKn: number, windDir: number, days: number): ForecastPackage {
+  const cols = 5;
+  const rows = 5;
+  const steps = days * 8; // paso de 3 h
+  const times = Array.from({ length: steps }, (_, t) => T0 + t * 3 * 3_600_000);
+  const count = cols * rows * steps;
+  const mk = (v: number): Int16Array => new Int16Array(count).fill(Math.round(v * 10));
+  const zero = new Int16Array(count).fill(FORECAST_MISSING);
+  return {
+    id: "test",
+    issuedAt: T0,
+    fetchedAt: T0,
+    bbox,
+    stepHours: 3,
+    cols,
+    rows,
+    times,
+    vars: {
+      wind_speed: mk(windKn),
+      wind_direction: mk(windDir),
+      wind_gusts: zero,
+      pressure: zero,
+      wave_height: zero,
+      wave_direction: zero,
+      wave_period: zero,
+      current_velocity: zero,
+      current_direction: zero,
+    },
+  };
+}
+
+test("E12.13 sin paquete usa el clima del mes (windSource clima)", () => {
+  const est = estimateRouteDuration({
+    coords: CANARIAS_BARBADOS,
+    clim: octClim(),
+    pkg: null,
+    polar: genericPolar(),
+    startMs: T0,
+  });
+  assert.equal(est.windSource, "clima");
+  assert.ok(est.nm > 2500, `millas ${est.nm} muy pocas para Canarias→Barbados`);
+  assert.ok(est.etaMs > T0, "la ETA tiene que ser posterior a la salida");
+  assert.ok(est.windMaxKn > 0, "el clima del Atlántico no puede dar viento 0");
+});
+
+test("E12.13 paquete que cubre el trazado → windSource pronostico y ETA distinta", () => {
+  const clim = octClim();
+  const sinPkg = estimateRouteDuration({ coords: CANARIAS_BARBADOS, clim, pkg: null, polar: genericPolar(), startMs: T0 });
+  // Viento flojo uniforme: con la misma polar, la travesía tiene que demorar más
+  // que el clima de octubre.
+  const pkg = pkgUniforme([-62, 10, -13, 30], 9, 90, 40);
+  const conPkg = estimateRouteDuration({ coords: CANARIAS_BARBADOS, clim, pkg, polar: genericPolar(), startMs: T0 });
+  assert.equal(conPkg.windSource, "pronostico");
+  assert.notEqual(conPkg.etaMs, sinPkg.etaMs, "el pronóstico tiene que cambiar la ETA");
+  assert.equal(conPkg.nm, sinPkg.nm, "las millas son del trazado, no del viento");
+});
+
+test("E12.13 paquete que NO cubre el trazado cae al clima (no miente)", () => {
+  const pkg = pkgUniforme([-20, 25, -14, 30], 25, 90, 40); // solo cerca de Canarias
+  const est = estimateRouteDuration({
+    coords: CANARIAS_BARBADOS,
+    clim: octClim(),
+    pkg,
+    polar: genericPolar(),
+    startMs: T0,
+  });
+  assert.equal(est.windSource, "clima", "un paquete que no cubre el trazado no es 'pronóstico'");
+});
+
+test("E12.13 windMaxKn coincide con el máximo de los tramos", () => {
+  const clim = octClim();
+  const wind = climateWindField(clim);
+  const est = estimateRouteDuration({ coords: CANARIAS_BARBADOS, clim, pkg: null, polar: genericPolar(), startMs: T0 });
+  const r = traverseRoute(CANARIAS_BARBADOS, T0, wind, genericPolar());
+  assert.equal(est.windMaxKn, r.windMax, "el máximo es el de traverseRoute tramo a tramo");
+});
+
+test("E12.13 sin clima y sin paquete no hay estimado", () => {
+  const est = estimateRouteDuration({ coords: CANARIAS_BARBADOS, clim: null, pkg: null, polar: genericPolar(), startMs: T0 });
+  assert.equal(est.nm, 0);
+  assert.equal(est.windSource, "clima");
 });
