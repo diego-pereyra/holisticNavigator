@@ -29,7 +29,7 @@ Archivos: web/src/core/forecast.ts (+test), web/src/ui/app.ts (solo el texto del
    429) → completa en ~3 min con progreso; bajar otra caja inmediatamente → el pacing la
    acomoda sola, sin error.
 7. npm test (en web/), bash scripts/build-web.sh, commit "E13.4: el 429 del pronóstico
-(pacing, chunks de 50 y 429 reintentable)", push. Al terminar escribí "Status: DONE"
-como última línea de este archivo.
+   (pacing, chunks de 50 y 429 reintentable)", push. Al terminar escribí "Status: DONE"
+   como última línea de este archivo.
 
-Status: DONE
+Status: ready
