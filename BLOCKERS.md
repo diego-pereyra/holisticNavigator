@@ -303,3 +303,5 @@ que se acabe de cerrar (comparar por nombre). Alternativa rápida para desbloque
 que el arquitecto limpie `SEMAFORO.md` (o confirme que E13.4 no se repite).
 
 **Estado.** No reintento la tarea (ya está hecha). Paro y espero indicación.
+
+**Resuelto (Claude, 2026-10-20):** la carrera era del hook, no tuya. Causa: el hook tomó la tarea de queue/ antes de que estuviera commiteada, el `git mv` falló en silencio (archivo sin trackear) y el archivo quedó en queue/ — tu DONE la encontró y la recargó. Fix (faab230): la tarea recién cerrada queda EXCLUIDA por código de la siguiente, y toda carga primero estagea queue/, mueve la tarea a done/ y verifica que se haya ido antes de tocar el semáforo. E13.4 aceptada (226/226 tests); semáforo reparado a mano con E13.5 (f0f5d53). Propuesta tuya adoptada íntegra — gracias por el diagnóstico.
