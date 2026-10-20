@@ -1960,7 +1960,10 @@ function renderWeatherLegend(
     if (layers.waves) {
       host.append(el("div", { class: "hn-wx-note" }, "altura de ola (m)"), wxRamp(WX_WAVE_STOPS, WX_WAVE_COLORS));
     }
-    if (!layers.isobars && !layers.waves) host.append(el("div", { class: "hn-wx-note" }, "Sin capas encendidas."));
+    if (layers.windField) host.append(el("div", { class: "hn-wx-note" }, "fondo: color por viento (tenue)"));
+    if (!layers.isobars && !layers.waves && !layers.windField) {
+      host.append(el("div", { class: "hn-wx-note" }, "Sin capas encendidas."));
+    }
     host.append(
       el(
         "div",
@@ -1977,10 +1980,11 @@ function renderWeatherLegend(
     const windU = ui.unidades().speed;
     host.append(
       wxRamp(WX_WIND_STOPS, WX_WIND_COLORS, (v) => (windU === "kmh" ? String(Math.round(v * 1.852)) : String(v))),
-      el("div", { class: "hn-wx-note" }, `${windU === "kmh" ? "km/h" : "nudos"} · flechas tenues = viento variable`),
+      el("div", { class: "hn-wx-note" }, `${windU === "kmh" ? "km/h" : "nudos"} · líneas finas = ríos de viento`),
     );
   }
-  if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: líneas azules finas y discontinuas"));
+  if (layers.current) host.append(el("div", { class: "hn-wx-note" }, "corrientes: ríos azules gruesos"));
+  if (layers.windField) host.append(el("div", { class: "hn-wx-note" }, "fondo: color por viento (tenue)"));
   if (layers.cyclone) host.append(el("div", { class: "hn-wx-note" }, "rayado = ciclones"));
   if (layers.ice) host.append(el("div", { class: "hn-wx-note" }, "hielo"));
   if (!layers.wind && !layers.current && !layers.cyclone && !layers.ice) {

@@ -20,7 +20,6 @@ import {
   WX_ARROW_OPACITY,
   WX_ARROW_WIDTH,
   WX_CURRENT_COLOR,
-  WX_CURRENT_DASH,
   WX_CURRENT_WIDTH,
   WX_CYCLONE_OPACITY,
   WX_FIELD_COLOR,
@@ -77,10 +76,10 @@ function mockMap(zoom: number): MockMap {
   const data = new Map<string, { features: unknown[] }>();
   const paints: PaintCall[] = [];
   const bounds = {
-    getWest: () => -180,
-    getEast: () => 180,
-    getSouth: () => -90,
-    getNorth: () => 90,
+    getWest: () => -5,
+    getEast: () => 5,
+    getSouth: () => -5,
+    getNorth: () => 5,
   };
   const map = {
     getLayer: (id: string) => layers.get(id),
@@ -98,6 +97,7 @@ function mockMap(zoom: number): MockMap {
     },
     getZoom: () => zoom,
     getBounds: () => bounds,
+    getCanvas: () => ({ clientWidth: 1024 }),
     addImage: () => {},
   } as unknown as MlMap;
   return { map, paints, layers, data };
@@ -126,10 +126,19 @@ test("E8.3 repinta diez celdas de prueba y setea el paint de cada capa", () => {
   updateWeather(m.map, miniClim(), 1);
 
   assert.equal(m.data.get("wx-field")?.features.length, 10, "celdas de campo");
-  assert.equal(m.data.get("wx-arrows")?.features.length, 10, "flechas de viento");
-  assert.equal(m.data.get("wx-arrows-head")?.features.length, 10, "puntas de viento");
-  assert.equal(m.data.get("wx-current")?.features.length, 10, "flechas de corriente");
-  assert.equal(m.data.get("wx-current-head")?.features.length, 10, "puntas de corriente");
+  // E13.5: viento y corriente salen como líneas de flujo (polilíneas).
+  assert.ok((m.data.get("wx-arrows")?.features.length ?? 0) > 0, "líneas de viento");
+  assert.equal(
+    m.data.get("wx-arrows-head")?.features.length,
+    m.data.get("wx-arrows")?.features.length,
+    "una punta por línea de viento",
+  );
+  assert.ok((m.data.get("wx-current")?.features.length ?? 0) > 0, "líneas de corriente");
+  assert.equal(
+    m.data.get("wx-current-head")?.features.length,
+    m.data.get("wx-current")?.features.length,
+    "una punta por línea de corriente",
+  );
   assert.equal(m.data.get("wx-cyclone")?.features.length, 10, "celdas con ciclones");
   assert.equal(m.data.get("wx-ice")?.features.length, 0, "sin hielo");
 
@@ -265,34 +274,38 @@ test("E13.4 el pronóstico dibuja viento y corrientes del paquete", () => {
   assert.equal(updateForecastWeather(m.map, null, pkg, inside), false);
 
   assert.equal(m.data.get("wx-field")?.features.length, 9, "campo de viento");
-  assert.equal(m.data.get("wx-arrows")?.features.length, 9, "flechas de viento");
-  assert.equal(m.data.get("wx-arrows-head")?.features.length, 9, "puntas de viento");
-  assert.equal(m.data.get("wx-current")?.features.length, 9, "corrientes");
-  assert.equal(m.data.get("wx-current-head")?.features.length, 9, "puntas de corriente");
-  assert.equal(m.data.get("wx-waves-head")?.features.length, 9, "puntas de ola");
+  const windLines = m.data.get("wx-arrows")!.features;
+  const windHeads = m.data.get("wx-arrows-head")!.features;
+  const curLines = m.data.get("wx-current")!.features;
+  const curHeads = m.data.get("wx-current-head")!.features;
+  assert.ok(windLines.length > 0, "líneas de viento");
+  assert.equal(windHeads.length, windLines.length, "una punta por línea");
+  assert.ok(curLines.length > 0, "líneas de corriente");
+  assert.equal(curHeads.length, curLines.length, "una punta por corriente");
+  const waveArrowsN = m.data.get("wx-waves")!.features.length;
+  assert.equal(m.data.get("wx-waves-head")?.features.length, waveArrowsN, "una punta por ola");
 
-  // Viento del E (90°): la flecha apunta hacia el O y lleva st:100 (firme).
-  const arrow = m.data.get("wx-arrows")!.features[0] as {
+  // Viento del E (90°): las líneas de flujo van hacia el O y llevan st:100.
+  const wl = windLines[0] as {
     properties: { ws: number; st: number };
-    geometry: { coordinates: [number, number][] };
+    geometry: { type: string; coordinates: [number, number][] };
   };
-  assert.equal(arrow.properties.st, 100, "st:100 para que la opacidad no apague la flecha");
-  assert.equal(arrow.properties.ws, 15);
-  const [a, b] = arrow.geometry.coordinates as [[number, number], [number, number]];
-  assert.ok(b[0] < a[0], "el viento viene del E, la flecha va hacia el O");
+  assert.equal(wl.geometry.type, "LineString", "viento = polilínea");
+  assert.equal(wl.properties.st, 100, "opacidad plena en pronóstico");
+  assert.equal(wl.properties.ws, 15);
+  const wc = wl.geometry.coordinates;
+  assert.ok(wc[wc.length - 1]![0] < wc[0]![0], "el viento viene del E, fluye hacia el O");
 
-  // Corriente hacia el N (0°): la flecha apunta al norte.
-  const cur = m.data.get("wx-current")!.features[0] as {
-    geometry: { coordinates: [number, number][] };
-  };
-  const [ca, cb] = cur.geometry.coordinates as [[number, number], [number, number]];
-  assert.ok(cb[1] > ca[1], "la corriente va hacia el norte");
+  // Corriente hacia el N (0°): las líneas van hacia el norte.
+  const cl = curLines[0] as { geometry: { coordinates: [number, number][] } };
+  const cc = cl.geometry.coordinates;
+  assert.ok(cc[cc.length - 1]![1] > cc[0]![1], "la corriente fluye hacia el norte");
 
   // Fuera del horizonte, el viento y la corriente salen de la climatología.
   const beyond = updateForecastWeather(m.map, miniClim(), pkg, pkg.times[3]! + 3600_000);
   assert.equal(beyond, true);
   assert.equal(m.data.get("wx-field")?.features.length, 10, "viento de climatología");
-  assert.equal(m.data.get("wx-current")?.features.length, 10, "corriente de climatología");
+  assert.ok((m.data.get("wx-current")?.features.length ?? 0) > 0, "corriente de climatología");
 });
 
 test("E13.4 isobaras cosidas: polilíneas continuas con una etiqueta por línea", () => {
@@ -353,12 +366,10 @@ test("E13.2 rampa de olas y constante de isobaras", () => {
 });
 
 test("E13.5 corrientes gruesas y legibles", () => {
-  // La rampa va de 1,8 a 4,2 px (mag 0 → 2 → 4): visible sin lupa.
+  // La rampa va de 2 a 4,2 px (mag 0 → 2 → 4): visible sin lupa.
   const steps = (WX_CURRENT_WIDTH as unknown as (string | number)[]).filter((x) => typeof x === "number");
-  assert.deepEqual(steps, [0, 1.8, 2, 3.4, 4, 4.2]);
-  // Raya más larga que el hueco.
-  assert.deepEqual(WX_CURRENT_DASH, [2.5, 1.5]);
-  assert.ok(WX_CURRENT_DASH[0]! > WX_CURRENT_DASH[1]!, "la raya supera al hueco");
+  assert.deepEqual(steps, [0, 2, 2, 3, 4, 4.2]);
+  assert.equal(WX_CURRENT_COLOR, "#2e9bff");
 });
 
 // --- E13.6/E13.7: punta de flecha (viento, corriente y olas) ----------
@@ -410,10 +421,11 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
     geometry: { coordinates: [number, number][][] };
   };
   assert.equal(windHead.properties.st, 100, "pronóstico: opacidad plena");
+  const wa = arrow.geometry.coordinates;
   checkHead(
     windHead.geometry.coordinates[0]!,
-    arrow.geometry.coordinates[0]!,
-    arrow.geometry.coordinates[1]!,
+    wa[wa.length - 2]!,
+    wa[wa.length - 1]!,
     WX_HEAD_WIND,
   );
 
@@ -423,10 +435,11 @@ test("E13.6 la punta sale del vector (viento y corriente)", () => {
   const curHead = m.data.get("wx-current-head")!.features[0] as {
     geometry: { coordinates: [number, number][][] };
   };
+  const ca = cur.geometry.coordinates;
   checkHead(
     curHead.geometry.coordinates[0]!,
-    cur.geometry.coordinates[0]!,
-    cur.geometry.coordinates[1]!,
+    ca[ca.length - 2]!,
+    ca[ca.length - 1]!,
     WX_HEAD_CURRENT,
   );
 });
@@ -435,8 +448,11 @@ test("E13.6 el pilot chart también lleva puntas", () => {
   const m = mockMap(4);
   initWeatherLayers(m.map);
   updateWeather(m.map, miniClim(), 1);
-  assert.equal(m.data.get("wx-arrows-head")?.features.length, 10, "puntas de viento (clima)");
-  assert.equal(m.data.get("wx-current-head")?.features.length, 10, "puntas de corriente (clima)");
+  const windLines = m.data.get("wx-arrows")?.features.length ?? 0;
+  const curLines = m.data.get("wx-current")?.features.length ?? 0;
+  assert.equal(m.data.get("wx-arrows-head")?.features.length, windLines, "puntas de viento (clima)");
+  assert.equal(m.data.get("wx-current-head")?.features.length, curLines, "puntas de corriente (clima)");
+  assert.ok(windLines > 0 && curLines > 0, "hay líneas de clima");
   assert.ok(!m.layers.has("wx-arrows-dot"), "el círculo viejo ya no va");
 });
 
