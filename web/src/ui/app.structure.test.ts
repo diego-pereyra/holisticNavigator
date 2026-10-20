@@ -26,3 +26,19 @@ test("UX-N.5b existe la sección Datos y el bloque de pronóstico de la ruta", (
   assert.ok(src.includes("function routeForecastBlock("), "la ficha tiene su bloque de pronóstico");
   assert.ok(!src.includes("Pronóstico de la travesía"), "muere el nombre genérico");
 });
+
+// E12.13b — la duración de la comparación del optimizador es una DURACIÓN
+// (etaMs - startMs), nunca la fecha de llegada (el número de 5 cifras de Diego).
+test("E12.13b el optimizador resta startMs antes de formatear la duración", () => {
+  assert.ok(
+    !/duracionTexto\([^)]*\.etaMs\s*\/\s*3600_000/.test(src),
+    "duracionTexto no puede recibir etaMs/3600_000 (fecha de epoch)",
+  );
+  const matches = src.match(/duracionTexto\(\([^)]*\.etaMs - job\.startMs\) \/ 3600_000\)/g) ?? [];
+  assert.ok(matches.length >= 3, `esperaba >=3 renders con (etaMs - startMs), hay ${matches.length}`);
+});
+
+test("E12.13b duracionTexto delega en breakdownDuration (un solo desglose)", () => {
+  const body = bodyOf("duracionTexto");
+  assert.ok(body.includes("breakdownDuration"), "duracionTexto usa el desglose único");
+});

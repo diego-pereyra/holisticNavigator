@@ -118,7 +118,7 @@ test("medir: rumbo hacia el norte y hacia el oeste", () => {
   assert.ok(Math.abs(west.legs[0]!.bearingDeg - 270) < 0.5);
 });
 
-import { navToWpLine, formatDuration } from "./format.ts";
+import { navToWpLine, formatDuration, breakdownDuration } from "./format.ts";
 
 test("nav-to-wp: solo con ruta activa, posición y destino", () => {
   const pos = { lat: 10, lon: 20 };
@@ -129,19 +129,34 @@ test("nav-to-wp: solo con ruta activa, posición y destino", () => {
   assert.equal(navToWpLine(true, pos, null), null, "sin waypoint destino");
 });
 
-const DAY = 86_400_000;
+const HOUR = 3_600_000;
 
-test("E12.13 formatDuration: días enteros y medias jornadas", () => {
-  assert.equal(formatDuration(21 * DAY), "≈ 21 días");
-  assert.equal(formatDuration(20.5 * DAY), "≈ 20,5 días");
-  assert.equal(formatDuration(21.2 * DAY), "≈ 21 días");
-  assert.equal(formatDuration(21 * DAY + 2 * 3_600_000), "≈ 21 días");
+test("E12.13b breakdownDuration: días separados y horas", () => {
+  assert.equal(breakdownDuration(20.5 * 24), "20 d 12 h");
+  assert.equal(breakdownDuration(21 * 24 + 6), "21 d 6 h");
+  assert.equal(breakdownDuration(21 * 24), "21 d");
+  assert.equal(breakdownDuration(536), "22 d 8 h");
 });
 
-test("E12.13 formatDuration: un día y travesías cortas", () => {
-  assert.equal(formatDuration(DAY), "≈ 1 día");
-  assert.equal(formatDuration(0.2 * DAY), "≈ 0,2 días");
-  assert.equal(formatDuration(0), "≈ 0 días");
+test("E12.13b breakdownDuration: horas y minutos bajo el día", () => {
+  assert.equal(breakdownDuration(6), "6 h");
+  assert.equal(breakdownDuration(6.5), "6 h 30 m");
+  assert.equal(breakdownDuration(0.5), "30 min");
+  assert.equal(breakdownDuration(0), "0 min");
+});
+
+test("E12.13b formatDuration: el '≈' delante del desglose", () => {
+  assert.equal(formatDuration(20.5 * 24 * HOUR), "≈ 20 d 12 h");
+  assert.equal(formatDuration(6 * HOUR), "≈ 6 h");
+  assert.equal(formatDuration(21 * 24 * HOUR), "≈ 21 d");
+});
+
+test("E12.13b la duración nunca es una fecha de epoch", () => {
+  // Duración típica de un crossing: ~536 h. La fecha de llegada (ms desde 1970)
+  // daría ~493.000 h, un número de 5 cifras como el que reportó Diego.
+  const crossingMs = 536 * HOUR;
+  assert.equal(formatDuration(crossingMs), "≈ 22 d 8 h");
+  assert.ok(!/\d{4,}/.test(formatDuration(crossingMs)), "no debe tener 4+ cifras");
 });
 
 test("E12.13 formatDuration: sin dato", () => {

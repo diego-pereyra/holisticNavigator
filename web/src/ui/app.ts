@@ -155,6 +155,7 @@ import {
   formatDistance,
   formatDepth,
   formatDuration,
+  breakdownDuration,
   applyUnits,
   applyVisibility,
   measureLegs,
@@ -3625,6 +3626,9 @@ interface OptJob {
   workerId: number;
   result: IsoMultiResult | null;
   baseline: IsoBaseline | null;
+  // E12.13b: la hora de salida del cálculo. `result.etaMs` es una FECHA de
+  // llegada; la duración es `etaMs - startMs`.
+  startMs: number;
   climateOnly: boolean;
   // E12.6: opcionales que el trazado optimizado ya no toca (solo rutas propias).
   dropped: number;
@@ -3713,7 +3717,7 @@ async function optStart(
   if (!clim && !pkg) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: true, dropped, error: "no hay datos de viento",
+      startMs: Date.now(), climateOnly: true, dropped, error: "no hay datos de viento",
     });
     optRefreshPanel(ui);
     return;
@@ -3724,7 +3728,7 @@ async function optStart(
   } catch (err) {
     optJobs.set(code, {
       code, kind, coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: !pkg, dropped, error: err instanceof Error ? err.message : String(err),
+      startMs: Date.now(), climateOnly: !pkg, dropped, error: err instanceof Error ? err.message : String(err),
     });
     optRefreshPanel(ui);
     return;
@@ -3732,7 +3736,7 @@ async function optStart(
   const id = ++optJobSeq;
   const job: OptJob = {
     code, kind, coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
-    climateOnly: !pkg, dropped,
+    startMs: Date.now(), climateOnly: !pkg, dropped,
   };
   optJobs.set(code, job);
   optJobCode.set(id, code);
@@ -3908,9 +3912,9 @@ function optRender(
       panel.append(el("p", { class: "hn-opt-compare" }, optCompareText(ui, job)));
       const stats = el("div", { class: "hn-opt-stats" });
       stats.append(
-        el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
+        el("span", {}, `Optimizada: ${duracionTexto((r.etaMs - job.startMs) / 3600_000)} · ${dst(ui, r.nm, false)}`),
         el("span", {}, `Ceñida: ${r.tacks} viradas`),
-        el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`),
+        el("span", {}, `Original: ${duracionTexto((job.baseline.etaMs - job.startMs) / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`),
       );
       if (r.gybes > 0) stats.append(el("span", {}, `Empopada: ${r.gybes} trasluchadas`));
       panel.append(stats);
@@ -4437,13 +4441,7 @@ function fechaHora(t: number): string {
 }
 
 function duracionTexto(hours: number): string {
-  const totalMin = Math.max(0, Math.round(hours * 60));
-  const d = Math.floor(totalMin / 1440);
-  const h = Math.floor((totalMin % 1440) / 60);
-  const m = totalMin % 60;
-  if (d > 0) return h > 0 ? `${d} d ${h} h` : `${d} d`;
-  if (h > 0) return m > 0 ? `${h} h ${m} m` : `${h} h`;
-  return `${m} min`;
+  return breakdownDuration(hours);
 }
 
 function diasTexto(d: number): string {
@@ -5177,7 +5175,7 @@ async function runPointOptNow(
     openPointOptSheet(ui, code, "no hay datos de viento");
     optJobs.set(code, {
       code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: true, dropped: 0, error: "no hay datos de viento",
+      startMs: Date.now(), climateOnly: true, dropped: 0, error: "no hay datos de viento",
     });
     return;
   }
@@ -5189,13 +5187,13 @@ async function runPointOptNow(
     openPointOptSheet(ui, code, msg);
     optJobs.set(code, {
       code, kind: "own", coords, names, status: "error", ratio: 0, workerId: 0, result: null, baseline: null,
-      climateOnly: !pkg, dropped: 0, error: msg,
+      startMs: Date.now(), climateOnly: !pkg, dropped: 0, error: msg,
     });
     return;
   }
   const job: OptJob = {
     code, kind: "own", coords, names, status: "running", ratio: 0, workerId: 0, result: null, baseline: null,
-    climateOnly: !pkg, dropped: 0,
+    startMs: Date.now(), climateOnly: !pkg, dropped: 0,
   };
   optJobs.set(code, job);
   optJobCode.set(id, code);
@@ -5263,11 +5261,11 @@ function renderPointOptBody(ui: UiState, host: HTMLElement, code: string, bootEr
   if (job.baseline) host.append(el("p", { class: "hn-opt-compare" }, optCompareText(ui, job)));
   const stats = el("div", { class: "hn-opt-stats" });
   stats.append(
-    el("span", {}, `Optimizada: ${duracionTexto(r.etaMs / 3600_000)} · ${dst(ui, r.nm, false)}`),
+    el("span", {}, `Optimizada: ${duracionTexto((r.etaMs - job.startMs) / 3600_000)} · ${dst(ui, r.nm, false)}`),
     el("span", {}, `Ceñida: ${r.tacks} viradas`),
   );
   if (r.gybes > 0) stats.append(el("span", {}, `Empopada: ${r.gybes} trasluchadas`));
-  if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto(job.baseline.etaMs / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`));
+  if (job.baseline) stats.append(el("span", {}, `Original: ${duracionTexto((job.baseline.etaMs - job.startMs) / 3600_000)} · ${dst(ui, job.baseline.nm, false)}`));
   host.append(stats);
   const notice = horizonNotice(job.climateOnly ? null : ui.forecast(), r.etaMs);
   if (notice) host.append(el("p", { class: "hn-muted hn-opt-notice" }, notice));

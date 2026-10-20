@@ -56,18 +56,25 @@ export function formatDepth(m: number | null | undefined, units: Units = DEFAULT
   return `${Math.round(ft).toLocaleString("es-AR")} ft`;
 }
 
-// E12.13 — duración estimada de una travesía, en días de navegación. Se
-// redondea a media jornada (21,2 → "21"; 20,5 → "20,5") porque así se cuenta un
-// día de navegación; un viaje que no llega a media se muestra con décimas para
-// no decir "0 días". El "≈" va siempre: es un estimado de planificación, no
-// una ETA.
+// E12.13b — duración en días y horas, el desglose único de la app. Regla de
+// Diego: días separados y horas ("21 d 6 h"), no medias jornadas ni fracciones.
+// Los minutos solo aparecen cuando no llega a un día ("6 h 30 m").
+export function breakdownDuration(hours: number): string {
+  const totalMin = Math.max(0, Math.round(hours * 60));
+  const d = Math.floor(totalMin / 1440);
+  const h = Math.floor((totalMin % 1440) / 60);
+  const m = totalMin % 60;
+  if (d > 0) return h > 0 ? `${d} d ${h} h` : `${d} d`;
+  if (h > 0) return m > 0 ? `${h} h ${m} m` : `${h} h`;
+  return `${m} min`;
+}
+
+// E12.13 / E12.13b — duración estimada de la ficha: el desglose de días y horas
+// con el "≈" delante, porque es un estimado de planificación, no una ETA. El
+// optimizador usa `breakdownDuration` pelado (sin "≈").
 export function formatDuration(ms: number | null | undefined): string {
   if (ms === null || ms === undefined || Number.isNaN(ms)) return "—";
-  const days = ms / 86_400_000;
-  const half = Math.round(days * 2) / 2;
-  const r = days > 0 && half === 0 ? Math.max(0.1, Math.round(days * 10) / 10) : half;
-  const txt = Number.isInteger(r) ? String(r) : r.toFixed(1).replace(".", ",");
-  return `≈ ${txt} ${r === 1 ? "día" : "días"}`;
+  return `≈ ${breakdownDuration(ms / 3_600_000)}`;
 }
 
 // --- UX-N.4b: visibilidad y persistencia ------------------------------------
