@@ -1,41 +1,57 @@
 ADELANTE
 
-TAREA ÚNICA: E12.13 — Duración estimada de la ruta en la ficha: cuánto demora con el clima
-del mes (o el pronóstico descargado) y la polar. (Pedido de Diego: "agregar cuánto tiempo
-demora una ruta en esas condiciones para esas polares" — y le gustó la demostración de que
-el viento se evalúa a la hora de llegada del barco.)
+TAREA ÚNICA: E12.13b + E13.3 — primero las dos correcciones de la duración que quedaron
+afuera de E12.13 (el número de 5 cifras que vio Diego SIGUE VIVO); después el pronóstico
+robusto de 16 días. Dos partes, un commit cada una.
 
-LA PIEZA YA EXISTE: `traverseRoute(coords, startMs, wind, polar)` en
-web/src/core/routing/isochrones.ts:664 calcula ETA, viento máximo y millas de un trazado con
-el mismo viento y polar del optimizador (es la base de la comparación "vs original"). No se
-reinventa nada: se expone.
+PARTE A — E12.13b: duración real y formato de días y horas. (Revisión del arquitecto sobre
+f6ae590: las correcciones pedidas no entraron.)
 
-Archivos: web/src/core/routing/isochrones.ts (solo si hace falta un envoltorio),
-web/src/ui/app.ts (bloque de la ficha), web/src/core/format.ts (duración, +test),
-web/public/app.css (solo si hace falta).
+Diagnóstico (verificado en el código):
+- web/src/ui/app.ts:3911, 3913 y 5266 siguen pasando `etaMs / 3600_000` — el etaMs
+  ABSOLUTO (fecha de llegada) — a duracionTexto(hours): muestra ~20.540 d (días desde
+  1970). Es el número de 5 cifras de Diego.
+- web/src/core/format.ts:64-70 sigue redondeando a media jornada ("≈ 20,5 días") — Diego
+  pidió días y horas SEPARADOS.
 
-1. **Helper estimado (puro, testeable):** `estimateRouteDuration({ coords, clim, pkg,
-   polar, startMs })` → { etaMs, nm, windMaxKn, windSource: "clima" | "pronostico" } —
-   elige el campo: si hay paquete propio de la ruta que cubra el trazado (UX-N.5b),
-   `forecastWindField(pkg, clim)`; si no, `climateWindField(clim)` del mes de planificación.
-   Con traverseRoute debajo, sin tocar el motor.
-2. **En la ficha, junto a "Viento medio en ruta":** la línea "Duración estimada":
-   "≈ 21 días · 5,4 kn medios · viento máx 28 kn — clima de octubre (polar 40 pies)".
-   Con paquete propio: "≈ 18 días · con el pronóstico descargado (hace 4 h)". Formato de
-   duración en format.ts ("≈ 21 días", medias jornadas como "≈ 20,5 días"), unidades por
-   hn.settings.unidades, y la edad visible del paquete (regla 7 de §6 ter).
-3. **Honestidad del rótulo:** dice SIEMPRE con qué viento se calculó (mes de climatología o
-   pronóstico) y qué polar usa ("polar 40 pies" hasta que exista la propia importable).
-   Es un estimado de planificación: no compite con el "Optimizar" — es su antesala.
-4. **Caché:** por (código, variante, mes) mientras la ficha esté abierta; el cálculo es
-   barato (traverseRoute sobre el trazado ya corre en cada optimización).
-5. Tests (node:test): el helper con clim sola → windSource "clima"; con paquete cubriendo
-   → "pronostico" y ETA distinto; formato de duración (21 días, 20,5 días); el viento máx
-   coincide con el máximo de los tramos.
-6. Prueba de Diego: AN12 en octubre → "≈ 21 días · 5,4 kn medios" (los números del
-   arquitecto ya verificaron Canarias→Barbados: 2 761 nm, 21,2-21,5 días, 5,4 kn);
-   con el pronóstico de la ruta descargado → el número baja a lo real y la edad se ve.
-7. npm test (en web/), bash scripts/build-web.sh, commit "E12.13: duración estimada en la
-   ficha", push. Al terminar escribí "Status: DONE" como última línea.
+1. **Duración, no fecha:** en las líneas del optimizador (3911, 3913, 5266 y su par del
+   panel del pin), pasar la DURACIÓN en horas: `(etaMs - startMs) / 3600_000`. startMs
+   sale del job (agregalo al lanzar el cálculo si no está).
+2. **Formato único "días separados y horas" (regla de Diego):** formatDuration pasa al
+   desglose de duracionTexto con el "≈" delante: "≈ 20 d 6 h" (minutos solo < 1 día:
+   "≈ 6 h"; exacto: "≈ 20 d"). El optimizador sigue con duracionTexto sin "≈" ("21 d 6 h")
+   — un solo desglose en toda la app.
+3. Tests: formatDuration con 20,5 días → "≈ 20 d 12 h"; con 6 h → "≈ 6 h"; los renders
+   reciben horas de duración (~536 h), nunca horas de epoch (~493.000 h).
+4. npm test (en web/), bash scripts/build-web.sh, commit "E12.13b: duración real y
+   formato d+h".
 
-Status: DONE
+PARTE B — E13.3: pronóstico robusto y 16 días de horizonte real. (Reporte de Diego: "el
+pronóstico me da error de conexión" + "¿otro servicio con más tiempo de predicción?".
+Verificado por el arquitecto con curl: ambas APIs de Open-Meteo vivas, CORS correcto, y
+ACEPTAN temporal_resolution=hourly_3 con forecast_days=16 → 128 pasos de 3 h, un tercio
+del peso horario. Verificado en forecast Y en marine. No existe mejor servicio sin clave
+ni backend: 16 días es el techo del viento operacional; más allá, pilot charts — línea
+roja de E12.12 y aviso de E12.11.)
+
+5. **16 días y 3-hourly:** FORECAST_DAYS = 16 y FORECAST_DAYS_MAX = 16; las dos URLs
+   agregan temporal_resolution=hourly_3. El submuestreo cliente (idx += stepHours) queda
+   como red de seguridad. El deslizador (128 pasos) queda lleno entero.
+6. **Robustez (el error de Diego):** defaultJson con timeout propio (AbortController,
+   30 s) y 2 reintentos por bloque (esperas de 1 s y 4 s); bloques de a 2 en paralelo.
+   Un tirón lento de la red móvil ya no mata la descarga completa.
+7. **Error honesto:** el mensaje dice qué falló ("viento" o "olas"), si fue red o HTTP
+   (con código); "Reintentar" arranca limpio; el progreso por bloque se mantiene.
+8. **Horizonte:** el aviso (E12.11) y el rojo (E12.12) se recalculan solos — la parte
+   azul de un crossing corto cubre casi toda la travesía (16 d × 5,4 kn ≈ 2.000 nm).
+9. Tests: URL builder con forecast_days=16 + temporal_resolution; el retry (fetch mock
+   que falla 1 vez por bloque y sale a la segunda); el timeout (mock mudo → 2 reintentos
+   → "sin conexión · viento"); el paquete decodifica 128 pasos.
+10. npm test (en web/), bash scripts/build-web.sh, commit "E13.3: pronóstico de 16 días
+    y robusto", push. Al terminar escribí "Status: DONE" como última línea de este
+    archivo.
+
+Prueba de Diego al final: en la red del celu que fallaba, bajar el pronóstico de una ruta
+→ completo con progreso; deslizador con 16 días reales; "Optimizada: 21 d 6 h" (y NUNCA más
+un número de 5 cifras); AN12 en octubre → duración estimada ≈ 22 d en la ficha con el
+formato nuevo.
