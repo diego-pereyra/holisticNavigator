@@ -346,6 +346,7 @@ test("E13.3 reintenta un bloque que falla una vez (sale a la segunda)", async ()
     marginNm: 0,
     now: () => START * 1000,
     fetchJson: flaky,
+    wait: () => Promise.resolve(),
   });
   assert.equal(pkg.id, "retry");
   assert.ok(calls >= 4, `esperaba reintentos (calls=${calls})`);
@@ -353,7 +354,7 @@ test("E13.3 reintenta un bloque que falla una vez (sale a la segunda)", async ()
 
 test("E13.3 error honesto: HTTP y red dicen qué falló", () => {
   assert.equal(forecastErrorMessage(new ForecastHttpError("viento", 500)), "error de viento · HTTP 500");
-  assert.equal(forecastErrorMessage(new ForecastHttpError("olas", 429)), "error de olas · HTTP 429");
+  assert.equal(forecastErrorMessage(new ForecastHttpError("olas", 503)), "error de olas · HTTP 503");
   const redErr = Object.assign(new Error("Failed to fetch"), { kind: "olas" as const });
   assert.equal(forecastErrorMessage(redErr), "sin conexión · olas");
   assert.equal(forecastErrorMessage(new Error("Failed to fetch")), "sin conexión · viento");
@@ -375,6 +376,7 @@ test("E13.3 mock mudo: 3 intentos y error 'sin conexión · viento'", async () =
       marginNm: 0,
       now: () => START * 1000,
       fetchJson: mute,
+      wait: () => Promise.resolve(),
     }),
     (err: unknown) => {
       assert.equal(forecastErrorMessage(err), "sin conexión · viento");
@@ -384,4 +386,99 @@ test("E13.3 mock mudo: 3 intentos y error 'sin conexión · viento'", async () =
   // 3 intentos (1 + 2 reintentos) por bloque antes de rendirse. Viento y olas
   // corren en paralelo, así que el total es >= 3.
   assert.ok(calls >= 3, `esperaba >= 3 intentos, hubo ${calls}`);
+});
+
+// --- E13.4: 429, pacing y chunks de 50 --------------------------------------
+
+import {
+  FORECAST_CHUNK,
+  FORECAST_RATE_LIMIT,
+  FORECAST_RATE_WINDOW_MS,
+  FORECAST_429_WAIT_MS,
+  ForecastBudget,
+} from "./forecast.ts";
+
+test("E13.4 chunk de 50 en las URLs", () => {
+  assert.equal(FORECAST_CHUNK, 50);
+  const pts = Array.from({ length: FORECAST_CHUNK }, (_, i) => ({ lat: 10 + i * 0.01, lon: -30 }));
+  const u = new URL(forecastUrl(pts, FORECAST_DAYS));
+  assert.equal(u.searchParams.get("latitude")!.split(",").length, 50);
+});
+
+test("E13.4 el pacing respeta el presupuesto de 60 s", async () => {
+  let clock = 0;
+  const waits: number[] = [];
+  const budget = new ForecastBudget(
+    FORECAST_RATE_LIMIT,
+    FORECAST_RATE_WINDOW_MS,
+    () => clock,
+    (ms) => {
+      waits.push(ms);
+      clock += ms; // avanzar el reloj al dormir
+      return Promise.resolve();
+    },
+  );
+  // Dos requests de 300 unidades llenan la ventana (600 > 450 ⇒ el segundo ya
+  // espera). Con 300 <= 450 el primero pasa; el segundo debe dormir.
+  await budget.acquire(300);
+  await budget.acquire(300);
+  assert.equal(waits.length, 1, "el segundo request tuvo que esperar");
+  assert.ok(waits[0]! <= FORECAST_RATE_WINDOW_MS, "la espera no supera la ventana");
+  // Ya pasó la ventana: entra de nuevo sin esperar.
+  assert.ok(clock >= FORECAST_RATE_WINDOW_MS);
+});
+
+test("E13.4 el 429 espera 60 s y sale a la segunda (reintentable)", async () => {
+  let n = 0;
+  const waits: number[] = [];
+  // El primer intento da 429; el segundo devuelve datos.
+  const fetch429then = (): Promise<unknown> => {
+    n++;
+    if (n === 1) return Promise.reject(new ForecastHttpError("viento", 429));
+    return Promise.resolve([{ hourly: { time: [START, START + 3600] } }]);
+  };
+  const pkg = await fetchForecast([-20, 20, -19.5, 20.5], 3, 1, {
+    id: "429ok",
+    marginNm: 0,
+    now: () => START * 1000,
+    fetchJson: fetch429then,
+    budget: new ForecastBudget(),
+    wait: (ms) => {
+      waits.push(ms);
+      return Promise.resolve();
+    },
+  });
+  assert.equal(pkg.id, "429ok");
+  assert.ok(waits.includes(FORECAST_429_WAIT_MS), "esperó los 60 s del 429");
+});
+
+test("E13.4 tres 429 seguidos es error definitivo con el mensaje nuevo", async () => {
+  let n = 0;
+  const always429 = (): Promise<unknown> => {
+    n++;
+    return Promise.reject(new ForecastHttpError("viento", 429));
+  };
+  await assert.rejects(
+    fetchForecast([-20, 20, -19.5, 20.5], 3, 1, {
+      id: "429fail",
+      marginNm: 0,
+      now: () => START * 1000,
+      fetchJson: always429,
+      budget: new ForecastBudget(),
+      wait: () => Promise.resolve(),
+    }),
+    (err: unknown) => {
+      assert.equal(
+        forecastErrorMessage(err),
+        "límite gratuito de la API (429) — esperá un minuto y tocá Reintentar",
+      );
+      return true;
+    },
+  );
+  // 1 intento + 2 reintentos = 3 por bloque (viento y olas comparten contador).
+  assert.ok(n >= 3, `esperaba >=3 intentos, hubo ${n}`);
+});
+
+test("E13.4 el 429 espera el tiempo configurado", () => {
+  assert.equal(FORECAST_429_WAIT_MS, 60_000);
 });

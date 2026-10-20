@@ -42,7 +42,9 @@ export const FORECAST_SCALE = 10; // Int16 = valor × 10 (escala 0,1)
 export const FORECAST_MISSING = -32768; // sentinel: sin dato (tierra)
 export const FORECAST_MARGIN_NM = 300;
 export const FORECAST_POINTS_MAX = 1500;
-export const FORECAST_CHUNK = 200;
+// E13.4 — cada request es más chico: 50 puntos. El pacing (ver `ForecastBudget`)
+// reparte esos 50 entre la ventana de 60 s y una caída aislada pesa menos.
+export const FORECAST_CHUNK = 50;
 export const FORECAST_STEP_HOURS = 3;
 // E13.3 — 16 días es el techo operacional de Open-Meteo (y del viento que tiene
 // sentido para planificar). Se pide directo en pasos de 3 h con
@@ -272,6 +274,10 @@ export interface ForecastHooks {
   onProgress?: (ratio: number) => void;
   now?: () => number;
   fetchJson?: (url: string) => Promise<unknown>;
+  // E13.4 — inyectable para tests: el presupuesto de la ventana de 60 s.
+  budget?: ForecastBudget;
+  // E13.4 — inyectable para tests: la espera (por defecto `setTimeout`).
+  wait?: (ms: number) => Promise<void>;
 }
 
 type OmHourly = Record<string, number[] | undefined>;
@@ -292,8 +298,75 @@ function asArray(res: unknown): OmLocation[] {
 export const FORECAST_TIMEOUT_MS = 30_000;
 export const FORECAST_RETRY_WAITS_MS = [1_000, 4_000];
 export const FORECAST_PARALLEL = 2;
+// E13.4 — la capa gratuita de Open-Meteo cuenta CADA ubicación (punto de la
+// grilla) contra un tope de ~600/min. Con margen propio vamos a ~450 unidades
+// por ventana móvil de 60 s: el paquete se acomoda solo.
+export const FORECAST_RATE_LIMIT = 450;
+export const FORECAST_RATE_WINDOW_MS = 60_000;
+// Cuando la API nos corta con 429 (no manda Retry-After): esperar un minuto y
+// reintentar, hasta 2 esperas por request (3 intentos).
+export const FORECAST_429_WAIT_MS = 60_000;
+export const FORECAST_429_RETRIES = 2;
 
 export type ForecastFetchKind = "viento" | "olas";
+
+// E13.4 — presupuesto con ventana móvil de 60 s. Cada request "gasta" tantas
+// unidades como puntos tiene; si la ventana ya está consumida, se duerme lo que
+// falte para vaciarla antes de lanzar. Contador de timestamps, sin librerías.
+export class ForecastBudget {
+  // Cada entrada es (timestamp, unidades) de un request dentro de la ventana.
+  private readonly spend: { t: number; units: number }[] = [];
+  private readonly limit: number;
+  private readonly windowMs: number;
+  private readonly clock: () => number;
+  private readonly wait: (ms: number) => Promise<void>;
+  constructor(
+    limit = FORECAST_RATE_LIMIT,
+    windowMs = FORECAST_RATE_WINDOW_MS,
+    clock: () => number = () => Date.now(),
+    wait: (ms: number) => Promise<void> = sleep,
+  ) {
+    this.limit = limit;
+    this.windowMs = windowMs;
+    this.clock = clock;
+    this.wait = wait;
+  }
+
+  private prune(now: number): void {
+    const from = now - this.windowMs;
+    while (this.spend.length > 0 && this.spend[0]!.t <= from) this.spend.shift();
+  }
+
+  private used(): number {
+    let sum = 0;
+    for (const e of this.spend) sum += e.units;
+    return sum;
+  }
+
+  // Un request de `units` puntos. Duerme lo necesario para no pasarse del tope.
+  async acquire(units: number, onWait?: (ms: number) => void): Promise<void> {
+    for (;;) {
+      const now = this.clock();
+      this.prune(now);
+      if (this.used() + units <= this.limit || this.spend.length === 0) {
+        this.spend.push({ t: now, units });
+        return;
+      }
+      // Hay que esperar a que el request más viejo salga de la ventana.
+      const ms = this.spend[0]!.t + this.windowMs - now;
+      if (ms <= 0) {
+        this.spend.shift();
+        continue;
+      }
+      onWait?.(ms);
+      await this.wait(ms);
+    }
+  }
+}
+
+// Presupuesto compartido por todas las descargas del proceso: bajar dos cajas
+// seguidas se acomoda solo bajo el mismo tope.
+const forecastBudget = new ForecastBudget();
 
 // Marca el tipo de dato que falló, para que el mensaje diga "viento" u "olas".
 export class ForecastHttpError extends Error {
@@ -320,24 +393,33 @@ async function fetchOnce(url: string, kind: ForecastFetchKind, timeoutMs: number
   }
 }
 
-// Hasta 3 intentos, con esperas de 1 s y 4 s. Red (fetch rechaza / timeout) o
-// HTTP 5xx se reintentan; un 4xx es definitivo (no tiene sentido insistir con
-// la misma URL).
+// Hasta 3 intentos, con esperas de 1 s y 4 s para fallas de red o 5xx. Un 4xx
+// es definitivo (insistir con la misma URL no sirve) — SALVO el 429, que sí se
+// reintenta con esperas de 60 s (ver E13.4 abajo).
 async function retryJson(
   fetchJson: (url: string) => Promise<unknown>,
   url: string,
   kind: ForecastFetchKind,
+  wait: (ms: number) => Promise<void> = sleep,
 ): Promise<unknown> {
   let last: unknown;
+  let waits429 = 0;
   for (let attempt = 0; attempt <= FORECAST_RETRY_WAITS_MS.length; attempt++) {
     try {
       return await fetchJson(url);
     } catch (err) {
       last = err;
-      if (err instanceof ForecastHttpError && err.status >= 400 && err.status < 500) throw err;
-      const wait = FORECAST_RETRY_WAITS_MS[attempt];
-      if (wait === undefined) break;
-      await sleep(wait);
+      if (err instanceof ForecastHttpError) {
+        if (err.status === 429 && waits429 < FORECAST_429_RETRIES) {
+          waits429++;
+          await wait(FORECAST_429_WAIT_MS);
+          continue;
+        }
+        if (err.status >= 400 && err.status < 500) throw err;
+      }
+      const w = FORECAST_RETRY_WAITS_MS[attempt];
+      if (w === undefined) break;
+      await wait(w);
     }
   }
   throw rethrowKind(last, kind);
@@ -369,7 +451,12 @@ export function forecastErrorMessage(err: unknown): string {
   const kind = (err as { kind?: ForecastFetchKind } | null)?.kind;
   const name = err instanceof Error ? err.name : "";
   const what = kind ?? (name === "ForecastMarineError" ? "olas" : "viento");
-  if (err instanceof ForecastHttpError) return `error de ${what} · HTTP ${err.status}`;
+  if (err instanceof ForecastHttpError) {
+    // E13.4 — el 429 es un tope temporal, no una falla: se le dice a Diego qué
+    // hacer, no "error de viento".
+    if (err.status === 429) return "límite gratuito de la API (429) — esperá un minuto y tocá Reintentar";
+    return `error de ${what} · HTTP ${err.status}`;
+  }
   return `sin conexión · ${what}`;
 }
 
@@ -381,6 +468,8 @@ export async function fetchForecast(
 ): Promise<ForecastPackage> {
   const now = hooks.now ?? (() => Date.now());
   const fetchJson = hooks.fetchJson ?? defaultJson;
+  const budget = hooks.budget ?? forecastBudget;
+  const wait = hooks.wait ?? sleep;
   const marginNm = hooks.marginNm ?? FORECAST_MARGIN_NM;
   const clampedDays = Math.max(1, Math.min(FORECAST_DAYS_MAX, days));
 
@@ -397,8 +486,11 @@ export async function fetchForecast(
   // mensaje sabe SI fue viento o olas.
   for (let i = 0; i < parts.length; i += FORECAST_PARALLEL) {
     const group = parts.slice(i, i + FORECAST_PARALLEL);
-    const fc = group.map((part) => retryJson(fetchJson, forecastUrl(part, clampedDays), "viento").then(asArray));
-    const mc = group.map((part) => retryJson(fetchJson, marineUrl(part, clampedDays), "olas").then(asArray));
+    // E13.4 — un request por API por bloque: se reserva el presupuesto de la
+    // ventana antes de lanzarlos (el pacing reparte la ráfaga).
+    for (const part of group) await budget.acquire(part.length);
+    const fc = group.map((part) => retryJson(fetchJson, forecastUrl(part, clampedDays), "viento", wait).then(asArray));
+    const mc = group.map((part) => retryJson(fetchJson, marineUrl(part, clampedDays), "olas", wait).then(asArray));
     const [fcRes, mcRes] = await Promise.all([Promise.all(fc), Promise.all(mc)]);
     forecastRes.push(...fcRes);
     marineRes.push(...mcRes);
