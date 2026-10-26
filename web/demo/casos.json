@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "viewport": { "width": 390, "height": 844 },
+  "titulo": "Holistic Navigator — demo funcional",
+  "casos": [
+    {
+      "id": "arranque",
+      "titulo": "Abrir la app",
+      "narracion": "Esta es la Holistic Navigator. Abre en el mapa, en tu cuenca, con el mes de planificación ya elegido. Sin cuentas, sin instalar nada: funciona desde el navegador del teléfono.",
+      "acciones": [{ "t": "wait", "v": 6000 }],
+      "dur_ms": 8000
+    },
+    {
+      "id": "mes",
+      "titulo": "Elegir el mes",
+      "narracion": "Todo lo que ves depende del mes que elijas: el viento medio, las corrientes y la época de cada ruta se puntúan para ese mes. Tocás Cuándo y elegís.",
+      "acciones": [
+        { "t": "click-sel", "sel": ".hn-ctx-when" },
+        { "t": "wait", "v": 1200 },
+        { "t": "click-texto", "v": "mar" },
+        { "t": "wait", "v": 1500 }
+      ],
+      "dur_ms": 10000
+    },
+    {
+      "id": "pilot-chart",
+      "titulo": "Pilot chart: 30 años de clima",
+      "narracion": "Este es el clima medio del mes, calculado sobre treinta años de datos satelitales: flechitas finas con el color de la fuerza del viento, corrientes en azul, ciclones rayados en rojo y el hielo en blanco. Es la pilot chart de siempre, viva sobre el mapa.",
+      "acciones": [
+        { "t": "click-sel", "sel": ".hn-context button:has-text(\"≈\")" },
+        { "t": "wait", "v": 2500 },
+        { "t": "pan", "v": [0.55, 0.5] },
+        { "t": "wait", "v": 3500 }
+      ],
+      "dur_ms": 22000
+    },
+    {
+      "id": "clima-aca",
+      "titulo": "Clima en un punto",
+      "narracion": "Mantenés apretado sobre cualquier parte del mar y la app te pregunta qué querés saber de ese punto. Clima acá: viento, corriente, olas y el riesgo de ciclones, en un panel que se lee de un vistazo.",
+      "acciones": [
+        { "t": "hold", "x": 0.5, "y": 0.35, "ms": 900 },
+        { "t": "wait", "v": 1000 },
+        { "t": "click-texto", "v": "Clima acá" },
+        { "t": "wait", "v": 2000 }
+      ],
+      "dur_ms": 16000
+    },
+    {
+      "id": "ruta",
+      "titulo": "Una ruta del libro",
+      "narracion": "Las rutas oceánicas salen de setecientas variantes del libro de Cornell, con sus consejos y referencias cartográficas. Elegimos una: la ficha te dice cuánto tarda con el clima del mes, con qué polar y cuánto viento vas a encontrar.",
+      "acciones": [
+        { "t": "click-sel", "sel": ".hn-tab:has-text('Rutas')" },
+        { "t": "wait", "v": 2500 },
+        { "t": "click-sel", "sel": ".hn-row" },
+        { "t": "wait", "v": 1500 },
+        { "t": "wheel", "v": 500 },
+        { "t": "wait", "v": 2500 }
+      ],
+      "dur_ms": 20000
+    },
+    {
+      "id": "optimizar",
+      "titulo": "Optimizar con el viento",
+      "narracion": "Acá está el corazón: el mismo motor de isócronas que usan los barcos de regata, corriendo en el teléfono. Traza la ruta con el viento del mes, cuenta las viradas, te dice el tiempo estimado y si conviene o no contra la ruta original. La parte roja es donde el pronóstico se acaba y entran las pilot charts.",
+      "acciones": [
+        { "t": "click-texto", "v": "Ruta del mes" },
+        { "t": "wait", "v": 9000 },
+        { "t": "wait", "v": 4000 },
+        { "t": "click-texto", "v": "Descartar" },
+        { "t": "wait", "v": 1500 }
+      ],
+      "dur_ms": 30000
+    },
+    {
+      "id": "ajustes",
+      "titulo": "Ajustes en un toque",
+      "narracion": "Unidades a tu gusto — nudos o kilómetros, millas o pies — y si algo te molesta en pantalla, lo ocultás. Todo queda donde lo dejaste.",
+      "acciones": [
+        { "t": "click-sel", "sel": ".hn-ctx-ajustes" },
+        { "t": "wait", "v": 1500 },
+        { "t": "click-texto", "v": "km/h" },
+        { "t": "wait", "v": 1500 },
+        { "t": "click-texto", "v": "kn" },
+        { "t": "wait", "v": 1000 }
+      ],
+      "dur_ms": 14000
+    },
+    {
+      "id": "cierre",
+      "titulo": "Sin conexión",
+      "narracion": "Y todo esto queda en el teléfono. Modo avión y la app sigue igual: cartas, clima y pronóstico descargado. La Holistic Navigator: rutas oceánicas planificadas con treinta años de clima y el viento de la semana.",
+      "acciones": [{ "t": "wait", "v": 6000 }],
+      "dur_ms": 8000
+    }
+  ]
+}
