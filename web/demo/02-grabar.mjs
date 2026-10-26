@@ -80,6 +80,16 @@ const page = await ctx.newPage();
 const problemas = [];
 page.on("console", (m) => { if (m.type() === "error") problemas.push(m.text().slice(0, 140)); });
 
+// Navegar ANTES de grabar: sin esto el clip sale about:blank (blanco).
+await page.goto(BASE, { waitUntil: "load", timeout: 60000 });
+const monto = await page
+  .waitForSelector(".hn-context", { state: "visible", timeout: 30000 })
+  .then(() => true, () => false);
+if (!monto) {
+  throw new Error("la app no monto (.hn-context no aparecio) — abortar antes de grabar blanco");
+}
+await sleep(3000); // que el mapa termine de pintar
+
 const narracion = [`# ${espec.titulo}\n\n_Base: ${BASE} · viewport ${vp.width}×${vp.height}\n`];
 const srt = [];
 let t = 0;
