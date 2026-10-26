@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Holistic Navigator">
+  <metadata><copyright author="Holistic Navigator"><license>ruta propia planificada con el motor de isocronas - pilot charts ERA5 1991-2020 + pronostico Open-Meteo del 26/10/2026</license></copyright></metadata>
+  <rte>
+    <name>La Paloma - Porto Belo</name>
+    <rtept lat="-34.66" lon="-54.17"><name>La Paloma</name></rtept>
+    <rtept lat="-34.709999999999994" lon="-54.17"><name>WP1</name></rtept>
+    <rtept lat="-34.725966069514605" lon="-54.01940218839428"><name>WP2</name></rtept>
+    <rtept lat="-34.732610506483496" lon="-53.54205712720466"><name>WP3</name></rtept>
+    <rtept lat="-34.825346230797095" lon="-52.560376291854766"><name>WP4</name></rtept>
+    <rtept lat="-34.98024337489853" lon="-50.77829412310132"><name>WP5</name></rtept>
+    <rtept lat="-33.18931361876166" lon="-48.914219307799954"><name>WP6</name></rtept>
+    <rtept lat="-32.8448196172387" lon="-49.02445551784001"><name>WP7</name></rtept>
+    <rtept lat="-32.86640642812627" lon="-48.82522698067544"><name>WP8</name></rtept>
+    <rtept lat="-32.68330853440263" lon="-48.792987993226575"><name>WP9</name></rtept>
+    <rtept lat="-32.76751171010083" lon="-48.707471886569806"><name>WP10</name></rtept>
+    <rtept lat="-32.045691369339494" lon="-48.5187320444594"><name>WP11</name></rtept>
+    <rtept lat="-31.572460497726812" lon="-47.577539688841625"><name>WP12</name></rtept>
+    <rtept lat="-31.001829854511342" lon="-47.99232926195077"><name>WP13</name></rtept>
+    <rtept lat="-30.887195843829367" lon="-47.20818704445844"><name>WP14</name></rtept>
+    <rtept lat="-27.55098961287232" lon="-48.297575601568724"><name>WP15</name></rtept>
+    <rtept lat="-27.558130077953994" lon="-48.05986699571076"><name>WP16</name></rtept>
+    <rtept lat="-27.107491368815854" lon="-48.265182978325754"><name>WP17</name></rtept>
+    <rtept lat="-27.14" lon="-48.55"><name>Porto Belo</name></rtept>
+  </rte>
+</gpx>

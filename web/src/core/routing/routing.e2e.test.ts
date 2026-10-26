@@ -67,6 +67,10 @@ runCase("climatología octubre, aguas abiertas", octubre, [-55, 15], [-50, 10]);
 runCase("SONDA uniforme, origen mar abierto → Barbados (celda de isla)", uniforme, [-55, 15], [-59, 13]);
 runCase("SONDA uniforme, origen mar abierto → agua al NE de Barbados", uniforme, [-55, 15], [-58.6, 12.9]);
 runCase("SONDA uniforme, origen isla Canarias → agua al NE de Barbados", uniforme, [-16, 28], [-58.6, 12.9]);
+// La ruta de Diego (2026-10-26): La Paloma (UY) → Porto Belo (BR) con octubre.
+// Caso costero con escapada de puerto en los dos extremos (E12.9) y ceñida
+// larga subiendo la costa brasileña contra los vientos del NE.
+runCase("ruta de Diego: La Paloma → Porto Belo (clima octubre)", octubre, [-54.17, -34.66], [-48.55, -27.14]);
 
 // E12.10 — la tabla de waypoints queda navegable: los puntos de paso son solo
 // viradas de verdad; los Bordos de la ceñida-popa y las anclas suman lo que
