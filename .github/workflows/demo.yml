@@ -85,7 +85,9 @@ jobs:
       - name: "Grabar la demo"
         run: node web/demo/02-grabar.mjs http://localhost:8087/holisticNavigator/ web/demo/casos.json web/demo/out
       - name: "webm → mp4 (compartible)"
-        run: ffmpeg -y -i web/demo/out/demo.webm -pix_fmt yuv420p web/demo/out/demo.mp4 2>/dev/null || echo "sin ffmpeg: queda el .webm"
+        run: |
+          ffmpeg -y -i web/demo/out/demo.webm -pix_fmt yuv420p web/demo/out/demo.mp4 \
+            || echo "sin ffmpeg: queda el .webm"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
