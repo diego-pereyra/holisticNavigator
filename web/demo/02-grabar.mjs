@@ -60,6 +60,10 @@ async function actuar(page, a) {
         // Toque simple sobre la carta (agrega waypoint en el editor de rutas).
         await page.mouse.click(vp.width * a.x, vp.height * a.y);
         return true;
+      case "fill":
+        // Campo de coordenadas del editor de rutas propias (aria-label).
+        await page.getByLabel(a.label, { exact: true }).fill(a.v, { timeout: 8000 });
+        return true;
       case "wheel":
         // Sobre el mapa, no sobre la hoja (posición configurable).
         await page.mouse.move(vp.width * (a.x ?? 0.5), vp.height * (a.y ?? 0.5));
