@@ -43,6 +43,18 @@ async function actuar(page, a) {
       case "key":
         await page.keyboard.press(a.v);
         return true;
+      case "esperar-paquete":
+        // Descarga del pronóstico con pacing: puede tardar minutos. Esperamos
+        // la señal real de "cargado" (el deslizador de horas aparece) en vez de
+        // un wait fijo que dejaba el caso 07 sin paquete.
+        const ok = await page
+          .locator(".hn-wx-bar")
+          .first()
+          .waitFor({ state: "visible", timeout: 240000 })
+          .then(() => true, () => false);
+        if (!ok) console.log("  [aviso] el paquete no se cargó en 240s");
+        await sleep(1500);
+        return true;
       case "hold":
         await page.mouse.move(vp.width * a.x, vp.height * a.y);
         await page.mouse.down();
@@ -64,16 +76,20 @@ async function actuar(page, a) {
         await page.mouse.click(vp.width * a.x, vp.height * a.y);
         return true;
       case "fill": {
-        // Coordenadas del editor de rutas propias: primero scrollear el campo a
-        // la vista (en el video tiene que VERSE el campo), pausa, y tipeo carácter
-        // por carácter con Tab final (la app escucha "change", no "input").
+        // Coordenadas del editor de rutas propias: scrollear el campo a la
+        // vista (en el video tiene que VERSE), pausa, y tipeo carácter por
+        // carácter. Los inputs number de Chromium no aceptan Ctrl+A: se usa
+        // triple-click para seleccionar el valor previo. Tab final = blur →
+        // la app escucha "change", no "input".
         const loc = page.getByLabel(a.label, { exact: true }).first();
         await loc.scrollIntoViewIfNeeded({ timeout: 10000 });
         await sleep(600); // que el espectador ubique el campo en pantalla
         await loc.click({ timeout: 8000 });
-        await loc.press("Control+a");
-        await loc.type(a.v, { delay: 75 });
+        await loc.click({ clickCount: 3 }); // seleccionar todo (número: Ctrl+A no va)
+        await loc.type(a.v, { delay: 90 });
         await page.keyboard.press("Tab"); // blur → dispara el change de la app
+        const val = await loc.inputValue().catch(() => "?");
+        if (val !== a.v) console.log(`  [aviso] ${a.label}: quedó "${val}" (esperado "${a.v}")`);
         await sleep(700);
         return true;
       }
