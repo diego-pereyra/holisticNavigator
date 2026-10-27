@@ -46,6 +46,10 @@ async function actuar(page, a) {
         await sleep(a.ms ?? 800);
         await page.mouse.up();
         return true;
+      case "file":
+        // La app abre un input[type=file] oculto (pickTextFile): le setemos el archivo.
+        await page.locator('input[type="file"]').first().setInputFiles(a.path);
+        return true;
       case "pan":
         await page.mouse.move(vp.width * a.v[0], vp.height * a.v[1]);
         await page.mouse.down();
@@ -105,6 +109,7 @@ for (const caso of espec.casos) {
     viewport: vp,
     hasTouch: true,
     isMobile: true,
+    deviceScaleFactor: 2, // pantalla de celular nítida
     permissions: ["geolocation"],
     geolocation: { latitude: -34.9, longitude: -56.2, accuracy: 50 },
     recordVideo: { dir: OUT, size: vp },

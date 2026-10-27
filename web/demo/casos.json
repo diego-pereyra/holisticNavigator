@@ -1,14 +1,17 @@
 {
-  "version": 2,
+  "version": 3,
   "viewport": { "width": 390, "height": 844 },
   "titulo": "Holistic Navigator — demo por caso de uso",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles (taps, scrolls, arrastres) y viewport de celular.",
   "casos": [
     {
       "orden": "01",
       "id": "arranque",
       "titulo": "Abrir la app",
       "narracion": "Esta es la Holistic Navigator. Abre en el mapa, en tu cuenca, con el mes de planificación ya elegido. Sin cuentas, sin instalar nada: funciona desde el navegador del teléfono.",
-      "acciones": [],
+      "acciones": [
+        { "t": "wheel", "v": 240 }
+      ],
       "dur_ms": 7000
     },
     {
@@ -35,7 +38,7 @@
         { "t": "pan", "v": [0.55, 0.5] },
         { "t": "wait", "v": 3500 }
       ],
-      "dur_ms": 12000
+      "dur_ms": 11000
     },
     {
       "orden": "04",
@@ -48,43 +51,62 @@
         { "t": "click-texto", "v": "Clima acá" },
         { "t": "wait", "v": 2000 }
       ],
-      "dur_ms": 9000
+      "dur_ms": 8000
     },
     {
       "orden": "05",
       "id": "ruta-del-libro",
       "titulo": "Una ruta del libro",
-      "narracion": "Las rutas oceánicas salen de setecientas variantes del libro de Cornell, con sus consejos y referencias cartográficas. Elegimos una: la ficha te dice cuánto tarda con el clima del mes, con qué polar y cuánto viento vas a encontrar.",
+      "narracion": "Las rutas oceánicas salen de setecientas variantes del libro de Cornell, con sus consejos y referencias cartográficas. Elegimos una y la ficha nos dice cuánto tarda con el clima del mes, con qué polar y cuánto viento vamos a encontrar.",
       "acciones": [
         { "t": "click-sel", "sel": ".hn-tab:has-text('Rutas')" },
         { "t": "wait", "v": 2500 },
         { "t": "click-sel", "sel": ".hn-row" },
         { "t": "wait", "v": 1500 },
-        { "t": "wheel", "v": 500 },
-        { "t": "wait", "v": 2500 }
+        { "t": "wheel", "v": 700 },
+        { "t": "wait", "v": 3000 }
       ],
-      "dur_ms": 8000
+      "dur_ms": 7000
     },
     {
       "orden": "06",
-      "id": "optimizar",
-      "titulo": "Optimizar con el viento",
-      "narracion": "Acá está el corazón: el mismo motor de isócronas que usan los barcos de regata, corriendo en el teléfono. Traza la ruta con el viento del mes, cuenta las viradas y te dice el tiempo estimado contra la ruta original. La parte roja es donde el pronóstico se acaba y entran las pilot charts.",
+      "id": "ruta-propia",
+      "titulo": "Mi propia ruta: La Paloma → Porto Belo",
+      "narracion": "Y la ruta propia: importás el GPX de tu travesía — La Paloma, Uruguay, a Porto Belo, Brasil — y queda en tus rutas con su ficha completa, sus waypoints y su duración estimada con el clima del mes.",
       "acciones": [
         { "t": "click-sel", "sel": ".hn-tab:has-text('Rutas')" },
+        { "t": "wait", "v": 2200 },
+        { "t": "click-texto", "v": "Importar GPX" },
+        { "t": "wait", "v": 600 },
+        { "t": "file", "path": "data/rutas/la-paloma-porto-belo.gpx" },
         { "t": "wait", "v": 2500 },
-        { "t": "click-sel", "sel": ".hn-row" },
-        { "t": "wait", "v": 1500 },
-        { "t": "wheel", "v": 500 },
+        { "t": "wheel", "v": 600 },
+        { "t": "wait", "v": 2500 }
+      ],
+      "dur_ms": 7000
+    },
+    {
+      "orden": "07",
+      "id": "optimizar",
+      "titulo": "Optimizar mi ruta con el viento",
+      "narracion": "Y sobre tu propia ruta, el corazón de la app: el mismo motor de isócronas que usan los barcos de regata, corriendo en el teléfono. Traza la travesía con el viento del mes, cuenta las viradas y te dice el tiempo estimado contra el trazado original. La parte roja es donde termina el pronóstico y entran las pilot charts.",
+      "acciones": [
+        { "t": "click-sel", "sel": ".hn-tab:has-text('Rutas')" },
+        { "t": "wait", "v": 2200 },
+        { "t": "click-texto", "v": "Importar GPX" },
+        { "t": "wait", "v": 600 },
+        { "t": "file", "path": "data/rutas/la-paloma-porto-belo.gpx" },
+        { "t": "wait", "v": 2500 },
+        { "t": "wheel", "v": 700 },
         { "t": "wait", "v": 1200 },
         { "t": "click-texto", "v": "Ruta del mes" },
         { "t": "wait", "v": 9000 },
-        { "t": "wait", "v": 4000 }
+        { "t": "wait", "v": 3500 }
       ],
       "dur_ms": 8000
     },
     {
-      "orden": "07",
+      "orden": "08",
       "id": "ajustes",
       "titulo": "Ajustes en un toque",
       "narracion": "Unidades a tu gusto — nudos o kilómetros, millas o pies — y si algo te molesta en pantalla, lo ocultás. Todo queda donde lo dejaste.",
@@ -99,7 +121,7 @@
       "dur_ms": 5000
     },
     {
-      "orden": "08",
+      "orden": "09",
       "id": "offline",
       "titulo": "Sin conexión",
       "narracion": "Y todo esto queda en el teléfono. Modo avión y la app sigue igual: cartas, clima y pronóstico descargado. La Holistic Navigator: rutas oceánicas planificadas con treinta años de clima y el viento de la semana.",
