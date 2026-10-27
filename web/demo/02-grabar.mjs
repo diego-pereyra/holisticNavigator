@@ -79,14 +79,38 @@ const ctx = await browser.newContext({
 const page = await ctx.newPage();
 const problemas = [];
 page.on("console", (m) => { if (m.type() === "error") problemas.push(m.text().slice(0, 140)); });
+page.on("pageerror", (e) => problemas.push("pageerror: " + String(e?.message ?? e).slice(0, 140)));
 
 // Navegar ANTES de grabar: sin esto el clip sale about:blank (blanco).
-await page.goto(BASE, { waitUntil: "load", timeout: 60000 });
-const monto = await page
-  .waitForSelector(".hn-context", { state: "visible", timeout: 30000 })
-  .then(() => true, () => false);
+// Espera estilo smoke (que sí funciona en CI) + volcado de diagnóstico si falla.
+async function bootDemo() {
+  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60000 });
+  const loaded = await page
+    .waitForSelector("#hn-loading.done", { state: "attached", timeout: 45000 })
+    .then(() => true, () => false);
+  const ctxOk = await page
+    .waitForSelector(".hn-context", { state: "visible", timeout: 45000 })
+    .then(() => true, () => false);
+  return loaded && ctxOk;
+}
+
+let monto = false;
+try {
+  monto = await bootDemo();
+} catch (e) {
+  problemas.push("boot: " + String(e?.message ?? e).slice(0, 140));
+}
 if (!monto) {
-  throw new Error("la app no monto (.hn-context no aparecio) — abortar antes de grabar blanco");
+  const diag = [
+    "BASE: " + BASE,
+    "title: " + (await page.title().catch(() => "?")),
+    "url final: " + page.url(),
+    "consola: " + (problemas.length ? problemas.join(" | ") : "(sin errores)"),
+    "html(inicio): " + (await page.content().catch(() => "")).slice(0, 600),
+  ];
+  mkdirSync(OUT, { recursive: true });
+  writeFileSync(join(OUT, "diagnostico.txt"), diag.join("\n") + "\n");
+  throw new Error("la app no monto — diagnostico en el artefacto (diagnostico.txt)");
 }
 await sleep(3000); // que el mapa termine de pintar
 
