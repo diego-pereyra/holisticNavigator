@@ -56,8 +56,13 @@ async function actuar(page, a) {
         await page.mouse.move(vp.width * (a.v[0] - 0.12), vp.height * a.v[1], { steps: 25 });
         await page.mouse.up();
         return true;
+      case "tap-map":
+        // Toque simple sobre la carta (agrega waypoint en el editor de rutas).
+        await page.mouse.click(vp.width * a.x, vp.height * a.y);
+        return true;
       case "wheel":
-        await page.mouse.move(vp.width / 2, vp.height / 2);
+        // Sobre el mapa, no sobre la hoja (posición configurable).
+        await page.mouse.move(vp.width * (a.x ?? 0.5), vp.height * (a.y ?? 0.5));
         await page.mouse.wheel(0, a.v);
         return true;
       default:
