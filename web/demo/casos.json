@@ -1,5 +1,5 @@
 {
-  "version": 5,
+  "version": 6,
   "viewport": { "width": 390, "height": 844 },
   "titulo": "Holistic Navigator — demo por caso de uso",
   "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo).",
@@ -70,7 +70,7 @@
       "orden": "06",
       "id": "ruta-propia",
       "titulo": "Mi propia ruta: La Paloma → Porto Belo",
-      "narracion": "Y la ruta propia: apretás ruta nueva, toqués dos puntos sobre la carta y después escribís las coordenadas exactas: La Paloma, en Uruguay, y Porto Belo, en Brasil. La ruta queda en Mis rutas con su distancia y su ficha completa.",
+      "narracion": "Y la ruta propia: apretás ruta nueva, toqués dos puntos sobre la carta y escribís las coordenadas exactas: La Paloma, en Uruguay, y Porto Belo, en Brasil. Después tocás tu ruta en la lista y la carta la encuadra, con su distancia y su ficha completa.",
       "acciones": [
         { "t": "click-sel", "sel": ".hn-tab:has-text('Rutas')" },
         { "t": "wait", "v": 2200 },
@@ -87,9 +87,13 @@
         { "t": "wait", "v": 800 },
         { "t": "fill", "label": "Latitud del waypoint 2", "v": "-27.14" },
         { "t": "fill", "label": "Longitud del waypoint 2", "v": "-48.55" },
-        { "t": "wait", "v": 2000 },
+        { "t": "wait", "v": 1500 },
+        { "t": "key", "v": "Escape" },
+        { "t": "wait", "v": 1200 },
+        { "t": "click-sel", "sel": ".hn-own-row button" },
+        { "t": "wait", "v": 2500 },
         { "t": "wheel", "v": 450 },
-        { "t": "wait", "v": 2500 }
+        { "t": "wait", "v": 2000 }
       ],
       "dur_ms": 6000
     },
@@ -114,7 +118,11 @@
         { "t": "wait", "v": 600 },
         { "t": "fill", "label": "Latitud del waypoint 2", "v": "-27.14" },
         { "t": "fill", "label": "Longitud del waypoint 2", "v": "-48.55" },
-        { "t": "wait", "v": 1800 },
+        { "t": "wait", "v": 1500 },
+        { "t": "key", "v": "Escape" },
+        { "t": "wait", "v": 1200 },
+        { "t": "click-sel", "sel": ".hn-own-row button" },
+        { "t": "wait", "v": 2500 },
         { "t": "click-sel", "sel": ".hn-context button:has-text(\"≈\")" },
         { "t": "wait", "v": 1200 },
         { "t": "click-sel", "sel": ".hn-context button:has-text(\"≈\")" },

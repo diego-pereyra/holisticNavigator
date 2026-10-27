@@ -40,6 +40,9 @@ async function actuar(page, a) {
       case "click-texto":
         await page.getByText(a.v, { exact: false }).first().click({ timeout: 8000 });
         return true;
+      case "key":
+        await page.keyboard.press(a.v);
+        return true;
       case "hold":
         await page.mouse.move(vp.width * a.x, vp.height * a.y);
         await page.mouse.down();
@@ -60,10 +63,20 @@ async function actuar(page, a) {
         // Toque simple sobre la carta (agrega waypoint en el editor de rutas).
         await page.mouse.click(vp.width * a.x, vp.height * a.y);
         return true;
-      case "fill":
-        // Campo de coordenadas del editor de rutas propias (aria-label).
-        await page.getByLabel(a.label, { exact: true }).fill(a.v, { timeout: 8000 });
+      case "fill": {
+        // Coordenadas del editor de rutas propias: primero scrollear el campo a
+        // la vista (en el video tiene que VERSE el campo), pausa, y tipeo carácter
+        // por carácter con Tab final (la app escucha "change", no "input").
+        const loc = page.getByLabel(a.label, { exact: true }).first();
+        await loc.scrollIntoViewIfNeeded({ timeout: 10000 });
+        await sleep(600); // que el espectador ubique el campo en pantalla
+        await loc.click({ timeout: 8000 });
+        await loc.press("Control+a");
+        await loc.type(a.v, { delay: 75 });
+        await page.keyboard.press("Tab"); // blur → dispara el change de la app
+        await sleep(700);
         return true;
+      }
       case "wheel":
         // Sobre el mapa, no sobre la hoja (posición configurable).
         await page.mouse.move(vp.width * (a.x ?? 0.5), vp.height * (a.y ?? 0.5));
