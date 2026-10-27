@@ -36,10 +36,15 @@ jobs:
           sleep 2
       - name: "Grabar la demo"
         run: node web/demo/02-grabar.mjs http://localhost:8087/holisticNavigator/ web/demo/casos.json web/demo/out
-      - name: "webm → mp4 (compartible)"
+      - name: "webm → mp4 (un video por caso)"
         run: |
-          ffmpeg -y -i web/demo/out/demo.webm -pix_fmt yuv420p web/demo/out/demo.mp4 \
-            || echo "sin ffmpeg: queda el .webm"
+          for f in web/demo/out/*.webm; do
+            [ -e "$f" ] || continue
+            base=$(basename "$f" .webm)
+            ffmpeg -y -i "$f" -pix_fmt yuv420p "web/demo/out/$base.mp4" 2>/dev/null \
+              || echo "sin convertir: $base (queda el .webm)"
+          done
+          ls -la web/demo/out/*.mp4 2>/dev/null || echo "sin mp4"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -51,10 +56,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: demo-latest
-          name: "Demo (última corrida)"
+          name: "Demo (última corrida) — un video por caso de uso"
           files: |
-            web/demo/out/demo.mp4
-            web/demo/out/demo.webm
+            web/demo/out/*.mp4
+            web/demo/out/*.srt
             web/demo/out/demo-narracion.md
-            web/demo/out/demo.srt
           fail_on_unmatched_files: false
