@@ -26,7 +26,7 @@
             "taps": 0
           }
         ],
-        "ms": 1214
+        "ms": 1707
       },
       {
         "journey": "j1-clima-en-un-punto",
@@ -54,7 +54,7 @@
             "taps": 1
           }
         ],
-        "ms": 9403
+        "ms": 9401
       },
       {
         "journey": "j2-seguir-ruta",
@@ -98,7 +98,7 @@
             "taps": 4
           }
         ],
-        "ms": 2612
+        "ms": 2753
       },
       {
         "journey": "j3-optimizar",
@@ -139,7 +139,7 @@
             "taps": 4
           }
         ],
-        "ms": 205857
+        "ms": 206050
       },
       {
         "journey": "j4-mob",
@@ -171,7 +171,7 @@
             "taps": 2
           }
         ],
-        "ms": 4569
+        "ms": 4917
       },
       {
         "journey": "j5-clima-y-mes",
@@ -223,7 +223,7 @@
             "taps": 5
           }
         ],
-        "ms": 5525
+        "ms": 5665
       },
       {
         "journey": "j6-ajustes",
@@ -239,7 +239,7 @@
             "taps": 1
           }
         ],
-        "ms": 4001
+        "ms": 4002
       }
     ],
     "erroresConsola": [],
@@ -275,7 +275,7 @@
             "taps": 0
           }
         ],
-        "ms": 2089
+        "ms": 3119
       },
       {
         "journey": "j1-clima-en-un-punto",
@@ -303,7 +303,7 @@
             "taps": 1
           }
         ],
-        "ms": 9455
+        "ms": 9505
       },
       {
         "journey": "j2-seguir-ruta",
@@ -347,7 +347,7 @@
             "taps": 4
           }
         ],
-        "ms": 3886
+        "ms": 5249
       },
       {
         "journey": "j3-optimizar",
@@ -388,7 +388,7 @@
             "taps": 4
           }
         ],
-        "ms": 206250
+        "ms": 206632
       },
       {
         "journey": "j4-mob",
@@ -420,7 +420,7 @@
             "taps": 2
           }
         ],
-        "ms": 4881
+        "ms": 5304
       },
       {
         "journey": "j5-clima-y-mes",
@@ -470,7 +470,7 @@
             "taps": 5
           }
         ],
-        "ms": 2000
+        "ms": 2714
       },
       {
         "journey": "j6-ajustes",
@@ -510,7 +510,7 @@
             "taps": 2
           }
         ],
-        "ms": 4869
+        "ms": 4802
       }
     ],
     "erroresConsola": [],
