@@ -1,7 +1,7 @@
 ---
 description: Evalúa los videos de la demo (celular 390×844) con un modelo visión-lenguaje — detecta problemas de scroll/visibilidad/contraste cuadro por cuadro y devuelve un informe por caso.
 mode: subagent
-model: ""
+model: "nvidia/nemotron-3.5-super-vl-120b-a12b"
 temperature: 0.1
 tools:
   write: false
@@ -20,6 +20,7 @@ caso como lo haría Diego en su celular**, y reportar todo lo que NO se ve bien.
 Los videos viven en la release `demo-latest` de GitHub (repo diego-pereyra/holisticNavigator)
 y localmente en `web/demo/out/*.mp4` si la corrida dejó los artefactos. Cada video es un caso
 de uso grabado en viewport de celular 390×844 a 2×, con arranque propio.
+IMPORTANTE: Todo lo que se activa tiene que tener visibilidad plena el usuario si tenes dudas de que sucedio es un problema. Intenta imaginarte el cuento paso por paso.
 
 ## Metodología
 
