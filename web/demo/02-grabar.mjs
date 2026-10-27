@@ -127,8 +127,8 @@ for (const caso of espec.casos) {
     writeFileSync(join(OUT, `${nombre}.srt`), subtitulos(caso.narracion, caso.dur_ms ?? 6000).join("\n") + "\n");
   } finally {
     await ctx.close(); // cierra el .webm de este caso
-    // El video del caso es el .webm más nuevo sin renombrar todavía.
-    const pendientes = readdirSync(OUT).filter((f) => /^[0-9a-f]{16,}\.webm$/.test(f));
+    // El video del caso es el .webm recién salido (Playwright lo llama page@<hash>).
+    const pendientes = readdirSync(OUT).filter((f) => f.endsWith(".webm") && !f.startsWith("demo-"));
     if (pendientes.length) {
       const { renameSync } = await import("node:fs");
       renameSync(join(OUT, pendientes[0]), join(OUT, `${nombre}.webm`));
