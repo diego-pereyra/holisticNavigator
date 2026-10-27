@@ -36,8 +36,20 @@ jobs:
           sleep 2
       - name: "Grabar la demo"
         run: node web/demo/02-grabar.mjs http://localhost:8087/holisticNavigator/ web/demo/casos.json web/demo/out
-      - name: "webm → mp4 (un video por caso)"
+      - name: "Recortar la espera de descarga y convertir a mp4"
         run: |
+          for f in web/demo/out/corte-*.json; do
+            [ -e "$f" ] || continue
+            base=$(basename "$f" .json | sed 's/^corte-//')
+            desde=$(python3 -c "import json;print(f\"{json.load(open('$f'))['desde']:.2f}\")")
+            hasta=$(python3 -c "import json;print(f\"{json.load(open('$f'))['hasta']:.2f}\")")
+            if [ -f "web/demo/out/$base.webm" ]; then
+              d=$(ffprobe -v quiet -show_entries format=duration -of csv=p=0 "web/demo/out/$base.webm")
+              ffmpeg -y -i "web/demo/out/$base.webm" -vf select="'lt(t,$desde)+gt(t,$hasta)'",setpts=N/FRAME_RATE/TB -pix_fmt yuv420p "web/demo/out/${base}_cortado.mp4" 2>/dev/null \
+                && mv "web/demo/out/${base}_cortado.mp4" "web/demo/out/$base.webm" \
+                && echo "$base: recortado ${desde}s–${hasta}s (de $d)"
+            fi
+          done
           for f in web/demo/out/*.webm; do
             [ -e "$f" ] || continue
             base=$(basename "$f" .webm)

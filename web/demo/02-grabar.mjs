@@ -43,18 +43,22 @@ async function actuar(page, a) {
       case "key":
         await page.keyboard.press(a.v);
         return true;
-      case "esperar-paquete":
-        // Descarga del pronóstico con pacing: puede tardar minutos. Esperamos
-        // la señal real de "cargado" (el deslizador de horas aparece) en vez de
-        // un wait fijo que dejaba el caso 07 sin paquete.
+      case "esperar-paquete": {
+        // Descarga con pacing: tarda minutos. Esperamos la señal real (aparece
+        // el deslizador) y anotamos el tramo aburrido para RECORTARLO del video
+        // (el cliente no quiere ver la espera: que "empiece y termine rápido").
+        if (!globalThis.__corte) globalThis.__corte = {};
+        globalThis.__corte["descarga-inicio"] = Date.now();
         const ok = await page
           .locator(".hn-wx-bar")
           .first()
           .waitFor({ state: "visible", timeout: 240000 })
           .then(() => true, () => false);
         if (!ok) console.log("  [aviso] el paquete no se cargó en 240s");
+        globalThis.__corte["descarga-fin"] = Date.now();
         await sleep(1500);
         return true;
+      }
       case "hold":
         await page.mouse.move(vp.width * a.x, vp.height * a.y);
         await page.mouse.down();
@@ -153,6 +157,7 @@ for (const caso of espec.casos) {
     recordVideo: { dir: OUT, size: vp },
   });
   const page = await ctx.newPage();
+  const videoT0 = Date.now(); // referencia para el plan de recorte
   const problemas = [];
   page.on("console", (m) => { if (m.type() === "error") problemas.push(m.text().slice(0, 140)); });
   page.on("pageerror", (e) => problemas.push("pageerror: " + String(e?.message ?? e).slice(0, 140)));
@@ -175,6 +180,17 @@ for (const caso of espec.casos) {
     if (pendientes.length) {
       const { renameSync } = await import("node:fs");
       renameSync(join(OUT, pendientes[0]), join(OUT, `${nombre}.webm`));
+    }
+    // Plan de recorte: si hubo una descarga larga, quedarse con el arranque
+    // (+3 s: se ve el clic y el "0 %") y el final (-3 s: el mapa ya cargado).
+    const corte = globalThis.__corte;
+    if (corte?.["descarga-inicio"] && corte?.["descarga-fin"]) {
+      const desde = Math.max(0, (corte["descarga-inicio"] - videoT0) / 1000 + 3);
+      const hasta = (corte["descarga-fin"] - videoT0) / 1000 - 3;
+      if (hasta > desde + 2) {
+        writeFileSync(join(OUT, `corte-${nombre}.json`), JSON.stringify({ desde, hasta }) + "\n");
+        console.log(`  recorte: fuera ${desde.toFixed(0)}s–${hasta.toFixed(0)}s (espera de descarga)`);
+      }
     }
   }
 }
