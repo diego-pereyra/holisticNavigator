@@ -3647,6 +3647,7 @@ let optJobSeq = 0;
 let optLandBytes: Uint8Array | null = null;
 let optPanelEl: HTMLElement | null = null;
 let optPanelMeta: { code: string; kind: "book" | "own"; coords: LonLat[]; names: string[] } | null = null;
+let optPanelUnsub: (() => void) | null = null;
 
 async function optLandBytesLoad(): Promise<Uint8Array> {
   if (optLandBytes) return optLandBytes;
@@ -3892,8 +3893,9 @@ function optRender(
   }
   panel.append(head);
 
-  // Al bajar el paquete, refrescar el panel sin switchear modo.
-  ui.forecast.subscribe(() => optRefreshPanel(ui));
+  // Al bajar el paquete, refrescar el panel sin switchear modo (una sola vez).
+  optPanelUnsub?.();
+  optPanelUnsub = ui.forecast.subscribe(() => optRefreshPanel(ui));
 
   if (!canRun) {
     panel.append(
@@ -4002,6 +4004,8 @@ function optRefreshPanel(ui: UiState): void {
 }
 
 function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
+  optPanelUnsub?.();
+  optPanelUnsub = null;
   optPanelEl = null;
   optPanelMeta = null;
   optClearLayers(ui);
