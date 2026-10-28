@@ -127,7 +127,7 @@ export const WX_CYCLONE_OPACITY: ExpressionSpecification = [
 export const WX_ICE_COLOR = "#d7ecf7";
 
 // E13.2 — Pronóstico en vivo: isobaras cada 4 hPa y olas por altura/dirección.
-export const WX_ISOBAR_COLOR = "#e6eef7";
+export const WX_ISOBAR_COLOR = "#9FB0C0";
 export const WX_ISOBAR_INTERVAL = 4;
 
 export const WX_WAVE_STOPS = [0, 1, 2, 3, 4, 6];
@@ -302,7 +302,7 @@ export function initWeatherLayers(map: MlMap): void {
     id: "wx-isobars",
     type: "line",
     source: "wx-isobars",
-    paint: { "line-color": WX_ISOBAR_COLOR, "line-width": 1, "line-opacity": 0.8 },
+    paint: { "line-color": WX_ISOBAR_COLOR, "line-width": 0.75, "line-opacity": 0.55 },
   });
   map.addLayer({
     id: "wx-isobar-labels",
@@ -310,11 +310,11 @@ export function initWeatherLayers(map: MlMap): void {
     source: "wx-isobar-labels",
     layout: {
       "text-field": ["get", "label"],
-      "text-size": 10,
+      "text-size": 9,
       "text-allow-overlap": false,
       "text-padding": 4,
     },
-    paint: { "text-color": "#eef4fb", "text-halo-color": "#0b1626", "text-halo-width": 1.2 },
+    paint: { "text-color": "#9FB0C0", "text-halo-color": "#0b1626", "text-halo-width": 1.2 },
   });
   map.addLayer({
     id: "wx-waves",

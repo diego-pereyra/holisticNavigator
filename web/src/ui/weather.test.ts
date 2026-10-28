@@ -364,7 +364,7 @@ test("E13.4 silla: dos diagonales dan dos tramos, sin descartar puntos", () => {
 
 test("E13.2 rampa de olas y constante de isobaras", () => {
   assert.equal(WX_WAVE_COLORS.length, 6);
-  assert.equal(WX_ISOBAR_COLOR, "#e6eef7");
+  assert.equal(WX_ISOBAR_COLOR, "#9FB0C0");
 });
 
 test("E13.6 corrientes finas y discretas", () => {
