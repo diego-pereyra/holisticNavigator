@@ -1,7 +1,7 @@
 ---
 description: Implementador Big Pickle — lee SEMAFORO.md, implementa la tarea, corre tests, commitea, pushea y reporta. También debuggea bugs específicos cuando el arquitecto se los pasa con diagnóstico previo.
 mode: subagent
-model: ""
+model: "nvidia/nemotron-3.5-super-vl-120b-a12b"
 temperature: 0.1
 tools:
   write: true
