@@ -37,3 +37,4 @@ bajar el pronóstico).
    cada una con su número en su lugar.
 7. npm test (en web/), bash scripts/build-web.sh, push. Al terminar escribí "Status: DONE"
    como última línea.
+Status: DONE
