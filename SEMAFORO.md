@@ -23,3 +23,4 @@ suscripciones: viven en la signal, no en el DOM.
 5. npm test (en web/), bash scripts/build-web.sh, commit "E13.8: suscripción única del
    optimizador (no se duplica por render)", push. Al terminar escribí "Status: DONE" como
    última línea.
+Status: DONE
