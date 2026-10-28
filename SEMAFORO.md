@@ -1,15 +1,18 @@
 ADELANTE
 
-TAREA ÚNICA: E13.7 — Isobaras legibles: menos, más suaves y más calladas. (Reporte de
-Diego: "las isolineas se ven mal". Medido por el arquitecto con el código real sobre un
-paquete sintético suave: 46 polilíneas y 46 ETIQUETAS para ~8 niveles — una etiqueta por
-FRAGMENTO, no por nivel; quiebres de hasta 61° en campo suave (escalera de la grilla, sin
-suavizado); y estilo blanco 1 px 0,8 — el grito del mapa.)
+TAREA ÚNICA: E13.7 — Isobaras legibles + fix del label del optimizador (no refresca tras
+bajar el pronóstico).
 
-SE QUEDA: el marching squares con el caso silla (E13.4), el intervalo de 4 hPa, y los ids
-de capas wx-isobars / wx-isobar-labels.
-
-Archivos: web/src/ui/weather.ts (+test), web/public/app.css (solo si la leyenda toca).
+0. **FIX PREVIO (reporte de Diego 2026-10-27):** tras bajar el paquete, el botón sigue
+   diciendo "Ruta del mes" — hay que switchear a Regata y volver a Crucero para que se
+   actualice. Causa exacta: `optRender` (web/src/ui/app.ts:3855) calcula
+   `hasPkg = !!ui.forecast()` al renderizar y `optRefreshPanel` solo se llama desde los chips
+   de modo, desde "Descartar" y desde "Aplicar" — nunca cuando `ui.forecast()` cambia.
+   Fix: en `optMount` (app.ts:3979) suscribir un efecto a `ui.forecast()` que llame a
+   `optRefreshPanel(ui)` (el estado del job vive en `optJobs`, no se pierde al re-renderizar;
+   los chips leen `ui.settings.routingMode`, tampoco). También actualizar la línea
+   "Pronóstico de {dueño} · edad". Commit: "fix: label del optimizador se refresca al bajar
+   el paquete".
 
 1. **Una etiqueta por NIVEL, no por fragmento:** de todas las polilíneas del mismo hPa,
    etiquetar solo la de mayor arco (en grados); en líneas muy largas (≥ 15° de arco) puede
@@ -29,10 +32,8 @@ Archivos: web/src/ui/weather.ts (+test), web/public/app.css (solo si la leyenda 
    etiqueta por nivel; ninguna polilínea de < 3 puntos en la salida; el quiebre máximo
    tras suavizar baja de 61° a < 30°; los extremos de cada polilínea suavizada coinciden
    con el original.
-6. Prueba de Diego: modo Pronóstico con un paquete bajado → pocas isobaras prolijas y
-   curvas, cada una con su número en su lugar, el mapa se lee entero.
-7. npm test (en web/), bash scripts/build-web.sh, commit "E13.7: isobaras legibles (una
-   etiqueta por nivel, suavizadas, calladas)", push. Al terminar escribí "Status: DONE"
+6. Prueba en browser: tras bajar el paquete, el botón pasa solo a "Optimizar con el viento"
+   (sin switchear modo); modo Pronóstico con paquete → pocas isobaras prolijas y curvas,
+   cada una con su número en su lugar.
+7. npm test (en web/), bash scripts/build-web.sh, push. Al terminar escribí "Status: DONE"
    como última línea.
-
-Status: ready
