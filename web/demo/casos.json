@@ -1,11 +1,11 @@
 {
-  "version": 6,
+  "version": 7,
   "viewport": {
     "width": 390,
     "height": 844
   },
   "titulo": "Holistic Navigator — demo por caso de uso",
-  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo). Versión: post-fix E13.8 (suscripción única del optimizador).",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo). Versión: post-fix label del optimizador (el paquete de la vista ya no se pisa con null al elegir la ruta propia).",
   "casos": [
     {
       "orden": "01",
