@@ -43,6 +43,16 @@ async function actuar(page, a) {
       case "key":
         await page.keyboard.press(a.v);
         return true;
+      case "check": {
+        // Casilla "Obligatorio" del editor de waypoints: scrollear a la vista y
+        // marcar (sin esto el optimizador no tiene anclas y no corre).
+        const loc = page.getByLabel(a.label, { exact: true }).first();
+        await loc.scrollIntoViewIfNeeded({ timeout: 10000 });
+        await sleep(400);
+        if (!(await loc.isChecked())) await loc.check({ timeout: 8000 });
+        await sleep(400);
+        return true;
+      }
       case "esperar-paquete": {
         // Descarga con pacing: tarda minutos. Esperamos la señal real (aparece
         // el deslizador) y anotamos el tramo aburrido para RECORTARLO del video
