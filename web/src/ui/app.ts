@@ -499,8 +499,18 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     const id = ui.active()?.code ?? ui.selected()?.code ?? "vista";
     if (mode !== "forecast") return;
     void loadForecast(ui.store, id).then((pkg) => {
-      ui.forecast.set(pkg);
-      ui.forecastHour.set(pkg ? nearestSlot(pkg, Date.now()) : 0);
+      if (pkg) {
+        ui.forecast.set(pkg);
+        ui.forecastHour.set(nearestSlot(pkg, Date.now()));
+        return;
+      }
+      // Sin paquete para esta caja no se pisa el que ya está cargado si sigue
+      // cubriendo la zona: es el caso "bajé el de la vista y después elegí mi
+      // ruta" (la ruta no tiene paquete propio, pero el de la vista la cubre).
+      // Si no la cubre, se suelta: no quedan datos viejos de otra zona.
+      if (forecastStillCovers(ui, id)) return;
+      ui.forecast.set(null);
+      ui.forecastHour.set(0);
     });
   });
 
@@ -914,6 +924,32 @@ function selectedGeometry(ui: UiState, code: string): Geometry | null {
     if (g) return g;
   }
   return firstGeometry(ui, code);
+}
+
+// Caja de pronóstico de una ruta: la de su trazado (del catálogo o propia).
+// null si todavía no hay geometría cargada.
+function routeForecastBox(ui: UiState, code: string): BBox | null {
+  const g = selectedGeometry(ui, code);
+  if (g) return bboxOfTrack(g.coords);
+  const own = ownRouteById(code);
+  if (own && own.waypoints.length >= 2) {
+    return bboxOfTrack(own.waypoints.map((w) => [w.lon, w.lat] as [number, number]));
+  }
+  return null;
+}
+
+// ¿El paquete cargado sigue cubriendo la zona de esta caja? Con trazado, su
+// caja; sin trazado, el centro del mapa (misma regla que la leyenda, UX-N.2 D2).
+function forecastStillCovers(ui: UiState, code: string): boolean {
+  const pkg = ui.forecast();
+  if (!pkg) return false;
+  const box = routeForecastBox(ui, code);
+  if (box) {
+    const c = bboxCenter(box);
+    return bboxCovers(pkg.bbox, c.lat, c.lon);
+  }
+  const center = ui.map.getCenter();
+  return bboxCovers(pkg.bbox, center.lat, center.lng);
 }
 
 function isoDate(): string {
@@ -2722,15 +2758,7 @@ function routeForecastBlock(
 
   let busy = false;
   let pkg: ForecastPackage | null = null;
-  const bboxOf = (): BBox | null => {
-    const g = selectedGeometry(ui, code);
-    if (g) return bboxOfTrack(g.coords);
-    const own = ownRouteById(code);
-    if (own && own.waypoints.length >= 2) {
-      return bboxOfTrack(own.waypoints.map((w) => [w.lon, w.lat] as [number, number]));
-    }
-    return null;
-  };
+  const bboxOf = (): BBox | null => routeForecastBox(ui, code);
   const showIdle = (): void => {
     btn.disabled = false;
     btn.textContent = pkg ? "Actualizar" : "Descargar";
