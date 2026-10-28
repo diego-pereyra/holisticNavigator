@@ -3892,6 +3892,9 @@ function optRender(
   }
   panel.append(head);
 
+  // Al bajar el paquete, refrescar el panel sin switchear modo.
+  ui.forecast.subscribe(() => optRefreshPanel(ui));
+
   if (!canRun) {
     panel.append(
       el(
