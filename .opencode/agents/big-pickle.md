@@ -1,7 +1,7 @@
 ---
-description: Implementador Big Pickle — lee SEMAFORO.md, implementa la tarea, corre tests, commitea, pushea y reporta. También debuggea bugs específicos cuando el arquitecto se los pasa con diagnóstico previo.
+description: Implementador Big Pickle — lee SEMAFORO.md, implementa la tarea, corre tests, commitea, pushea y reporta. También debuggea bugs específicos cuando el arquitecto se los pasa con diagnóstico previo, y crea y corrige la automatización de browser (smoke, UAT y demo con Playwright).
 mode: subagent
-model: "nvidia/nemotron-3.5-super-vl-120b-a12b"
+model: "opencode/big-pickle"
 temperature: 0.1
 tools:
   write: true
@@ -47,6 +47,26 @@ causa real.
 - Node: `source scripts/env.sh` antes de usar npm (está en `.tools/node/bin`).
 - Tests: `cd web && node --test`. Build: `bash scripts/build-web.sh` desde la raíz.
 - No hay browser en WSL: lo que requiera browser real corre en CI (smoke, demo).
+
+## Automatización de browser (Playwright)
+
+- Los tres scripts: `web/smoke.mjs` (arranque; CI en deploy-pages),
+  `web/uat/uat.mjs` (journeys a 390×844 y 1180×820; CI en uat.yml) y
+  `web/demo/02-grabar.mjs` (los videos; CI en demo.yml).
+- Playwright NO se agrega a `package.json`: el CI lo instala con
+  `npm i --no-save playwright` + `npx playwright install chromium`. Nada de
+  dependencias nuevas en package.json.
+- Los videos salen de `web/demo/casos.json` (acciones + narración por caso).
+  Un push que toque `web/demo/**` los re-graba y publica en la release
+  `demo-latest`.
+- Selectores contra los nombres fijos de la UI (clases `.hn-*`, textos en
+  español rioplatense). En escritorio el "mantener pulsado" es click derecho
+  (`contextmenu`), los `<select>` se cambian con `selectOption`, y se esperan
+  señales reales (clases que aparecen, `window.__hc`) antes que `sleep` largos.
+- Viewport de la demo: celular 390×844 a 2×.
+- Para verificar una automatización: pusheá y leé el log del workflow — los
+  `[aviso]` del grabador dicen qué acción falló — y bajá el video de
+  `demo-latest` para mirarlo.
 - El repo tiene workflow de demo (`.github/workflows/demo.yml`) que graba los videos de
   `web/demo/casos.json` y los publica en la release `demo-latest`. Un push que toque
   `web/demo/**` o `.github/workflows/demo.yml` lo dispara.
