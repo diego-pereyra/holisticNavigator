@@ -75,10 +75,9 @@
       "narracion": "Mantenés apretado sobre cualquier parte del mar y la app te pregunta qué querés saber de ese punto. Clima acá: viento, corriente, olas y el riesgo de ciclones, en un panel que se lee de un vistazo.",
       "acciones": [
         {
-          "t": "hold",
+          "t": "right-click",
           "x": 0.5,
-          "y": 0.35,
-          "ms": 900
+          "y": 0.35
         },
         {
           "t": "wait",
@@ -427,7 +426,7 @@
           "t": "wheel",
           "v": 900,
           "x": 0.5,
-          "y": 0.75
+          "y": 0.32
         },
         {
           "t": "wait",
@@ -437,7 +436,7 @@
           "t": "wheel",
           "v": 600,
           "x": 0.5,
-          "y": 0.75
+          "y": 0.32
         },
         {
           "t": "wait",
@@ -473,7 +472,8 @@
           "v": 1500
         },
         {
-          "t": "click-texto",
+          "t": "select",
+          "sel": "select.hn-unit-select",
           "v": "km/h"
         },
         {
@@ -481,7 +481,8 @@
           "v": 1500
         },
         {
-          "t": "click-texto",
+          "t": "select",
+          "sel": "select.hn-unit-select",
           "v": "kn"
         },
         {

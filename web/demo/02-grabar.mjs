@@ -28,6 +28,38 @@ function srtTime(ms) {
   return `00:${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}.000`;
 }
 
+// Diagnóstico de un click que no prospera: en vez de un "no encontrado"
+// opaco, reporta dónde está el elemento y qué hay encima (la app superpone
+// notas y botones flotantes en la misma esquina).
+async function clickODiagnostico(page, loc, etiqueta) {
+  try {
+    await loc.click({ timeout: 8000 });
+  } catch (err) {
+    const probe = await page.evaluate(() => {
+      const info = {};
+      for (const sel of [".hn-wx-dl", ".hn-wx-stack", ".hn-scale-note", ".hn-mob"]) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const s = getComputedStyle(el);
+        const r = el.getBoundingClientRect();
+        info[sel] = [Math.round(r.x), Math.round(r.y), Math.round(r.width), Math.round(r.height), s.visibility, s.zIndex].join(",");
+      }
+      const b = document.querySelector(".hn-wx-dl");
+      if (b) {
+        const r = b.getBoundingClientRect();
+        const cx = r.x + r.width / 2;
+        const cy = r.y + r.height / 2;
+        const top = document.elementFromPoint(cx, cy);
+        info["encima-del-boton"] = top ? `${top.tagName}.${top.className}`.slice(0, 120) : "nada";
+      } else info["encima-del-boton"] = "sin-boton";
+      return info;
+    });
+    console.log(`  [diag] click-texto (${etiqueta}) falló:`);
+    for (const [k, v] of Object.entries(probe)) console.log(`         ${k} = ${v}`);
+    throw err;
+  }
+}
+
 async function actuar(page, a) {
   try {
     switch (a.t) {
@@ -35,10 +67,21 @@ async function actuar(page, a) {
         await sleep(a.v ?? 1500);
         return true;
       case "click-sel":
-        await page.locator(a.sel).first().click({ timeout: 8000 });
+        await clickODiagnostico(page, page.locator(a.sel).first(), a.sel);
         return true;
       case "click-texto":
-        await page.getByText(a.v, { exact: false }).first().click({ timeout: 8000 });
+        await clickODiagnostico(page, page.getByText(a.v, { exact: false }).first(), a.v);
+        return true;
+      case "right-click":
+        // Gesto de "mantener pulsado" en escritorio: abre la hoja del punto
+        // (point-hold.ts atiende contextmenu; el mouse izquierdo no dispara).
+        await page.mouse.click(vp.width * a.x, vp.height * a.y, { button: "right" });
+        return true;
+      case "select":
+        // Ajustes: los select nativos no se llevan con clicks de texto. Hay
+        // tres (velocidad, distancia, sonda): se elige el primero, que es la
+        // velocidad.
+        await page.locator(a.sel ?? "select.hn-unit-select").first().selectOption({ label: a.v });
         return true;
       case "key":
         await page.keyboard.press(a.v);
