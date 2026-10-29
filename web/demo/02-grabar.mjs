@@ -128,6 +128,42 @@ async function actuar(page, a) {
         await page.mouse.move(vp.width * (a.v[0] - 0.12), vp.height * a.v[1], { steps: 25 });
         await page.mouse.up();
         return true;
+      case "drag":
+        // Arrastre libre entre dos puntos normalizados [x1, y1, x2, y2]. Sirve
+        // para la manija de la hoja: arrastrarla hacia abajo colapsa el
+        // acordeón (half → peek) y hacia arriba lo sube (peek → half).
+        await page.mouse.move(vp.width * a.v[0], vp.height * a.v[1]);
+        await page.mouse.down();
+        await page.mouse.move(vp.width * a.v[2], vp.height * a.v[3], { steps: 25 });
+        await page.mouse.up();
+        return true;
+      case "scroll-hasta": {
+        // Scrollea la hoja con la rueda hasta que el elemento quede a la vista
+        // (o hasta que la hoja no scrollee más): muestra los waypoints hasta el
+        // final sin pasarse al panel de optimizar.
+        const scrollSel = ".hn-sheet.hn-ficha-open .hn-col-ficha";
+        const estado = () =>
+          page.evaluate(
+            ({ s, t }) => {
+              const sc = document.querySelector(s);
+              const tgt = document.querySelector(t);
+              if (!sc || !tgt) return { top: -1, visible: false };
+              const r = tgt.getBoundingClientRect();
+              return { top: Math.round(sc.scrollTop), visible: r.top >= 0 && r.bottom <= window.innerHeight };
+            },
+            { s: scrollSel, t: a.sel },
+          );
+        for (let i = 0; i < 90; i++) {
+          const antes = await estado();
+          if (antes.top < 0 || antes.visible) break;
+          await page.mouse.move(vp.width * 0.5, vp.height * (a.y ?? 0.72));
+          await page.mouse.wheel(0, -(a.v ?? 500));
+          await sleep(a.ms ?? 300);
+          const despues = await estado();
+          if (despues.top === antes.top) break; // pie del contenido: no scrollea más
+        }
+        return true;
+      }
       case "tap-map":
         // Toque simple sobre la carta (agrega waypoint en el editor de rutas).
         await page.mouse.click(vp.width * a.x, vp.height * a.y);
