@@ -1196,6 +1196,14 @@ html[data-theme="red"] {
   color: var(--hn-text);
   pointer-events: none;
 }
+/* El cartel de "bajar el pronóstico de la vista" (UX-N.2 D2) vive dentro de la
+   leyenda: el arrastre del mapa pasa a través del cartel, pero sus controles
+   sí reciben los toques. */
+.hn-wx-legend button,
+.hn-wx-legend input,
+.hn-wx-legend select {
+  pointer-events: auto;
+}
 .hn-wx-legend[hidden] { display: none; }
 .hn-wx-panel {
   padding: 8px 10px;
