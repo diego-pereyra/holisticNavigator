@@ -24,3 +24,4 @@ suscripciones: viven en la signal, no en el DOM.
    optimizador (no se duplica por render)", push. Al terminar escribí "Status: DONE" como
    última línea.
 Status: DONE
+Status:done
