@@ -31,27 +31,30 @@ Reglas del enlace canónico:
 
 | Canal | Estado | Enlace | Fecha |
 |---|---|---|---|
-| Ko-fi | **VIVA** (cuenta creada y pública) | https://ko-fi.com/holisticnavigator | 2026-10-30 |
+| Ko-fi | **VIVA + feed iniciado (1 post)** — página pública, payout conectado (PayPal/Stripe), primer post del feed publicado 2026-10-30; falta prueba de $1 real | https://ko-fi.com/holisticnavigator | 2026-10-30 |
 | Mercado Pago UY | PENDIENTE (Diego crea) | — | — |
 | GitHub Sponsors | PENDIENTE (Diego crea) | — | — |
 
-> Ko-fi VIVA = la URL pública existe y se puede compartir. **Payout desde Uruguay todavía SIN verificar** (ver checklist 1). Hasta verificarlo, los aportes pueden entrar pero no confirmamos que se puedan retirar.
+> **Ko-fi VIVA + feed iniciado = página pública, payout conectado y feed con 1 post.** Diego conectó los métodos de pago (2026-10-30; reportado como PayPal/Stripe) y publicó el **primer post del feed** ese mismo día (introducción; fuente en `KOFI/FUENTE-POST.md`). La URL es pública y los aportes pueden entrar. Lo único que falta para cerrar el círculo: **un aporte de prueba de $1** (autotipado) y verlo acreditarse.
+>
+> Historia del estado: VIVA (2026-10-30, cuenta pública) → CONFIRMADA (2026-10-30, métodos de pago conectados) → **VIVA + feed iniciado (1 post)** (2026-10-30). El bloqueo teórico previo ("Stripe no opera en UY / PayPal UY con límites") **no se materializó**: Diego reporta conexión exitosa. Queda a confirmar por la prueba real qué método quedó activo y en qué moneda.
 
 ## Checklist por canal
 
-### 1) Ko-fi — VIVA (2026-10-30)
+### 1) Ko-fi — VIVA + feed iniciado (2026-10-30)
 - [x] Crear cuenta en https://ko-fi.com/ (con mail de Diego)
 - [x] URL pública: **https://ko-fi.com/holisticnavigator**
-- [ ] Configurar perfil: nombre "holisticNavigator", descripción breve ("app gratis y abierta de navegación marítima para el Río de la Plata y la costa uruguaya"), avatar/portada
-- [ ] **VERIFICAR PAYOUT DESDE URUGUAY** - CRÍTICO, sigue abierto
-  - Ko-fi permite recibir donativos; el retiro puede ir por PayPal o Stripe según configuración
-  - **Stripe NO opera en Uruguay** → si pide Stripe Connect, NO es viable directamente
-  - **PayPal Uruguay** tiene limitaciones para recibir cobros/ingresos comerciales en algunos casos
-  - **ACCIÓN:** entrar a "Withdraw funds" / payout con la cuenta UY y anotar qué opciones aparecen realmente. Anotar fecha + captura + fuente.
+- [x] **Métodos de pago conectados** en la página de Ko-fi (2026-10-30, reporte de Diego: PayPal/Stripe conectados). Registrado sin captura; a validar por la prueba de $1.
 - [x] Pegar enlace real: `KO_FI_URL: https://ko-fi.com/holisticnavigator`
-- [ ] Verificar en navegador que la página carga (chequeo automático 2026-10-30 dio HTTP 403 de Cloudflare — bloquea curl, no prueba nada; mirar desde el celular de Diego)
-- Estado payout: `VERIFICANDO` — Fecha verificación: ____/____/____
-- Si payout queda bloqueado: mantener Ko-fi como vidriera y priorizar Mercado Pago + GitHub Sponsors para el cobro real (documentar acá).
+- [x] **Feed iniciado: 1 post publicado** (2026-10-30) — introducción con imagen destacada `KOFI/post-introduccion-1200x600.png`. Fuente en `KOFI/FUENTE-POST.md` (copiar-editar para el próximo).
+- [ ] **Buzón next:** cada versión nueva con feature visible → 1 post en el feed con la sección "Novedad" cambiada (protocolo en `KOFI/FUENTE-POST.md`)
+- [ ] **ÚNICO PENDIENTE — prueba de cobro real ($1):** Diego hace un aporte de prueba en `ko-fi.com/holisticnavigator` (autotipado a su misma cuenta) y verifica que (a) entra en Ko-fi, (b) figura el método/moneda usado, (c) llega al payout. Anotar acá fecha + resultado. **Con esto el canal queda cerrado.**
+- [ ] Configurar perfil: nombre "holisticNavigator", descripción breve ("app gratis y abierta de navegación marítima para el Río de la Plata y la costa uruguaya"), avatar/portada
+- [ ] Verificar desde el celular de Diego que la página carga bien (el chequeo automático 2026-10-30 dio HTTP 403 de Cloudflare — bloquea curl, no prueba nada)
+- Estado payout: `CONFIRMADO por métodos conectados — PRUEBA $1 PENDIENTE` — Fecha verificación: 2026-10-30
+- **Nota de una línea:** el **canal** Ko-fi queda cerrado en cuanto entre y se acredite el aporte de prueba de $1; el **feed** sí se mantiene (1 post por versión, ver `KOFI/FUENTE-POST.md`).
+
+> Notas que ya no aplican (histórico): el miedo a que "Stripe no opera en UY" bloqueara el canal **no se dio** — Diego conectó los métodos de pago y Ko-fi quedó operativo. Si más adelante un retiro grande falla, la salida sigue siendo priorizar Mercado Pago + GitHub Sponsors para el cobro real.
 
 ### 2) Mercado Pago (SEGUNDO)
 - [ ] Crear/usar cuenta Mercado Pago Uruguay (https://www.mercadopago.com.uy/)

@@ -21,10 +21,17 @@ Rellenar mes a mes con datos reales.
 
 | Mes | Visitas aprox (contador) | IG seguidores | IG alcance/impresiones | Pitches enviados | Respuestas | Sponsors confirmados | Notas |
 |---|---|---|---|---|---|---|---|
-| 2026-10 | ____ | ____ | ____ | ____ | ____ | 0 | Boot inicial. **Ko-fi VIVA 2026-10-30** (ko-fi.com/holisticnavigator); payout UY sin verificar |
+| 2026-10 | ____ | ____ | ____ | ____ | ____ | 0 | Boot inicial. **Ko-fi VIVA 2026-10-30** (ko-fi.com/holisticnavigator), payout conectado; **feed iniciado con 1 post** (introducción). Falta prueba de $1 |
 | 2026-11 | ____ | ____ | ____ | ____ | ____ | ____ | |
 | 2026-12 | ____ | ____ | ____ | ____ | ____ | ____ | |
 | 2027-01 | ____ | ____ | ____ | ____ | ____ | ____ | |
 
 ## Seguimiento IG
 Ver `sponsors/IG/PLAN.md` y `sponsors/IG/posteos/*/ESTADO.md`. Actualizar desde lo que Diego pegue del celular.
+
+## Seguimiento feed Ko-fi
+Ko-fi muestra vistas y likes por post en el panel. Pegar acá lo que vea Diego (no hay que registrarse en nada nuevo).
+
+| Fecha | Post | Vistas | Likes | Comentarios | Notas |
+|---|---|---|---|---|---|
+| 2026-10-30 | Introducción (polares 27–45 pies) | ____ | ____ | ____ | Primer post del feed; fuente en `KOFI/FUENTE-POST.md` |

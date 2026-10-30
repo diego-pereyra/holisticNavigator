@@ -2,7 +2,7 @@
 
 **Estado:** LISTA PARA COLA — implementa Big Pickle vía `SEMAFORO.md`. El gestor no toca `web/src/`.
 **Fecha:** 2026-10-30
-**Origen:** Ko-fi VIVA → https://ko-fi.com/holisticnavigator (enlace canónico, ver `ENLACES.md`).
+**Origen:** Ko-fi **CONFIRMADA** (métodos de pago conectados 2026-10-30) → https://ko-fi.com/holisticnavigator (enlace canónico, ver `ENLACES.md`).
 **Nombre propuesto de commit/tarea:** `apoyar-kofi`
 
 ## Objetivo

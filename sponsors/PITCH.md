@@ -2,6 +2,8 @@
 
 Tono: presentación personal de Diego. Recado que la herramienta que sus socios ya usan. Cero jargon, cero venta agresiva. Español rioplatense.
 
+**Pie fijo en los dos pitches:** `Apoyar el proyecto: ko-fi.com/holisticnavigator` (última línea, después de la firma). Es el enlace canónico; no se agregan otros.
+
 ## 1) Club náutico uruguayo (prioritario - 70%)
 **Destinatarios:** Yacht Club Uruguayo (YCU), YCPU, clubes de Colonia/Piriápolis/La Paloma/José Ignacio, escuelas de vela, charters.
 
@@ -19,11 +21,13 @@ Si les parece útil para socios/escuela, con gusto la comparto tal como está, g
 
 Gracias,
 Diego
+
+Apoyar el proyecto: ko-fi.com/holisticnavigator
 ```
 
 **Notas:** Personalizar con nombre del club, mencionar zona que navegan (ej. "para ir a Colonia" o "travesías al Plata"). Enviar por mail/WhatsApp según canal del club.
 
-**Línea opcional si preguntan cómo apoyar** (agregar al final, no en el primer mail):
+**Línea opcional si preguntan cómo apoyar** (con el pie ya puesto, **no repetirla**: el pie alcanza. Usarla solo si mandás una versión sin pie):
 ```
 Si a alguno le sirve y quiere reconocer el laburo: https://ko-fi.com/holisticnavigator
 ```
@@ -47,11 +51,13 @@ Si algún socio quiere reconocer el laburo, hay formas de apoyo, pero no es cond
 
 Un abrazo,
 Diego
+
+Apoyar el proyecto: ko-fi.com/holisticnavigator
 ```
 
 **Notas:** Enfatizar "travesía inversa" / cruce Plata sutilmente. No vender, mostrar caso de uso real. Mantener proporción 70% UY / 30% AR.
 
-**Línea opcional si preguntan cómo apoyar:**
+**Línea opcional si preguntan cómo apoyar** (con el pie ya puesto, **no repetirla**: el pie alcanza. Usarla solo si mandás una versión sin pie):
 ```
 Si quieren reconocer el proyecto: https://ko-fi.com/holisticnavigator
 ```
