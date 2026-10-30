@@ -45,3 +45,6 @@ Thumbs.db
 .architect-hook.log
 .architect-hook.pid
 .architect-hook.lock
+sponsors/IG/posteos/**/*.mp4
+sponsors/IG/posteos/**/*.jpg
+sponsors/IG/posteos/**/*.png
