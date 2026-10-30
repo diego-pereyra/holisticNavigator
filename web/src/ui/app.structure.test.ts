@@ -42,3 +42,45 @@ test("E12.13b duracionTexto delega en breakdownDuration (un solo desglose)", () 
   const body = bodyOf("duracionTexto");
   assert.ok(body.includes("breakdownDuration"), "duracionTexto usa el desglose único");
 });
+
+// BT1.1 — "Apoyar el proyecto" es un único punto en Ajustes: dos canales con
+// roles distintos, entre Tema y "Datos sin conexión", y nada en navegación.
+test("BT1.1 Apoyar: dos canales en Ajustes, entre Tema y Datos sin conexión", () => {
+  const ajustes = bodyOf("renderAjustes");
+  assert.ok(ajustes.includes("ENLACE_KOFI"), "Ajustes ofrece Ko-fi");
+  assert.ok(ajustes.includes("ENLACE_SPONSORS"), "Ajustes ofrece Sponsors");
+  assert.equal(
+    (ajustes.match(/noopener/g) ?? []).length,
+    2,
+    "una fila por canal, cada una con rel noopener",
+  );
+  assert.ok(
+    ajustes.indexOf("ENLACE_KOFI") < ajustes.indexOf("ENLACE_SPONSORS"),
+    "Ko-fi va primero y Sponsors segundo",
+  );
+  assert.ok(
+    ajustes.indexOf("themeCard(ui, cleanup)") < ajustes.indexOf("hn-apoyar"),
+    "la tarjeta va después de Tema",
+  );
+  assert.ok(
+    ajustes.indexOf("hn-apoyar") < ajustes.indexOf("Datos sin conexión"),
+    "la tarjeta va antes de Datos sin conexión",
+  );
+});
+
+test("BT1.1 Apoyar: constante única, fuera de pantallas de navegación y sin pop-ups", () => {
+  const sinImports = src.replace(/^import[\s\S]*?;$/gm, "");
+  const ajustes = bodyOf("renderAjustes");
+  for (const nombre of ["ENLACE_KOFI", "ENLACE_SPONSORS"]) {
+    const total = (sinImports.match(new RegExp(nombre, "g")) ?? []).length;
+    const enAjustes = (ajustes.match(new RegExp(nombre, "g")) ?? []).length;
+    assert.equal(total, enAjustes, `${nombre} solo se usa dentro de renderAjustes`);
+  }
+  assert.ok(!/window\.open|alert\(|confirm\(/.test(ajustes), "Apoyar no abre pop-ups");
+  assert.equal(
+    (src.match(/hn-apoyar/g) ?? []).length,
+    (ajustes.match(/hn-apoyar/g) ?? []).length,
+    "el bloque Apoyar no aparece en otras pantallas",
+  );
+});
+

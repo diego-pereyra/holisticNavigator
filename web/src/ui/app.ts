@@ -54,6 +54,7 @@ import {
   type VariantGeometry,
 } from "../core/context.ts";
 import { getCell, loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
+import { ENLACE_KOFI, ENLACE_SPONSORS } from "../core/enlaces.ts";
 import {
   ageText,
   bboxCenter,
@@ -5683,6 +5684,34 @@ function renderAjustes(ui: UiState, body: HTMLElement, cleanup: (() => void)[]):
   body.append(polarCard(ui));
   body.append(alarmsCard(ui, cleanup));
   body.append(themeCard(ui, cleanup));
+
+  // BT1.1 — Apoyar el proyecto: un único punto discreto en Ajustes, dos canales
+  // con rol distinto (Ko-fi puntual, GitHub Sponsors recurrente). Sin pop-ups,
+  // sin banner, sin estado: si no hay red, el enlace simplemente no abre.
+  const apoyarCard = el("div", { class: "hn-card" });
+  apoyarCard.append(
+    el("div", { class: "hn-card-title" }, "Apoyar el proyecto"),
+    el(
+      "p",
+      { class: "hn-muted" },
+      "holisticNavigator es gratis y sin publicidad. Si te sirve, hay dos formas de reconocerlo.",
+    ),
+  );
+  apoyarCard.append(
+    el(
+      "a",
+      { class: "hn-apoyar-link", href: ENLACE_KOFI, target: "_blank", rel: "noopener noreferrer" },
+      el("span", { class: "hn-apoyar-label" }, "Aporte puntual (Ko-fi) ›"),
+      el("span", { class: "hn-apoyar-nota" }, "una vez, con tarjeta"),
+    ),
+    el(
+      "a",
+      { class: "hn-apoyar-link", href: ENLACE_SPONSORS, target: "_blank", rel: "noopener noreferrer" },
+      el("span", { class: "hn-apoyar-label" }, "Sostener todos los meses (Sponsors) ›"),
+      el("span", { class: "hn-apoyar-nota" }, "mensual, también para clubes y empresas"),
+    ),
+  );
+  body.append(apoyarCard);
 
   // UX-N.5b — los datos no se mezclan con los interruptores: entrada destacada
   // a la sección propia "Datos sin conexión".
