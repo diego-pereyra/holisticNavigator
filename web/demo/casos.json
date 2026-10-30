@@ -447,20 +447,13 @@
           "v": "Optimizar con el viento"
         },
         {
-          "t": "wait",
-          "v": 12000
+          "t": "esperar-texto",
+          "v": "Aplicar optimización",
+          "ms": 45000
         },
         {
           "t": "wait",
-          "v": 4000
-        },
-        {
-          "t": "click-texto",
-          "v": "Aplicar optimización"
-        },
-        {
-          "t": "wait",
-          "v": 2500
+          "v": 3000
         },
         {
           "t": "click-texto",
