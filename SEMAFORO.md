@@ -28,4 +28,4 @@ canal exista), contador de visitas, portada, íconos/badges nuevos.
 npm test (en web/), bash scripts/build-web.sh, commit "apoyar-dos-canales:
 botón Apoyar con Ko-fi + GitHub Sponsors", push.
 
-Status: ready
+Status:done
