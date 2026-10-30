@@ -8,10 +8,15 @@
 - **Por 2-3 arreglos chicos:** 1 reel acumulado
 - **Promoción pura:** Solo cuando perfil >500 seguidores (y justifique tiempo)
 
+## Enlaces del perfil
+- **Bio (link en bio):** app gratis → https://diego-pereyra.github.io/holisticNavigator/
+- **Segundo enlace (si la bio lo permite o en el destacado "Apoyar"):** https://ko-fi.com/holisticnavigator — enlace canónico de "Apoyar" (ver `../ENLACES.md`). No usar otras URLs de donación.
+- CTA estándar del pie: `link en bio → app gratis`. Si se menciona apoyo: `si te sirve, en la bio está cómo invitarme un café`.
+
 ## Calendario
 | Fecha | Posteo | Estado | Notas |
 |---|---|---|---|
-| 2026-10-30 | 2026-10-30-optimizar (demo-07) | PREPARADO | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints |
+| 2026-10-30 | 2026-10-30-optimizar (demo-07) | PREPARADO (falta publicar Diego) | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints. Paquete en `posteos/2026-10-30-optimizar/` |
 | TBD | demo-06 (ruta propia + click derecho en mapa) | CANDIDATO PRÓXIMO | Siguiente candidato según instrucción |
 
 ## Métricas perfil (actualizar con datos de Diego)

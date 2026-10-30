@@ -21,7 +21,7 @@ Rellenar mes a mes con datos reales.
 
 | Mes | Visitas aprox (contador) | IG seguidores | IG alcance/impresiones | Pitches enviados | Respuestas | Sponsors confirmados | Notas |
 |---|---|---|---|---|---|---|---|
-| 2026-10 | ____ | ____ | ____ | ____ | ____ | ____ | Boot inicial |
+| 2026-10 | ____ | ____ | ____ | ____ | ____ | 0 | Boot inicial. **Ko-fi VIVA 2026-10-30** (ko-fi.com/holisticnavigator); payout UY sin verificar |
 | 2026-11 | ____ | ____ | ____ | ____ | ____ | ____ | |
 | 2026-12 | ____ | ____ | ____ | ____ | ____ | ____ | |
 | 2027-01 | ____ | ____ | ____ | ____ | ____ | ____ | |

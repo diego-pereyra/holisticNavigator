@@ -23,6 +23,11 @@ Diego
 
 **Notas:** Personalizar con nombre del club, mencionar zona que navegan (ej. "para ir a Colonia" o "travesías al Plata"). Enviar por mail/WhatsApp según canal del club.
 
+**Línea opcional si preguntan cómo apoyar** (agregar al final, no en el primer mail):
+```
+Si a alguno le sirve y quiere reconocer el laburo: https://ko-fi.com/holisticnavigator
+```
+
 ## 2) Cruzador del Plata argentino (secundario - 30%)
 **Destinatarios:** San Isidro, Olivos, Club Náutico San Esteban, YCA y cruceros que hacen travesía inversa.
 
@@ -46,8 +51,13 @@ Diego
 
 **Notas:** Enfatizar "travesía inversa" / cruce Plata sutilmente. No vender, mostrar caso de uso real. Mantener proporción 70% UY / 30% AR.
 
+**Línea opcional si preguntan cómo apoyar:**
+```
+Si quieren reconocer el proyecto: https://ko-fi.com/holisticnavigator
+```
+
 ## Recomendaciones generales
 - Enviar 1x1, personalizado. Evitar mail masivo.
 - Priorizar YCU primero.
 - No hablar de "monetizar", hablar de "apoyar si les parece útil".
-- Si preguntan cómo apoyar → compartir enlaces de ENLACES.md cuando estén LISTOS.
+- Si preguntan cómo apoyar → **un solo enlace**: https://ko-fi.com/holisticnavigator (canónico, ver ENLACES.md). No mandar alias/CBU ni otras URLs.
