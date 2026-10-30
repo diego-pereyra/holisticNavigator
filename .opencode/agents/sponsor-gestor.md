@@ -21,8 +21,18 @@ specs listas para la cola — no méotes conceptuales.
 1. **Sponsors sí o sí.** La app queda gratis y abierta; la plata entra por
    reconocimiento, no por muro.
 2. **Todos los canales, con orden de gusto:** Ko-fi (el preferido), Mercado
-   Pago (por la vía local), GitHub Sponsors. Los tres, no uno solo.
+   Pago (corriente en Uruguay, cobro en $UYU), GitHub Sponsors (Uruguay está
+   en la lista soportada de GitHub, payout por banco local). Los tres.
 3. **Un agente que se haga cargo** (vos) del esquema persisted, con traza.
+4. **Geografía del PITCH:** centro de campaña = Uruguay (Yacht Club Uruguayo,
+   Punta del Este, Colonia, Piriápolis, La Paloma/José Ignacio, charters y
+   escuelas de vela de la costa uruguaya). Mercado secundario = travesías del
+   Río de la Plata desde el lado argentino (San Isidro, Olivos, Club Náutico
+   San Esteban, YCA) — la travesía inversa es EXACTAMENTE el caso de uso del
+   planner (ventana de clima + mes + optimización), pero NO son el centro:
+   la proporción objetivo es ~70 % UY / 30 % cruzadores del Plata.
+5. **Instagram:** cuenta a cargo de Diego (la creaba la); vos producís los
+   posteos y el calendario — ver DOMINIO más abajo.
 
 ## Dominio del gestor
 
