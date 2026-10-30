@@ -2242,6 +2242,61 @@ html[data-theme="red"] {
   width: 100%;
 }
 
+/* E12.3: polares del barco en Ajustes. Tabla TWA × TWS con inputs chicos,
+   scrolleable en horizontal en pantallas chicas. */
+.hn-polar-wrap {
+  overflow-x: auto;
+  margin-top: 8px;
+}
+.hn-polar-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.hn-polar-table th,
+.hn-polar-table td {
+  border: 1px solid var(--hn-line, rgba(255, 255, 255, 0.14));
+  padding: 2px 3px;
+  text-align: center;
+  color: var(--hn-text);
+}
+.hn-polar-table th {
+  color: var(--hn-muted);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hn-polar-cell {
+  width: 46px;
+  padding: 2px 3px;
+  font: inherit;
+  color: var(--hn-text);
+  background: var(--hn-panel-2);
+  border: none;
+  border-radius: 4px;
+  text-align: right;
+}
+.hn-polar-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+.hn-polar-fields .hn-field {
+  min-width: 88px;
+}
+.hn-polar-paste {
+  width: 100%;
+  font: inherit;
+  color: var(--hn-text);
+  background: var(--hn-panel-2);
+  border: 1px solid var(--hn-line, rgba(255, 255, 255, 0.14));
+  border-radius: 6px;
+  resize: vertical;
+  white-space: pre;
+}
+.hn-polar-paste + .hn-btn {
+  margin-top: 6px;
+}
+
 /* T11.3: banda de Medir. Fija arriba de la hoja, con el tramo y el total. */
 .hn-measure {
   position: fixed;

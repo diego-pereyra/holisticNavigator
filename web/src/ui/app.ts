@@ -90,7 +90,13 @@ import {
 import { navigate, haversineNm, trackLengthNm, pointAlongTrack, type RouteTrack, type NavFix, type LonLat } from "../core/navigation.ts";
 import type { OwnRoute } from "../core/routes-own.ts";
 import { addWaypoint } from "../core/routes-own.ts";
-import { genericPolar } from "../core/routing/polar.ts";
+import { parsePolar, genericPolar, type Polar, type PolarConfig } from "../core/routing/polar.ts";
+import {
+  PLANTILLA_GENERICA_ID,
+  POLAR_TEMPLATES,
+  polarDePlantilla,
+  validarPolar,
+} from "../core/routing/polar-templates.ts";
 import { forecastHorizon, forecastWindField, horizonNotice } from "../core/routing/windfield.ts";
 import {
   DEFAULT_ROUTING_MODE,
@@ -226,6 +232,19 @@ interface Settings {
   uiMode?: UiMode;
   visibilidad?: Visibility;
   unidades?: Units;
+  // E12.3: polar del barco. Guarda la plantilla de la que partió (o "propia"
+  // si se editó la tabla o se importó) más la polar vigente completa.
+  polar?: PolarGuardada;
+}
+
+// Polar del barco guardada en hn.settings (E12.3).
+export interface PolarGuardada {
+  plantillaId: string;
+  polar: Polar;
+}
+
+function polarPorDefecto(): PolarGuardada {
+  return { plantillaId: PLANTILLA_GENERICA_ID, polar: genericPolar() };
 }
 
 // Fondeo (E9.3): radio del círculo y punto donde se largó el ancla.
@@ -412,7 +431,7 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
     modeEnteredAt: Date.now(),
     unidades: signal<Units>({ ...DEFAULT_UNITS }),
     visibilidad: signal<Visibility>({ ...DEFAULT_VISIBILITY }),
-    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE, uiMode: "planificar", visibilidad: { ...DEFAULT_VISIBILITY }, unidades: { ...DEFAULT_UNITS } },
+    settings: { acc: defaultAcc(), alarms: { ...DEFAULT_ALARMS }, anchor: { ...DEFAULT_ANCHOR }, mob: null, theme: "auto", redAtNight: false, wxLayers: defaultWxLayers(), routingMode: DEFAULT_ROUTING_MODE, uiMode: "planificar", visibilidad: { ...DEFAULT_VISIBILITY }, unidades: { ...DEFAULT_UNITS }, polar: polarPorDefecto() },
     zones: deps.zones,
   };
 
@@ -821,6 +840,12 @@ async function restore(ui: UiState): Promise<void> {
     }
     if (s.routingMode && ROUTING_MODES.some((m) => m.id === s.routingMode)) {
       ui.settings.routingMode = s.routingMode;
+    }
+    // E12.3: polar del barco persistida; si la estructura no valida, queda la
+    // genérica de 40 pies y así no rompe el optimizador.
+    if (s.polar) {
+      const p = validarPolar(s.polar.polar);
+      if (p && s.polar.plantillaId) ui.settings.polar = { plantillaId: s.polar.plantillaId, polar: p };
     }
     if (s.visibilidad) {
       const v = applyVisibility(s.visibilidad);
@@ -2461,6 +2486,187 @@ function endMeasure(): void {
   drawMeasure(m.ui);
 }
 
+// Polares del barco (E12.3): plantillas por eslora, tabla TWA × TWS editable,
+// cono muerto / empopada / factor de realismo / motor e import de pegado en
+// formato Maxsea/Adrena/qtVlm. Todo persiste en hn.settings.
+function polarCard(ui: UiState): HTMLElement {
+  const card = el("div", { class: "hn-card" });
+  card.append(
+    el("div", { class: "hn-card-title" }, "Polares del barco"),
+    el(
+      "p",
+      { class: "hn-muted" },
+      "Velocidad del barco según el ángulo al viento y la fuerza del viento. Elegí la plantilla más cercana a la eslora de tu barco y ajustá los valores: se usan para la duración estimada y el optimizador.",
+    ),
+  );
+
+  const estado = (): PolarGuardada => ui.settings.polar ?? polarPorDefecto();
+
+  const opciones = (): string[] => {
+    const ids = POLAR_TEMPLATES.map((t) => t.nombre);
+    return estado().plantillaId === "propia" ? [...ids, "Propia (tabla editada)"] : ids;
+  };
+  const nombreAId = (nombre: string): string =>
+    nombre === "Propia (tabla editada)" ? "propia" : (POLAR_TEMPLATES.find((t) => t.nombre === nombre)?.id ?? PLANTILLA_GENERICA_ID);
+
+  const sel = el("select", { class: "hn-search hn-unit-select", "aria-label": "Plantilla de polar" });
+  const gridBox = el("div", { class: "hn-polar-wrap" });
+  const cfgRow = el("div", { class: "hn-polar-fields" });
+  const err = el("p", { class: "hn-err", hidden: "hidden" });
+
+  const repintarSelect = (): void => {
+    clear(sel);
+    for (const o of opciones()) {
+      const opt = el("option", { value: o }, o);
+      if (nombreAId(o) === estado().plantillaId) opt.selected = true;
+      sel.append(opt);
+    }
+  };
+  sel.addEventListener("change", () => {
+    const id = nombreAId(sel.value);
+    if (id === "propia") {
+      repintarSelect();
+      return;
+    }
+    ui.settings.polar = { plantillaId: id, polar: polarDePlantilla(id) };
+    saveSettings(ui);
+    repintarSelect();
+    repintarGrid();
+    repintarConfig();
+  });
+
+  // Pasar a "propia" cuando el usuario toca la tabla o importa: queda claro
+  // que ya no es la plantilla elegida.
+  const marcarPropia = (): void => {
+    if (estado().plantillaId !== "propia") {
+      ui.settings.polar = { plantillaId: "propia", polar: estado().polar };
+      saveSettings(ui);
+      repintarSelect();
+    }
+  };
+
+  const repintarGrid = (): void => {
+    clear(gridBox);
+    const p = estado().polar;
+    const tabla = el("table", { class: "hn-polar-table" });
+    const thead = el("thead");
+    const trh = el("tr", {}, el("th", {}, "TWA \\ TWS"));
+    for (const w of p.tws) trh.append(el("th", {}, String(w)));
+    thead.append(trh);
+    const tbody = el("tbody");
+    p.table.forEach((fila, i) => {
+      const tr = el("tr", {}, el("th", { scope: "row" }, `${p.twa[i]}°`));
+      fila.forEach((v, j) => {
+        const input = el("input", {
+          class: "hn-polar-cell",
+          type: "number",
+          min: "0",
+          max: "25",
+          step: "0.1",
+          inputmode: "decimal",
+          "aria-label": `Velocidad a ${p.twa[i]}° con ${p.tws[j]} kn`,
+        });
+        input.value = String(v);
+        input.addEventListener("change", () => {
+          const n = Number(input.value);
+          if (Number.isFinite(n) && n >= 0 && n < 25) {
+            marcarPropia();
+            ui.settings.polar!.polar.table[i]![j] = Math.round(n * 10) / 10;
+            saveSettings(ui);
+          }
+          input.value = String(estado().polar.table[i]![j]);
+        });
+        tr.append(el("td", {}, input));
+      });
+      tbody.append(tr);
+    });
+    tabla.append(thead, tbody);
+    gridBox.append(tabla);
+  };
+
+  // Cono muerto, empopada, factor de realismo y motor (ADR-008 §componente 2).
+  const camposConfig: { label: string; key: keyof PolarConfig; min: string; step: string }[] = [
+    { label: "Cono muerto (°)", key: "deadAngle", min: "0", step: "1" },
+    { label: "Empopada máx (°)", key: "maxRunAngle", min: "90", step: "1" },
+    { label: "Factor de realismo", key: "factorRealismo", min: "0.7", step: "0.05" },
+    { label: "Motor al viento (kn)", key: "motorTws", min: "0", step: "1" },
+    { label: "Velocidad a motor (kn)", key: "motorKn", min: "0", step: "0.5" },
+  ];
+  const repintarConfig = (): void => {
+    clear(cfgRow);
+    for (const c of camposConfig) {
+      const input = el("input", {
+        class: "hn-search",
+        type: "number",
+        min: c.min,
+        step: c.step,
+        inputmode: "decimal",
+        "aria-label": c.label,
+      });
+      input.value = String(estado().polar.config[c.key]);
+      input.addEventListener("change", () => {
+        const n = Number(input.value);
+        if (Number.isFinite(n) && n >= Number(c.min)) {
+          marcarPropia();
+          ui.settings.polar!.polar.config[c.key] = n;
+          saveSettings(ui);
+        }
+        input.value = String(estado().polar.config[c.key]);
+      });
+      cfgRow.append(el("label", { class: "hn-field" }, el("span", { class: "hn-field-label" }, c.label), input));
+    }
+  };
+
+  // Import de pegado en formato tabulado (Maxsea/Adrena/qtVlm); queda como
+  // polar propia con la config que ya se tenía.
+  const paste = el("textarea", {
+    class: "hn-search hn-polar-paste",
+    rows: "5",
+    placeholder: "TWA\\TWS;4;6;8\n40;2,2;3,1;3,8\n90;3,2;4,6;5,5\n…",
+    "aria-label": "Polar en formato Maxsea, Adrena o qtVlm",
+  });
+  const aplicar = el("button", { class: "hn-btn", type: "button" }, "Importar pegado");
+  aplicar.addEventListener("click", () => {
+    err.hidden = true;
+    try {
+      const p = parsePolar(paste.value, { config: estado().polar.config });
+      ui.settings.polar = { plantillaId: "propia", polar: p };
+      saveSettings(ui);
+      paste.value = "";
+      repintarSelect();
+      repintarGrid();
+      repintarConfig();
+    } catch (e) {
+      err.textContent = e instanceof Error ? e.message : "No se pudo importar la polar";
+      err.hidden = false;
+    }
+  });
+  const pegar = el(
+    "label",
+    { class: "hn-field", style: "margin-top:8px" },
+    el("span", { class: "hn-field-label" }, "Importar polar (pegado Maxsea/Adrena/qtVlm)"),
+    paste,
+    aplicar,
+  );
+
+  const restablecer = el("div", { class: "hn-actions" });
+  const btnReset = el("button", { class: "hn-btn", type: "button" }, "Restablecer plantilla");
+  btnReset.addEventListener("click", () => {
+    ui.settings.polar = polarPorDefecto();
+    saveSettings(ui);
+    repintarSelect();
+    repintarGrid();
+    repintarConfig();
+  });
+  restablecer.append(btnReset);
+
+  repintarSelect();
+  repintarGrid();
+  repintarConfig();
+  card.append(sel, gridBox, cfgRow, pegar, err, restablecer);
+  return card;
+}
+
 // Ajustes de alarmas (E9.2): dos umbrales numéricos, persistidos en hn.settings.
 function alarmsCard(ui: UiState, cleanup: (() => void)[]): HTMLElement {
   const card = el("div", { class: "hn-card" });
@@ -3556,6 +3762,21 @@ function saveSettings(ui: UiState): void {
   void ui.store.put(KEYS.settings, JSON.stringify(ui.settings));
 }
 
+// E12.3: polar del barco entra al optimizador y a la duración estimada.
+function polarActual(ui: UiState): Polar {
+  return ui.settings.polar?.polar ?? genericPolar();
+}
+
+// Nombre corto para la leyenda "polar …" de la ficha: "crucero 40 pies" o
+// "propia" si se editó la tabla o se importó un archivo.
+function polarNombre(ui: UiState): string {
+  const s = ui.settings.polar;
+  if (!s || s.plantillaId === PLANTILLA_GENERICA_ID) return "crucero 40 pies";
+  if (s.plantillaId === "propia") return "propia";
+  const t = POLAR_TEMPLATES.find((x) => x.id === s.plantillaId);
+  return t ? t.nombre.toLowerCase().replace("· ", "") : "propia";
+}
+
 // Teclado de escritorio (regla 12 de §6 ter, W4.5 #4).
 function wireKeyboard(ui: UiState): void {
   document.addEventListener("keydown", (ev) => {
@@ -3784,7 +4005,7 @@ async function optStart(
     original: coords,
     pkg,
     clim,
-    polar: genericPolar(),
+    polar: polarActual(ui),
     landBytes: bytes,
     climateOnly: !pkg,
     config: routingModeConfig(mode),
@@ -4375,7 +4596,7 @@ function updateRouteDuration(ui: UiState, host: HTMLElement, d: RouteDetail): vo
       return;
     }
     const startMs = Date.now();
-    const est = estimateRouteDuration({ coords: g.coords, clim: ui.clim.get(month) ?? null, pkg, polar: genericPolar(), startMs });
+    const est = estimateRouteDuration({ coords: g.coords, clim: ui.clim.get(month) ?? null, pkg, polar: polarActual(ui), startMs });
     durCache.set(key, { stamp, startMs, est });
     host.textContent = durationLineText(ui, est, month, ageOf(pkg));
   };
@@ -4399,7 +4620,7 @@ function durationLineText(ui: UiState, est: RouteEstimate, month: number, pkgAge
       : `clima de ${MONTH_NAME[month - 1] ?? ""}`;
   return (
     `Duración estimada: ${formatDuration(etaMs)} · ${spd(ui, avgKn)} medios · ` +
-    `viento máx ${spd(ui, est.windMaxKn, false)} — ${source} (polar 40 pies)`
+    `viento máx ${spd(ui, est.windMaxKn, false)} — ${source} (polar ${polarNombre(ui)})`
   );
 }
 
@@ -5247,7 +5468,7 @@ async function runPointOptNow(
     original: coords,
     pkg,
     clim,
-    polar: genericPolar(),
+    polar: polarActual(ui),
     landBytes: bytes,
     climateOnly: !pkg,
     config: routingModeConfig(mode),
@@ -5459,6 +5680,7 @@ function renderAjustes(ui: UiState, body: HTMLElement, cleanup: (() => void)[]):
     }),
   );
 
+  body.append(polarCard(ui));
   body.append(alarmsCard(ui, cleanup));
   body.append(themeCard(ui, cleanup));
 
