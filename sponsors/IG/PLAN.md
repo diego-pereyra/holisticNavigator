@@ -11,8 +11,8 @@
 
 ## Enlaces del perfil
 - **Bio (link en bio):** app gratis → https://diego-pereyra.github.io/holisticNavigator/
-- **Segundo enlace (si la bio lo permite o en el destacado "Apoyar"):** https://ko-fi.com/holisticnavigator — enlace canónico de "Apoyar" (ver `../ENLACES.md`). No usar otras URLs de donación.
-- CTA estándar del pie: `link en bio → app gratis`. Si se menciona apoyo: `si te sirve, en la bio está cómo invitarme un café`.
+- **Segundo enlace (si la bio lo permite o en el destacado "Apoyar"):** https://ko-fi.com/holisticnavigator — aporte puntual + vitrina (ver `../ENLACES.md`). Si la bio admite un tercero o el destacado lo permite, sumar https://github.com/sponsors/diego-pereyra (recurrente). No usar otras URLs de donación.
+- CTA estándar del pie: `link en bio → app gratis`. Si se menciona apoyo: `si te sirve, en la bio está cómo invitarme un café o sostenerlo todos los meses`.
 
 ## Calendario
 | Fecha | Posteo | Estado | Notas |
