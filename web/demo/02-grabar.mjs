@@ -137,32 +137,39 @@ async function actuar(page, a) {
         await page.mouse.move(vp.width * a.v[2], vp.height * a.v[3], { steps: 25 });
         await page.mouse.up();
         return true;
-      case "scroll-hasta": {
-        // Scrollea la hoja con la rueda hasta que el elemento quede a la vista
-        // (o hasta que la hoja no scrollee más): muestra los waypoints hasta el
-        // final sin pasarse al panel de optimizar.
+      case "scroll-ruta": {
+        // Scrollea la ficha desde el primer waypoint hasta el final (el Total):
+        // scroll animado con duración fija para que el video muestre los
+        // waypoints pasando. La rueda no sirve: cada evento mueve miles de
+        // píxeles y la dirección es fácil de invertir.
         const scrollSel = ".hn-sheet.hn-ficha-open .hn-col-ficha";
-        const estado = () =>
-          page.evaluate(
-            ({ s, t }) => {
-              const sc = document.querySelector(s);
-              const tgt = document.querySelector(t);
-              if (!sc || !tgt) return { top: -1, visible: false };
-              const r = tgt.getBoundingClientRect();
-              return { top: Math.round(sc.scrollTop), visible: r.top >= 0 && r.bottom <= window.innerHeight };
-            },
-            { s: scrollSel, t: a.sel },
-          );
-        for (let i = 0; i < 90; i++) {
-          const antes = await estado();
-          if (antes.top < 0 || antes.visible) break;
-          await page.mouse.move(vp.width * 0.5, vp.height * (a.y ?? 0.72));
-          await page.mouse.wheel(0, -(a.v ?? 500));
-          await sleep(a.ms ?? 300);
-          const despues = await estado();
-          if (despues.top === antes.top) break; // pie del contenido: no scrollea más
-        }
-        return true;
+        const dur = a.ms ?? 6000;
+        const ok = await page.evaluate(
+          ({ s, t, d }) => {
+            const sc = document.querySelector(s);
+            const tgt = document.querySelector(t);
+            if (!sc || !tgt) return false;
+            sc.scrollTo({ top: 0, behavior: "auto" });
+            // Posición del destino dentro del contenido del scroller.
+            const st = sc.scrollTop + tgt.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+            const to = Math.max(
+              0,
+              Math.min(sc.scrollHeight - sc.clientHeight, st + tgt.offsetHeight - sc.clientHeight),
+            );
+            const t0 = performance.now();
+            const step = (now) => {
+              const k = Math.min(1, (now - t0) / d);
+              const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+              sc.scrollTop = to * e;
+              if (k < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+            return true;
+          },
+          { s: scrollSel, t: a.sel, d: dur },
+        );
+        await sleep(dur + 900);
+        return ok;
       }
       case "tap-map":
         // Toque simple sobre la carta (agrega waypoint en el editor de rutas).
