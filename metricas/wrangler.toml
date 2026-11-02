@@ -1,0 +1,10 @@
+# BT1.2 — ejemplo de configuración del worker de métricas.
+# Copiá este archivo, completá el id del namespace KV (paso 4 del README) y
+# desplegá con `npx wrangler deploy` desde esta carpeta.
+name = "hn-metricas"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+kv_namespaces = [
+  { binding = "METR_KV", id = "PEGAR_AQUI_EL_ID_DEL_NAMESPACE" },
+]

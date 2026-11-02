@@ -22,6 +22,25 @@ function readUrlParams(): BootParams {
 }
 
 const bootParams = readUrlParams();
+
+function fechaLocalHoy(now: Date = new Date()): string {
+  const mes = String(now.getMonth() + 1).padStart(2, "0");
+  const dia = String(now.getDate()).padStart(2, "0");
+  return `${now.getFullYear()}-${mes}-${dia}`;
+}
+
+// BT1.2 — no-op hasta que Diego pegue la URL del worker en ENLACE_METRICAS.
+// Un solo GET por dispositivo y día; si falla la red, no pasa nada.
+function avisarVisita(): void {
+  if (!ENLACE_METRICAS) return;
+  try {
+    const hoy = fechaLocalHoy();
+    const guardado = localStorage.getItem(CLAVE_BEACON_DIA);
+    if (!deberiaApitarBeacon(ENLACE_METRICAS, hoy, guardado)) return;
+    localStorage.setItem(CLAVE_BEACON_DIA, hoy);
+    void fetch(ENLACE_METRICAS, { method: "GET", mode: "cors" }).catch(() => {});
+  } catch {}
+}
 // W4 — UI equivalente en DOM (ADR-007, sin framework):
 // barra de contexto, hoja con tabs, tab Rutas (búsqueda/chips/lista), ficha v3,
 // importar GPX/KML/CSV, GPS/manual y bitácora.
@@ -54,7 +73,13 @@ import {
   type VariantGeometry,
 } from "../core/context.ts";
 import { getCell, loadMonth, type ClimLineString, type ClimMonth } from "../core/clim.ts";
-import { ENLACE_KOFI, ENLACE_SPONSORS } from "../core/enlaces.ts";
+import {
+  CLAVE_BEACON_DIA,
+  ENLACE_KOFI,
+  ENLACE_METRICAS,
+  ENLACE_SPONSORS,
+  deberiaApitarBeacon,
+} from "../core/enlaces.ts";
 import {
   ageText,
   bboxCenter,
@@ -761,6 +786,10 @@ export function mountApp(map: MlMap, deps: AppDeps): AppHandle {
   // UX-2: recién después de restaurar se decide arrancar el GPS, para no pisar
   // una posición manual persistida aunque el permiso esté concedido.
   void restore(ui).then(() => autoStartGps(ui));
+
+  // BT1.2 — contador no invasivo: un GET anónimo por día, solo si el worker de
+  // metricas/ ya está configurado. Sin datos del usuario, sin UI, silencio total.
+  avisarVisita();
 
   let bootOpened = false;
   return {

@@ -2,7 +2,13 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync } from "node:fs";
 
-import { ENLACE_KOFI, ENLACE_SPONSORS } from "./enlaces.ts";
+import {
+  CLAVE_BEACON_DIA,
+  ENLACE_KOFI,
+  ENLACE_METRICAS,
+  ENLACE_SPONSORS,
+  deberiaApitarBeacon,
+} from "./enlaces.ts";
 
 // Los esperados se arman por partes para que este test no sea una segunda
 // ocurrencia literal de las URLs en web/src/ (la guardia las cuenta).
@@ -43,6 +49,25 @@ test("BT1.1 enlaces: enlaces.ts solo declara estas dos URLs", () => {
   for (const url of urls) {
     assert.ok(url === ENLACE_KOFI || url === ENLACE_SPONSORS, `URL no declarada: ${url}`);
   }
+});
+
+test("BT1.2 metrics: la constante queda vacía o es https (nunca http)", () => {
+  if (ENLACE_METRICAS !== "") {
+    assert.ok(ENLACE_METRICAS.startsWith("https://"), "ENLACE_METRICAS debe ser https");
+  }
+  assert.equal(CLAVE_BEACON_DIA, "hn-beacon-dia");
+});
+
+test("BT1.2 metrics: deberiaApitarBeacon es no-op sin URL o el mismo día", () => {
+  assert.equal(deberiaApitarBeacon("", "2026-11-02", null), false, "sin URL no se manda nada");
+  assert.equal(deberiaApitarBeacon("https://m.example", "2026-11-02", "2026-11-02"), false, "mismo día no repite");
+  assert.equal(deberiaApitarBeacon("https://m.example", "2026-11-02", "2026-11-01"), true, "día nuevo avisa");
+  assert.equal(deberiaApitarBeacon("https://m.example", "2026-11-02", null), true, "primera vez avisa");
+});
+
+test("BT1.2 metrics: deberiaApitarBeacon rechaza URLs que no sean https", () => {
+  assert.equal(deberiaApitarBeacon("http://m.example", "2026-11-02", null), false);
+  assert.equal(deberiaApitarBeacon("m.example", "2026-11-02", null), false);
 });
 
 test("BT1.1 enlaces: cada URL aparece una sola vez en web/src/ (guardia anti-duplicación)", () => {
