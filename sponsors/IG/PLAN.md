@@ -1,8 +1,16 @@
 # IG PLAN - Cuenta Instagram holisticNavigator
 
-**Cuenta:** A cargo de Diego (creación propia). El gestor produce paquetes listos para publicar.
-**Modo de publicación:** **MANUAL** — Diego publica desde el celular con el paquete del gestor (~60 s). Hasta fase 2 (ver abajo). Sin credenciales de IG en el agente ni en el repo.
+**Cuenta:** @holisticnavigator.app — nació 2026-10-31 (creada por Diego con SMS desde el celu; profesional/empresa desde el día 1).
+**Modo de publicación:** **HITL escritorio** (directiva de Diego 2026-10-30: "quiero que me uses como HITL para la publicación, pero no las quiero hacer yo"). El gestor ejecuta en el browser de Diego con la sesión abierta; Diego aprueba el paquete antes (primera palabra: "listo" = publicar; "cambiale X" = iterar). Sin credenciales de IG en el agente ni en el repo — la sesión es de Diego. La receta técnica de subida por DOM está en `CREAR-CUENTA.md`.
 **Objetivo:** Mostrar casos de uso reales (planificación, optimización con viento, travesías Plata) sin vender. Dirigir a link en bio → app gratis.
+
+## Nacimiento y arranque de la cuenta
+
+- **Cuenta:** @holisticnavigator.app (profesional/empresa). Perfil completo el 2026-11-02: bio + avatar (logo de la app) + link al sitio.
+- **Receta de subida de archivos por DOM** (verificada con el avatar): `CREAR-CUENTA.md` — es la misma que se usa para el reel.
+- **Follows iniciales (2026-11-02, 5 nuevos + 1 previo, todos a mano):**
+  @yachtcluburuguayo, @clubnautico (Carrasco y Punta Gorda), @yachtclubpuntadeleste, @laestacadaescueladevela, @apuravelaa, + cross @navegandoviento (cuenta del barco de Diego). Descartados: `@ycpe` (cuenta ajena), `@clubnauticocarrasco` (no existe).
+  Presupuesto respetado: ≤15/semana mientras la cuenta es fría.
 
 ## Línea de contenido
 - **Por versión con feature visible:** 1 posteo (reel) mostrando el caso más vistoso
@@ -17,7 +25,7 @@
 ## Calendario
 | Fecha | Posteo | Estado | Notas |
 |---|---|---|---|
-| 2026-10-30 | 2026-10-30-optimizar (demo-07) | PREPARADO (falta publicar Diego) | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints. Paquete en `posteos/2026-10-30-optimizar/` |
+| 2026-10-30 | 2026-10-30-optimizar (demo-07) | PAQUETE LISTO — pie pendiente de HITL de Diego; luego se publica por HITL escritorio | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints. Paquete en `posteos/2026-10-30-optimizar/` |
 | TBD (solo si el reel de demo-07 no rindió) | Post de **imagen simple** con el beat del post de Ko-fi | MATERIA PRIMA lista | No es reel: imagen + pie corto. Misma imagen 2:1 de `../KOFI/post-introduccion-1200x600.png` (beat de demo-07), recomponer a 1080×1350 (4:5) o 1080×1080 sin cortar el texto del card. Ver "Plan B" abajo |
 | TBD | demo-06 (ruta propia + click derecho en mapa) | CANDIDATO PRÓXIMO | Siguiente candidato según instrucción |
 
@@ -37,7 +45,7 @@
 ## Métricas perfil (actualizar con datos de Diego)
 | Fecha | Seguidores | Alcance | Guardados/Compartidos | Notas |
 |---|---|---|---|---|
-| ____ | ____ | ____ | ____ | |
+| 2026-11-02 | 0 | — | — | Perfil completo; 5 follows dados, 0 posts aún |
 
 ## Auto-posteo — FASE 2 (documentado, NO implementado)
 
