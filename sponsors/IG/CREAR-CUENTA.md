@@ -44,10 +44,10 @@ después desde la desktop).
   - **Avatar ✅:** logo del repo dibujado 1:1 con PIL (`web/public/icon.svg`
     → PNG 1024 → JPEG 512 → PNG-8 320, 5 KB) y subido exitosamente
     2026-11-02 (medio Meta `18157663945489967`).
-  - **Sitio web ❌:** IG web lo bloquea ("Solo puedes editar tus enlaces en
-    móviles"). **Lo tiene que cargar Diego desde la app del celu**:
-    `https://diego-pereyra.github.io/holisticNavigator/` (~10 s). Sin eso,
-    el `Link 👇` de la bio queda sin destino.
+  - **Sitio web ✅ (2026-11-02):** Diego lo cargó desde la app del celu.
+    Confirmado en el perfil: la bio muestra
+    `diego-pereyra.github.io/holisticNavigator` (wrap de
+    `l.instagram.com` con utm de IG — normal; el destino es el correcto).
 - **Follows iniciales (moderado, 10-15):** Yacht Club Uruguayo, Yacht Club
   Punta del Este, Club Náutico Carrasco, escuelas de vela UY (La Náutica,
   Vela Pinta?), marineros locales con swing en el feed. A mano, con
@@ -84,9 +84,8 @@ en su momento).
   0 posts, 0 seguidores, 8 seguidos.
 - Diego la creó con SMS desde el celu y se logueó desde desktop (sesión
   viva; el cofre de credenciales de vibebrowser sigue sin activar).
-- Bio guardada, avatar subido. Falta: Sitio web (solo celu), nombre visible
-  si hace falta, 2FA por app (recomendado, no urgente), follows iniciales
-  y el reel de estreno.
+- Bio guardada, avatar subido, link del sitio vivo. Falta: 2FA por app
+  (recomendado, no urgente), follows iniciales y el reel de estreno.
 
 ## Notas de seguridad de cuenta
 
