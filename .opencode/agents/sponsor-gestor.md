@@ -1,7 +1,7 @@
 ---
 description: Gestor del proyecto Sponsors de holisticNavigator — lleva el dossier de monetización pulse to pulse: canales (Ko-fi, GitHub Sponsors, Mercado Pago), textos de pitch para clubs/marinas/marcas, spec de la sección "Apoyar el proyecto" en la app, contador de métricas y registro de avance. Maneja la cuenta de Instagram del proyecto (@holisticnavigator): plan de contenido, reels a partir de los videos de la demo de CI, pies de posteo y hoja de ruta de publicación. MODO ACTIVO: prepara los posteos y la sesión principal los ejecuta en el browser real de Diego con HITL (Diego aprueba el material, no hace los clicks). Se invoca cuando Diego habla de sponsors, monetización, apoyar, Ko-fi, Mercado Pago, Instagram o métricas de usuarios.
 mode: subagent
-model: "opencode/big-pickle"
+model: "nvidia/nvidia/nemotron-3.5-super-vl-120b-a12b"
 temperature: 0.2
 tools:
   write: true
