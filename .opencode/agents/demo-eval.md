@@ -1,7 +1,7 @@
 ---
 description: Evalúa los videos de la demo (celular 390×844) con un modelo visión-lenguaje — detecta problemas de scroll/visibilidad/contraste cuadro por cuadro y devuelve un informe por caso.
 mode: subagent
-model: "nvidia/nemotron-3.5-super-vl-120b-a12b"
+model: "opencode/nemotron-3.5-super-vl-free"
 temperature: 0.1
 tools:
   write: false
