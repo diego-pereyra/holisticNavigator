@@ -13,6 +13,7 @@
   Presupuesto respetado: ≤15/semana mientras la cuenta es fría.
 
 ## Línea de contenido
+- **Directiva de Diego (2026-11-02): SIEMPRE velero** — la app es para veleros. Emoji ⛵, nunca 🛥️/lancha; vocabulario náutico de vela en todos los pies y posts.
 - **Por versión con feature visible:** 1 posteo (reel) mostrando el caso más vistoso
 - **Por 2-3 arreglos chicos:** 1 reel acumulado
 - **Promoción pura:** Solo cuando perfil >500 seguidores (y justifique tiempo)
