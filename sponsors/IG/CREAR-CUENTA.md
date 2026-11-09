@@ -78,6 +78,44 @@ Esta misma receta es la que se va a usar para subir el **reel.mp4** desde
 límite de la tool, plan B es alojar el archivo y descargarlo... a definir
 en su momento).
 
+## Receta PLAYWRIGHT para publicar reel (VERIFICADA 2026-11-09 ✅)
+
+El reel de estreno se publicó 100% automatizado con Playwright
+(`publish-reel-v8.cjs` en la raíz del repo; cookies de sesión en
+`/tmp/ig-cookies.json`, generadas con login manual de Diego en el browser
+Playwright). Esta receta reemplaza el intento de "upload inline" del
+browser — no funciona por CSP/base64; Playwright sí.
+
+Claves que hacen quefuncione (lo que fallaba antes):
+1. **Entrada por el rail izquierdo:** click en `svg[aria-label="New post"]`
+   (el "+" de la barra lateral). NO usar `/create/` (redirige a un perfil
+   ajeno @create).
+2. El "+" abre un **menú con items Post / Live video / Ad** que NO son
+   `role=menuitem`: son DIVs sueltos. Se los encuentra por texto exacto
+   ("Post") y se los clikea **por coordenadas** (`page.mouse.click`) — los
+   locators de texto no los resuelven.
+3. Tras "Post" se monta el `div[role=dialog]` con un input
+   `accept=...,video/mp4,video/quicktime` — **ese es el input de video**.
+   Los otros 4 inputs (image/jpeg) son avatar/destacados/story: ignorar.
+   Upload directo: `input.setInputFiles(reel_compressed.mp4)`.
+4. **Next 1** (botón con texto "Next"): pasa a la pantalla Edit/Trim/Cover
+   (mostró "Video has no audio" — normal, el reel va sin audio).
+5. **Next 2**: pasa a la pantalla de pie. El campo de caption es
+   `[role=textbox][contenteditable=true]`: click + `keyboard.insertText`
+   con el contenido de `pie.txt` (insertText preserva emojis/tildes).
+6. **Share** ("Share"/"Compartir") → dialog "Sharing" con spinner ~1 min.
+   Salió un popup de confirmación que pide OK: se clickea OK si aparece.
+7. Verificación: perfil → "1 post" + un `<a href=reel/DfiJjDIMrjd/>`.
+   Post: https://www.instagram.com/reel/DfiJjDIMrjd/
+   Cover quedó = primer frame (no subimos portada.jpg; IG la genera sola).
+
+Precauciones:
+- Un solo contexto con cookies ya logueadas (NO crear contextos de más).
+- Si aparece dialog "Save your login info": cerrarlo con
+  `[role=button]:has-text("Not now")` (es DIV role=button, no `<button>`).
+- La sesión SPA muere si se cierra el browser: lanzar Next/share en la
+  MISMA corrida en que se sube el archivo.
+
 ## Estado real de la cuenta (2026-11-02)
 
 - Cuenta creada: @holisticnavigator.app, **profesional (Panel visible)**,

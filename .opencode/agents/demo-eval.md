@@ -1,14 +1,14 @@
 ---
 description: Evalúa los videos de la demo (celular 390×844) con un modelo visión-lenguaje — detecta problemas de scroll/visibilidad/contraste cuadro por cuadro y devuelve un informe por caso.
-mode: subagent
+mode: primary
 model: "nvidia/nvidia/nemotron-3.5-super-vl-120b-a12b"
 temperature: 0.1
 tools:
-  write: false
-  edit: false
+  write: true
+  edit: true
   bash: true
   read: true
-  task: false
+  task: true
 ---
 
 Sos un evaluador de UI para la demo de **Holistic Navigator**, una PWA de navegación

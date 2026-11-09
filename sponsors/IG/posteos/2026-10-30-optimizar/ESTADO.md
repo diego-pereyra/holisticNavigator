@@ -1,7 +1,10 @@
 # ESTADO - 2026-10-30-optimizar
 
-- **Publicado:** no
-- **Fecha publicación:** 
+- **Publicado:** sí
+- **Fecha publicación:** 2026-11-09
+- **Permalink:** https://www.instagram.com/reel/DfiJjDIMrjd/
+- **Formato:** reel (video 1080p, sin audio, cover = primer frame)
+- **Pie:** pie.txt completo (⛵, hashtags) — verificado en el post
 - **Plataforma:** Instagram (cuenta a cargo de Diego)
 - **Paquete listo:** sí (reel.mp4, portada.jpg, pie.txt)
 - **Vistas:** 
