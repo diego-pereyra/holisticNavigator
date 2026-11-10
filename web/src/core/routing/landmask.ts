@@ -35,6 +35,9 @@ export interface Landmask {
   isLand(lat: number, lon: number): boolean;
   /** Ídem, considerando un margen costero de `nm` millas náuticas. */
   isLandWithMargin(lat: number, lon: number, nm: number): boolean;
+  /** Distancia en nm a la costa más cercana (0 en tierra). Océano abierto:
+   *  devuelve DIST_MAX/DIST_SCALE (≈ 6550 nm), suficiente como "lejos". */
+  coastDistanceNm(lat: number, lon: number): number;
 }
 
 export function decodeLandmask(bytes: Uint8Array): Landmask {
@@ -140,7 +143,21 @@ export function decodeLandmask(bytes: Uint8Array): Landmask {
     return dist[row * LANDMASK_WIDTH + col]! < (nm + HALF_CELL_NM) * DIST_SCALE;
   };
 
-  return { width: LANDMASK_WIDTH, height: LANDMASK_HEIGHT, isLand, isLandWithMargin };
+  // Distancia a la costa en nm: la transformada guarda décimas de nm desde el
+  // CENTRO de la celda; se descuenta la media celda (la costa es el borde) y
+  // en tierra devolvemos 0. La misma gracia que usa `isLandWithMargin`.
+  const coastDistanceNm = (lat: number, lon: number): number => {
+    let col = ((lon + 180) * PER_DEG + INDEX_EPS) | 0;
+    if (col >= LANDMASK_WIDTH) col -= LANDMASK_WIDTH;
+    else if (col < 0) col += LANDMASK_WIDTH;
+    let row = ((lat + 90) * PER_DEG + INDEX_EPS) | 0;
+    row = row < 0 ? 0 : row >= LANDMASK_HEIGHT ? LANDMASK_HEIGHT - 1 : row;
+    const d = dist[row * LANDMASK_WIDTH + col]!;
+    if (d === 0) return 0;
+    return Math.max(0, d / DIST_SCALE - HALF_CELL_NM);
+  };
+
+  return { width: LANDMASK_WIDTH, height: LANDMASK_HEIGHT, isLand, isLandWithMargin, coastDistanceNm };
 }
 
 export async function loadLandmask(base = document.baseURI): Promise<Landmask> {

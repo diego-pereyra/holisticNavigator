@@ -58,6 +58,14 @@ export interface IsoConfig {
   /** Viento fuerte: por encima de `heavyTwsKn`, factor `heavyPenalty` (Infinity = ninguno). */
   heavyTwsKn: number;
   heavyPenalty: number;
+  /** Preferencia costera: por debajo de esta distancia a la costa (nm) no hay
+   * penalización. 0 = preferencia desactivada. */
+  coastNearNm: number;
+  /** Preferencia costera: a esta distancia (o más) la penalización es máxima. */
+  coastFarNm: number;
+  /** Preferencia costera: penalización máxima, en minutos por paso de 3 h
+   * (se escala linealmente con Δt y con la distancia entre near y far). */
+  coastPenaltyMin: number;
 }
 
 export const DEFAULT_ISO_CONFIG: IsoConfig = {
@@ -81,6 +89,9 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   beatPenaltyMin: 1,
   heavyTwsKn: Infinity,
   heavyPenalty: 1,
+  coastNearNm: 0,
+  coastFarNm: 300,
+  coastPenaltyMin: 0,
 };
 
 // E12.6 — modos de ponderación del optimizador (reglas de Diego): cada uno es un
@@ -121,6 +132,22 @@ export const DEFAULT_ROUTING_MODE: RoutingMode = "crucero";
 export function routingModeConfig(mode: RoutingMode): Partial<IsoConfig> {
   return (ROUTING_MODES.find((m) => m.id === mode) ?? ROUTING_MODES[1]!).config;
 }
+
+// Preferencia costera (regla de Diego): se suma al preset del modo activo y hace
+// que el trazado abrace la costa — hasta 40 nm no paga nada y desde 300 nm hacia
+// afuera paga el peso completo. Con viento parejo el optimizador elige el
+// corredor costero; con ceñida fuerte puede seguir abriéndose igual.
+// "Baja" cuesta 20 min por paso de 3 h, "Media" 45 y "Alta" 90.
+export type CoastalWeight = "baja" | "media" | "alta";
+
+export const COASTAL_WEIGHTS: Record<CoastalWeight, Partial<IsoConfig>> = {
+  baja: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 20 },
+  media: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 45 },
+  alta: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 90 },
+};
+
+// Atajo histórico del peso medio (tests y llamadas directas).
+export const COASTAL_BIAS: Partial<IsoConfig> = COASTAL_WEIGHTS.media;
 
 export function routingModeLabel(mode: RoutingMode): string {
   return ROUTING_MODES.find((m) => m.id === mode)?.label ?? "Crucero";
@@ -699,7 +726,16 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         continue;
       }
       const penaltyMin = maneuver === "gybe" ? cfg.gybePenaltyMin : cfg.tackPenaltyMin;
-      const t = p.t + dtMs + (maneuver ? penaltyMin * 60_000 : 0);
+      let t = p.t + dtMs + (maneuver ? penaltyMin * 60_000 : 0);
+      // Preferencia costera: penalización proporcional a la distancia al
+      // litoral (lineal entre `coastNearNm` y `coastFarNm`), normalizada por
+      // paso de 3 h para que un Δt chico cerca de costa pague su parte justa.
+      if (cfg.coastPenaltyMin > 0) {
+        const dNm = land.coastDistanceNm(q.lat, q.lon);
+        const span = Math.max(1, cfg.coastFarNm - cfg.coastNearNm);
+        const k = Math.min(1, Math.max(0, (dNm - cfg.coastNearNm) / span));
+        if (k > 0) t += cfg.coastPenaltyMin * k * (dtH / 3) * 60_000;
+      }
       const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p, ...(isRetry ? { retry: true } : {}) };
       out.push(node);
 

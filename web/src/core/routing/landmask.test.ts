@@ -110,3 +110,31 @@ test("E12.8 margen real: una celda de canal con 3 nm de holgura no queda bloquea
   assert.ok(!m.isLandWithMargin(0.05, 0, 3), "a 3 nm el eje del canal sigue libre");
   assert.ok(m.isLandWithMargin(0.05, 0, 4), "a 4 nm ya bloquea la celda de 3 nm de holgura");
 });
+
+test("costa: coastDistanceNm — 0 en tierra, ~3 en el eje del canal, grande en océano abierto", () => {
+  const bytes = new Uint8Array(LANDMASK_BYTES);
+  for (let row = 0; row < LANDMASK_HEIGHT; row++) {
+    const lat = row * LANDMASK_CELL_DEG - 90 + LANDMASK_CELL_DEG / 2;
+    const isCanal = lat >= 0.05 && lat < 0.15;
+    if (!isCanal) {
+      for (let col = 0; col < LANDMASK_WIDTH; col++) {
+        const i = row * LANDMASK_WIDTH + col;
+        bytes[i >> 3]! |= 128 >> (i & 7);
+      }
+    }
+  }
+  const m = decodeLandmask(bytes);
+  assert.equal(m.coastDistanceNm(0.15, 0), 0, "en tierra la distancia es 0");
+  const canal = m.coastDistanceNm(0.05, 0);
+  assert.ok(canal > 2 && canal < 4, `el eje del canal está a ~3 nm (dio ${canal.toFixed(1)})`);
+});
+
+test("costa: Cabo da Roca — la distancia crece hacia mar adentro", () => {
+  const m = mask();
+  const lat = 38.78;
+  const nmLon = (nm: number): number => nm / (60 * Math.cos((lat * Math.PI) / 180));
+  const cerca = m.coastDistanceNm(lat, -9.5 - nmLon(4));
+  const lejos = m.coastDistanceNm(lat, -9.5 - nmLon(30));
+  assert.ok(cerca > 0 && cerca < 10, `a ~4 nm de la costa da poco (${cerca?.toFixed(1)})`);
+  assert.ok(lejos > cerca + 20, `a ~30 nm da ~30 (${lejos.toFixed(1)})`);
+});

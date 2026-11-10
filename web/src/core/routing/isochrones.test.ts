@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import { genericPolar } from "./polar.ts";
 import {
+  COASTAL_BIAS,
   detectManeuver,
   estimateRouteDuration,
   multiRouteCoords,
@@ -29,7 +30,7 @@ function uniform(dir: number, speed: number): WindField {
 
 // Máscara sin tierra.
 function noLand(): Landmask {
-  return { width: 3600, height: 1800, isLand: () => false, isLandWithMargin: () => false };
+  return { width: 3600, height: 1800, isLand: () => false, isLandWithMargin: () => false, coastDistanceNm: () => 999 };
 }
 
 // Máscara con un bloque de tierra (grados) y margen.
@@ -42,6 +43,12 @@ function blockLand(w: number, s: number, e: number, n: number): Landmask {
     isLandWithMargin: (lat, lon, nm) => {
       const m = nm / 60;
       return inside(lat, lon) || inside(lat, lon + m) || inside(lat, lon - m) || inside(lat + m, lon) || inside(lat - m, lon);
+    },
+    // Distancia aproximada a la caja en nm (0 adentro): alcanza para el sesgo.
+    coastDistanceNm: (lat, lon) => {
+      const dx = lon < w ? w - lon : lon > e ? lon - e : 0;
+      const dy = lat < s ? s - lat : lat > n ? lat - n : 0;
+      return Math.hypot(dx, dy) * 60;
     },
   };
 }
@@ -640,4 +647,49 @@ test("E12.13 sin clima y sin paquete no hay estimado", () => {
   const est = estimateRouteDuration({ coords: CANARIAS_BARBADOS, clim: null, pkg: null, polar: genericPolar(), startMs: T0 });
   assert.equal(est.nm, 0);
   assert.equal(est.windSource, "clima");
+});
+
+// Preferencia costera (pedido de Diego 2026-11-10).
+
+// Costa artificial a `D` nm de todo punto (océano abierto): la penalización se
+// aplica parejo y se puede medir en el ETA sin cambiar la geometría.
+function farCoast(nm: number): Landmask {
+  return {
+    width: 3600,
+    height: 1800,
+    isLand: () => false,
+    isLandWithMargin: () => false,
+    coastDistanceNm: () => nm,
+  };
+}
+
+test("costa: la penalización sube el ETA sin romper el trazado", () => {
+  const land = farCoast(200);
+  const sin = routeOptimal(base({ land }));
+  const con = routeOptimal(base({ land, config: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 60 } }));
+  assert.equal(sin.reached, true);
+  assert.equal(con.reached, true, "sigue llegando con la costa penalizada");
+  assert.ok(con.etaMs > sin.etaMs, `el ETA crece (${sin.etaMs} → ${con.etaMs})`);
+  // Misma geometría: el sesgo es de costo, no de forma, cuando la costa es pareja.
+  const maxDev = Math.max(...con.waypoints.map((w) => distToLineNm([w.lon, w.lat], [0, 0], [0, 5])));
+  assert.ok(maxDev < 2, `no serpentina en océano parejo (${maxDev.toFixed(2)}°)`);
+});
+
+test("costa: coastPenaltyMin = 0 (por defecto) no cambia nada", () => {
+  const land = farCoast(200);
+  const sin = routeOptimal(base({ land }));
+  const con = routeOptimal(base({ land, config: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 0 } }));
+  assert.equal(con.etaMs, sin.etaMs, "sin peso costero el resultado es idéntico");
+  assert.equal(con.nm, sin.nm);
+});
+
+test("costa: COASTAL_BIAS activa el sesgo con parámetros sanos", () => {
+  assert.ok(COASTAL_BIAS.coastNearNm! > 0, "hay zona libre junto a la costa");
+  assert.ok(COASTAL_BIAS.coastFarNm! > COASTAL_BIAS.coastNearNm!, "near < far");
+  assert.ok(COASTAL_BIAS.coastPenaltyMin! > 0, "peso positivo");
+  // Con una sola isócrona de prueba alcanza para ver el costo en el ETA.
+  const land = farCoast(200);
+  const sin = routeOptimal(base({ land }));
+  const con = routeOptimal(base({ land, config: COASTAL_BIAS }));
+  assert.ok(con.etaMs > sin.etaMs, "el preset cuesta ETA a 200 nm de la costa");
 });

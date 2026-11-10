@@ -123,20 +123,24 @@ import {
   polarDePlantilla,
   validarPolar,
 } from "../core/routing/polar-templates.ts";
-import { forecastHorizon, forecastWindField, horizonNotice } from "../core/routing/windfield.ts";
+import { climateWindField, forecastHorizon, forecastWindField, horizonNotice, type WindField } from "../core/routing/windfield.ts";
 import {
+  COASTAL_WEIGHTS,
   DEFAULT_ROUTING_MODE,
   ROUTING_MODES,
   estimateRouteDuration,
   multiRouteCoords,
   multiRouteSplit,
   routingModeConfig,
+  type CoastalWeight,
   type IsoBaseline,
+  type IsoConfig,
   type IsoMultiResult,
   type IsoWorkerResponse,
   type RouteEstimate,
   type RoutingMode,
 } from "../core/routing/isochrones.ts";
+import { optTrack, simulateDays, type SimDay, type TrackPoint } from "../core/routing/sim-days.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
   DEFAULT_ALARMS,
@@ -253,6 +257,8 @@ interface Settings {
   wxLayers?: WxLayers;
   // E12.6: modo de ponderación del optimizador (Confort / Crucero / Regata).
   routingMode?: RoutingMode;
+  // Preferencia costera del optimizador: sin valor = apagada; si está, el peso.
+  coastalBias?: CoastalWeight;
   // UX-N.3: Planificar y Navegar (D3). Las alarmas de navegación solo suenan
   // en Navegar.
   uiMode?: UiMode;
@@ -870,6 +876,9 @@ async function restore(ui: UiState): Promise<void> {
     }
     if (s.routingMode && ROUTING_MODES.some((m) => m.id === s.routingMode)) {
       ui.settings.routingMode = s.routingMode;
+    }
+    if (s.coastalBias && s.coastalBias in COASTAL_WEIGHTS) {
+      ui.settings.coastalBias = s.coastalBias;
     }
     // E12.3: polar del barco persistida; si la estructura no valida, queda la
     // genérica de 40 pies y así no rompe el optimizador.
@@ -3752,6 +3761,7 @@ function openRoute(ui: UiState, code: string): void {
 
 // Cierra la ficha y limpia la selección (botón ‹ Rutas y tecla Esc).
 function closeFicha(ui: UiState): void {
+  if (optSim.ui) optSimStop();
   endOwn();
   endOwnEdit();
   ui.selected.set(null);
@@ -3985,6 +3995,15 @@ function optOwnAnchors(code: string): LonLat[] {
   return route.waypoints.filter((w) => w.mandatory).map((w) => [w.lon, w.lat] as LonLat);
 }
 
+// Config efectiva del optimizador: preset del modo + preferencia costera (si
+// está activa). Se calcula al lanzar cada trabajo, no al pintar el panel: un
+// cambio de peso se aplica re-optimizando.
+function optConfig(ui: UiState): Partial<IsoConfig> {
+  const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
+  const bias = ui.settings.coastalBias;
+  return bias ? { ...routingModeConfig(mode), ...COASTAL_WEIGHTS[bias] } : routingModeConfig(mode);
+}
+
 async function optStart(
   ui: UiState,
   code: string,
@@ -4026,7 +4045,6 @@ async function optStart(
   optJobs.set(code, job);
   optJobCode.set(id, code);
   job.workerId = id;
-  const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
   optWorkerGet(ui).postMessage({
     type: "run",
     id,
@@ -4038,7 +4056,7 @@ async function optStart(
     polar: polarActual(ui),
     landBytes: bytes,
     climateOnly: !pkg,
-    config: routingModeConfig(mode),
+    config: optConfig(ui),
   });
   optRefreshPanel(ui);
 }
@@ -4119,6 +4137,7 @@ function optRender(
   coords: LonLat[],
   names: string[],
 ): void {
+  if (optSim.ui) optSimStop();
   clear(panel);
   panel.dataset.code = code;
   const job = optJobs.get(code);
@@ -4143,6 +4162,47 @@ function optRender(
     modes.append(chip);
   }
   panel.append(modes);
+
+  // Preferencia costera: chip que la prende o apaga y, si está activa, el peso.
+  // No cambia el trazado ya calculado: se aplica en la próxima optimización.
+  const bias = ui.settings.coastalBias;
+  const coast = el("div", { class: "hn-chips hn-opt-coast" });
+  const coastToggle = el(
+    "button",
+    {
+      class: `hn-chip${bias ? " on" : ""}`,
+      type: "button",
+      title: "Prefiere los rumbos cerca de la costa; el peso se elige al lado",
+      "aria-pressed": bias ? "true" : "false",
+    },
+    "Costera",
+  );
+  coastToggle.addEventListener("click", () => {
+    ui.settings.coastalBias = bias ? undefined : "media";
+    saveSettings(ui);
+    optRefreshPanel(ui);
+  });
+  coast.append(coastToggle);
+  if (bias) {
+    for (const [id, label] of [
+      ["baja", "Baja"],
+      ["media", "Media"],
+      ["alta", "Alta"],
+    ] as const) {
+      const chip = el(
+        "button",
+        { class: `hn-chip${bias === id ? " on" : ""}`, type: "button", title: `Peso costero ${label.toLowerCase()}` },
+        label,
+      );
+      chip.addEventListener("click", () => {
+        ui.settings.coastalBias = id;
+        saveSettings(ui);
+        optRefreshPanel(ui);
+      });
+      coast.append(chip);
+    }
+  }
+  panel.append(coast);
 
   // UX-N.5b: con qué viento se calcula — el mismo paquete que se ve en la ficha.
   const pkg = ui.forecast();
@@ -4232,6 +4292,12 @@ function optRender(
       apply.addEventListener("click", () => optApply(ui, code));
       acts.append(apply);
     }
+    if (r.reached) {
+      const simBtn = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Simular día a día");
+      simBtn.title = "Recorre el trazado optimizado día por día con el viento de cada momento";
+      simBtn.addEventListener("click", () => optSimOpen(ui, panel, job));
+      acts.append(simBtn);
+    }
     const close = el("button", { class: "hn-btn hn-btn-mini hn-btn-ghost", type: "button" }, "Descartar");
     close.addEventListener("click", () => {
       optJobs.delete(code);
@@ -4275,6 +4341,180 @@ function optMount(
   optRender(ui, panel, code, kind, coords, names);
 }
 
+// ----------------------------------- simulación día a día del optimizado
+
+// A diferencia de "Recorrer" (6 kn fijos sobre la geometría), esta simulación
+// camina por el reloj del optimizador: cada día cierra donde el trazado llega a
+// las 24 h, y muestra el viento que hay ahí en ese momento. La barra vive en el
+// panel de optimización y muere con "✕ Terminar" o al repintar el panel.
+const optSim = {
+  ui: null as UiState | null,
+  days: [] as SimDay[],
+  idx: 0,
+  running: false,
+  timer: null as number | null,
+  prevPosition: null as Position | null,
+  prevGps: false,
+  prevStatus: "off" as PositionStatus,
+  row: null as HTMLElement | null,
+  playBtn: null as HTMLButtonElement | null,
+  label: null as HTMLElement | null,
+  info: null as HTMLElement | null,
+  slider: null as HTMLInputElement | null,
+};
+
+// Mismas piezas que el worker: pronóstico si lo hubo, si no climatología.
+function optSimWind(ui: UiState, job: OptJob): WindField | null {
+  const pkg = job.climateOnly ? null : ui.forecast();
+  const clim = ui.clim.get(ui.month()) ?? null;
+  if (pkg) return forecastWindField(pkg, clim);
+  return clim ? climateWindField(clim) : null;
+}
+
+function optSimOpen(ui: UiState, panel: HTMLElement, job: OptJob): void {
+  const result = job.result;
+  if (!result?.reached) return;
+  if (optSim.ui) optSimStop();
+  const track: TrackPoint[] = optTrack(result, job.startMs);
+  const days = simulateDays(track, optSimWind(ui, job));
+  if (days.length === 0) return;
+  optSim.ui = ui;
+  optSim.days = days;
+  optSim.idx = 0;
+  optSim.running = false;
+  optSim.prevPosition = ui.position();
+  optSim.prevGps = ui.gpsStop !== null;
+  optSim.prevStatus = ui.gpsStatus();
+  stopGps(ui);
+  optSimRowBuild(panel);
+  optSimApply();
+  optSimPlay();
+}
+
+function optSimRowBuild(panel: HTMLElement): void {
+  const row = el("div", { class: "hn-sim hn-sim-days" });
+  const play = el("button", { class: "hn-sim-btn", type: "button" }, "▶");
+  play.title = "Reproducir o pausar la simulación";
+  play.setAttribute("aria-label", "Reproducir");
+  const label = el("div", { class: "hn-sim-progress" }, "Día 1");
+  const stop = el("button", { class: "hn-sim-btn hn-sim-stop", type: "button" }, "✕ Terminar");
+  const slider = el("input", {
+    class: "hn-sim-days-slider",
+    type: "range",
+    min: "1",
+    max: String(optSim.days.length),
+    step: "1",
+    value: "1",
+    "aria-label": "Día de la travesía",
+  }) as HTMLInputElement;
+  const info = el("div", { class: "hn-sim-days-info" });
+  play.addEventListener("click", () => optSimToggle());
+  stop.addEventListener("click", () => optSimStop());
+  slider.addEventListener("input", () => {
+    optSimPause();
+    optSim.idx = Math.max(1, Math.min(optSim.days.length, Number(slider.value))) - 1;
+    optSimApply();
+  });
+  row.append(play, label, stop, slider, info);
+  panel.append(row);
+  optSim.row = row;
+  optSim.playBtn = play;
+  optSim.label = label;
+  optSim.info = info;
+  optSim.slider = slider;
+}
+
+function optSimApply(): void {
+  const ui = optSim.ui;
+  const d = optSim.days[optSim.idx];
+  if (!ui || !d) return;
+  const pos: Position = { lat: d.lat, lon: d.lon, accuracyM: 0, source: "simulated", t: d.tMs };
+  ui.position.set(pos);
+  setSource(ui.map, "me", featureCollection([pointFeature(d.lon, d.lat)]));
+  if (optSim.label) optSim.label.textContent = `Día ${d.day} de ${optSim.days.length}`;
+  if (optSim.info) {
+    const viento =
+      d.twsKn === null
+        ? "sin dato de viento"
+        : `viento ${POINT_CARDINALS[Math.round((d.twdDeg ?? 0) / 22.5) % 16] ?? "—"} ${spd(ui, d.twsKn, false)}`;
+    optSim.info.textContent = `${dst(ui, d.nm, false)} · ${d.sogKn.toFixed(1).replace(".", ",")} kn · rumbo ${rumboTexto(d.cogDeg)}° · ${viento}`;
+  }
+  if (optSim.slider) optSim.slider.value = String(d.day);
+}
+
+function optSimPlay(): void {
+  if (!optSim.ui || optSim.timer !== null) return;
+  if (optSim.idx >= optSim.days.length - 1) {
+    optSim.idx = 0;
+    optSimApply();
+  }
+  optSim.running = true;
+  optSimUpdatePlay();
+  optSim.timer = window.setInterval(() => {
+    if (optSim.idx >= optSim.days.length - 1) {
+      optSimPause();
+      return;
+    }
+    optSim.idx++;
+    optSimApply();
+  }, 1100);
+}
+
+function optSimPause(): void {
+  if (optSim.timer !== null) {
+    clearInterval(optSim.timer);
+    optSim.timer = null;
+  }
+  optSim.running = false;
+  optSimUpdatePlay();
+}
+
+function optSimToggle(): void {
+  if (optSim.timer !== null) optSimPause();
+  else optSimPlay();
+}
+
+function optSimUpdatePlay(): void {
+  if (!optSim.playBtn) return;
+  optSim.playBtn.textContent = optSim.running ? "⏸" : "▶";
+  optSim.playBtn.setAttribute("aria-label", optSim.running ? "Pausar" : "Reproducir");
+  optSim.playBtn.className = `hn-sim-btn${optSim.running ? " hn-sim-on" : ""}`;
+}
+
+function optSimStop(): void {
+  if (optSim.timer !== null) {
+    clearInterval(optSim.timer);
+    optSim.timer = null;
+  }
+  const ui = optSim.ui;
+  const prev = optSim.prevPosition;
+  const wasGps = optSim.prevGps;
+  const prevStatus = optSim.prevStatus;
+  optSim.ui = null;
+  optSim.running = false;
+  optSim.days = [];
+  optSim.idx = 0;
+  optSim.row?.remove();
+  optSim.row = null;
+  optSim.playBtn = null;
+  optSim.label = null;
+  optSim.info = null;
+  optSim.slider = null;
+  if (!ui) return;
+  ui.position.set(null);
+  setSource(ui.map, "me", featureCollection([]));
+  if (wasGps) {
+    ui.gpsStatus.set("searching");
+    wireGpsStart();
+    return;
+  }
+  ui.gpsStatus.set(prevStatus);
+  if (prev) {
+    ui.position.set(prev);
+    setSource(ui.map, "me", featureCollection([pointFeature(prev.lon, prev.lat)]));
+  }
+}
+
 function optRefreshPanel(ui: UiState): void {
   const meta = optPanelMeta;
   const panel = optPanelEl;
@@ -4283,6 +4523,7 @@ function optRefreshPanel(ui: UiState): void {
 }
 
 function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: string): void {
+  if (optSim.ui) optSimStop();
   optPanelUnsub?.();
   optPanelUnsub = null;
   optPanelEl = null;

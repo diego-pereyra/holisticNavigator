@@ -674,6 +674,22 @@ html[data-theme="red"] {
   color: var(--hn-error);
 }
 
+/* Simulación día a día: barra dentro del panel de optimización. */
+.hn-sim-days {
+  margin-top: 8px;
+}
+.hn-sim-days-slider {
+  flex: 1 1 100%;
+  width: 100%;
+  accent-color: var(--hn-accent);
+}
+.hn-sim-days-info {
+  flex: 1 1 100%;
+  font-size: 13px;
+  color: var(--hn-text-2);
+  font-variant-numeric: tabular-nums;
+}
+
 .hn-search-row {
   display: flex;
   flex: 0 0 auto;
