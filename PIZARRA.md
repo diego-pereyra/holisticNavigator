@@ -89,22 +89,26 @@ node publicar-reels.cjs <video.mp4> <pie.txt> [cookies.json]
 
 ## Estado de la obra (la actualiza SIEMPRE el implementador)
 
-- **2026-11-10 (hoy):**
-  - Reel v4 vivo: https://www.instagram.com/reel/DfkOP2RvEGs/ (tema día, 9:16).
-    Cron cada 4h saca métricas; VEREDICTO.md a las 48h (~2026-11-11 17:00).
-    Plan B si <1000 vistas: post imagen Ko-fi (ver sponsors/IG/plan-proximos-meses.md).
-  - **En curso: GitHub Actions re-grabando los 3 reels a 432×768** (optimizar
-    con punto costero S-Paulo, rutas del libro, recomendaciones). Van a parar
-    a la release demo-latest. Al terminar: bajarlos, escalar a 1080×1920 en
-    `sponsors/IG/posteos/2026-11-10-reels/`, y que **Sponsor Gestor** publique
-    los 3 con `publicar-reels.cjs` (pies ya escritos ahí).
-  - Features delegadas al arquitecto vía `queue/`: simulación en el tiempo
-    (contador de días + polares + posición del barco) y preferencia costera
-    (peso a rumbos cerca de la costa). Commits 49c6133, a4fc0ef.
-  - Después de publicar: actualizar ESTADO.md del paquete, PLAN.md con
-    permalinks, cron apuntando al reel nuevo, `Status:done` y push.
+- **2026-11-10 (cierre del día):**
+  - **3 reels NUEVOS publicados y verificados en el perfil:**
+    - Optimizar (punto costero, tema día): https://www.instagram.com/reel/DfkrA1vNVUc/
+    - Rutas del libro (Cornell): https://www.instagram.com/reel/DfkpIhLMJ13/
+    - Recomendaciones (Consejo): https://www.instagram.com/reel/DfkreczMWNq/
+    - Pipeline usado: casos.json (432×768) → GitHub Actions `demo` → release
+      demo-latest → ffmpeg 1080×1920 → Demo Eval (frames) → sponsor-gestor
+      publica con `publicar-reels.cjs` → yo verifico con `verificar-reels.cjs`.
+  - **LECCIÓN: la 1ª subida a veces queda en spinner "Sharing"** (a los 180s del
+    Share) y NO llega al perfil: verificar siempre con `verificar-reels.cjs` y
+    re-publicar los que falten. Hoy pasó con 07 y 10.
+  - Reel v4 `DfkOP2RvEGs` vivo hasta el VEREDICTO 48h (~2026-11-11 17:00, cron
+    cada 4h con `monitoreo-reel.cjs`); después BORRARLO (duplica al nuevo
+    optimizar). Cron sigue apuntando a v4 hasta entonces.
+  - Features delegadas al arquitecto vía `queue/` (commits 49c6133, a4fc0ef):
+    simulación en el tiempo (contador de días + polares + posición del barco) y
+    preferencia costera (peso a rumbos cerca de la costa). El hook del
+    arquitecto las toma del semáforo/queue.
 - Pendientes de Diego: deploy del worker de métricas (`npx wrangler deploy`
   en metricas/ → URL a `web/src/core/enlaces.ts:8`), Ko-fi $1 de prueba,
   tiers GitHub Sponsors, Mercado Pago UY.
-- v1/v2/v3 borrados (crop cuadrado). La receta completa con el paso Crop:
+- v1/v2/v3 borrados (crop cuadrado). Receta completa con el paso Crop:
   `sponsors/IG/CREAR-CUENTA.md`.
