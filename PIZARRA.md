@@ -106,7 +106,20 @@ node publicar-reels.cjs <video.mp4> <pie.txt> [cookies.json]
   - Features delegadas al arquitecto vía `queue/` (commits 49c6133, a4fc0ef):
     simulación en el tiempo (contador de días + polares + posición del barco) y
     preferencia costera (peso a rumbos cerca de la costa). El hook del
-    arquitecto las toma del semáforo/queue.
+    arquitecto las tomó con `Status:done` prematuro SIN implementarlas; Diego
+    ordenó "continúa con las tareas pendientes" y se implementaron a mano
+    (commit f928171):
+    - **Preferencia costera**: `landmask.coastDistanceNm()`; en `IsoConfig`
+      `coastNearNm/coastFarNm/coastPenaltyMin`; presets `COASTAL_WEIGHTS`
+      (baja 20 / media 45 / alta 90 min por paso de 3 h, libre hasta 40 nm,
+      tope a 300 nm); chip "Costera" + peso en el panel del optimizador,
+      persistido en `settings.coastalBias`.
+    - **Simulación día a día**: core puro `routing/sim-days.ts`
+      (`optTrack`, `positionAt`, `distanceBetween`, `simulateDays`) sobre los
+      `etaMs` del optimizador; botón "Simular día a día" con slider, autoplay
+      1,1 s/día, "Día X de N · nm · kn · rumbo · viento", posición simulada
+      (#FF8F00) y barco en el mapa. No confundir con "Recorrer" (6 kn fijos).
+    - 13 tests nuevos; `npm test` 257/257 y build OK.
 - Pendientes de Diego: deploy del worker de métricas (`npx wrangler deploy`
   en metricas/ → URL a `web/src/core/enlaces.ts:8`), Ko-fi $1 de prueba,
   tiers GitHub Sponsors, Mercado Pago UY.
