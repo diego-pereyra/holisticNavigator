@@ -48,3 +48,7 @@ Thumbs.db
 sponsors/IG/posteos/**/*.mp4
 sponsors/IG/posteos/**/*.jpg
 sponsors/IG/posteos/**/*.png
+
+# --- Cookies de sesión IG (nunca commitear) ---
+ig-cookies.json
+sponsors/IG/posteos/**/ig-cookies.json

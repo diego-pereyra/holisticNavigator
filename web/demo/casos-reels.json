@@ -1,5 +1,5 @@
 {
- "version": 9,
+ "version": 10,
  "viewport": {
   "width": 432,
   "height": 768
@@ -284,6 +284,114 @@
     }
    ],
    "dur_ms": 8000
+  },
+  {
+   "orden": "05",
+   "id": "ruta-del-libro",
+   "titulo": "Rutas del libro: 400 rutas de Cornell en el mapa + ficha \"Del libro\"",
+   "narracion": "Las rutas oceánicas salen de setecientas variantes del libro de Cornell, con sus consejos y referencias cartográficas. Elegimos una y la ficha nos dice cuánto tarda con el clima del mes, con qué polar y cuánto viento vamos a encontrar.",
+   "acciones": [
+    {
+     "t": "click-sel",
+     "sel": "button.hn-ctx-theme"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-tab:has-text('Rutas')"
+    },
+    {
+     "t": "wait",
+     "v": 2500
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-row"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "wheel",
+     "v": 700
+    },
+    {
+     "t": "wait",
+     "v": 3000
+    }
+   ],
+   "dur_ms": 7000
+  },
+  {
+   "orden": "10",
+   "id": "recomendaciones",
+   "titulo": "Recomendaciones: Consejo / Cómo encarar en la ficha",
+   "dur_ms": 120000,
+   "narracion": "La ficha de cada ruta trae el Consejo propio: cómo encarar la travesía según el viento, con los rumbos recomendados y la distancia. Se ve claro en tema día.",
+   "acciones": [
+    {
+     "t": "click-sel",
+     "sel": "button.hn-ctx-theme"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-tab:has-text('Rutas')"
+    },
+    {
+     "t": "wait",
+     "v": 2000
+    },
+    {
+     "t": "click-texto",
+     "v": "Una ruta del libro"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "click-texto",
+     "v": "AN12 · Falmouth → Newport"
+    },
+    {
+     "t": "wait",
+     "v": 2000
+    },
+    {
+     "t": "scroll-ruta",
+     "sel": ".hn-col-consejo",
+     "ms": 8000
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "click-texto",
+     "v": "AN14 · Lisboa → Las Palmas"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "scroll-ruta",
+     "sel": ".hn-col-consejo",
+     "ms": 8000
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    }
+   ]
   }
  ]
 }
