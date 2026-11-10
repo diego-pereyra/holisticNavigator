@@ -331,7 +331,7 @@
    "orden": "10",
    "id": "recomendaciones",
    "titulo": "Recomendaciones: Consejo / Cómo encarar en la ficha",
-   "dur_ms": 120000,
+   "dur_ms": 25000,
    "narracion": "La ficha de cada ruta trae el Consejo propio: cómo encarar la travesía según el viento, con los rumbos recomendados y la distancia. Se ve claro en tema día.",
    "acciones": [
     {
@@ -348,19 +348,11 @@
     },
     {
      "t": "wait",
-     "v": 2000
+     "v": 2500
     },
     {
-     "t": "click-texto",
-     "v": "Una ruta del libro"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-texto",
-     "v": "AN12 · Falmouth → Newport"
+     "t": "click-sel",
+     "sel": ".hn-row"
     },
     {
      "t": "wait",
@@ -368,29 +360,12 @@
     },
     {
      "t": "scroll-ruta",
-     "sel": ".hn-col-consejo",
-     "ms": 8000
+     "sel": ".hn-acc-body",
+     "ms": 9000
     },
     {
      "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-texto",
-     "v": "AN14 · Lisboa → Las Palmas"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "scroll-ruta",
-     "sel": ".hn-col-consejo",
-     "ms": 8000
-    },
-    {
-     "t": "wait",
-     "v": 1500
+     "v": 4000
     }
    ]
   }
