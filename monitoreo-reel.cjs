@@ -1,10 +1,10 @@
 const { chromium } = require('playwright');
 const fs = require('fs');
 
-const REEL_URL = 'https://www.instagram.com/holisticnavigator.app/reel/Dfin9xxPArA/';
+const REEL_URL = 'https://www.instagram.com/holisticnavigator.app/reel/DfkOP2RvEGs/';
 const PERFILES = [
-  'https://www.instagram.com/holisticnavigator.app/reel/Dfin9xxPArA/',
-  'https://www.instagram.com/reel/Dfin9xxPArA/',
+  'https://www.instagram.com/holisticnavigator.app/reel/DfkOP2RvEGs/',
+  'https://www.instagram.com/reel/DfkOP2RvEGs/',
 ];
 const LOG = '/home/diego/workspace/holisticNavigator/sponsors/IG/posteos/2026-10-30-optimizar/metricas.jsonl';
 const VEREDICTO = '/home/diego/workspace/holisticNavigator/sponsors/IG/posteos/2026-10-30-optimizar/VEREDICTO.md';

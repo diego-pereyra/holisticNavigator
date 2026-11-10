@@ -116,8 +116,8 @@ Claves que hacen quefuncione (lo que fallaba antes):
    720×1280 (9:16) ✅. Sin esto, IG recortó a 720×720 cuadrado ❌.
    En Playwright el botón Next de la pantalla Crop es un DIV texto
    "Next" (no role=button): click por geometría del span más chico.
-7. Verificación: perfil → "1 post" + un `<a href=reel/Dfin9xxPArA/>`.
-   Post: https://www.instagram.com/reel/Dfin9xxPArA/
+7. Verificación: perfil → "1 post" + un `<a href=reel/DfkOP2RvEGs/>`.
+   Post: https://www.instagram.com/reel/DfkOP2RvEGs/
    Cover quedó = primer frame (no subimos portada.jpg; IG la genera sola).
 
 Precauciones:
