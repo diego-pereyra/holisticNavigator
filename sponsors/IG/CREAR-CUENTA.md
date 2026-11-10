@@ -105,8 +105,19 @@ Claves que hacen quefuncione (lo que fallaba antes):
    con el contenido de `pie.txt` (insertText preserva emojis/tildes).
 6. **Share** ("Share"/"Compartir") → dialog "Sharing" con spinner ~1 min.
    Salió un popup de confirmación que pide OK: se clickea OK si aparece.
-7. Verificación: perfil → "1 post" + un `<a href=reel/DfiJjDIMrjd/>`.
-   Post: https://www.instagram.com/reel/DfiJjDIMrjd/
+5. **Next 2**: pasa a la pantalla de pie. El campo de caption es
+   `[role=textbox][contenteditable=true]`: click + `keyboard.insertText`
+   con el contenido de `pie.txt` (insertText preserva emojis/tildes).
+5b. **⚠ CROP — EL TRAMO CRÍTICO (v1/v2 salieron cuadradas por esto):**
+   el paso "Crop" del dialog aplica **crop 1:1 por defecto**: hay que
+   abrir **"Select crop"** (svg abajo-izquierda del preview, aria-label
+   exacto `Select crop`) → menú {Original, 1:1, 9:16, 16:9} → elegir
+   **Original** (el de más arriba). Verificado: v3 con este paso salió
+   720×1280 (9:16) ✅. Sin esto, IG recortó a 720×720 cuadrado ❌.
+   En Playwright el botón Next de la pantalla Crop es un DIV texto
+   "Next" (no role=button): click por geometría del span más chico.
+7. Verificación: perfil → "1 post" + un `<a href=reel/Dfin9xxPArA/>`.
+   Post: https://www.instagram.com/reel/Dfin9xxPArA/
    Cover quedó = primer frame (no subimos portada.jpg; IG la genera sola).
 
 Precauciones:

@@ -1,10 +1,12 @@
 # ESTADO - 2026-10-30-optimizar
 
 - **Publicado:** sí
-- **Fecha publicación:** 2026-11-09
-- **Permalink:** https://www.instagram.com/reel/DfiJjDIMrjd/
-- **Formato:** reel (video 1080p, sin audio, cover = primer frame)
+- **Fecha publicación:** 2026-11-09 (v3 reemplazada — ver abajo)
+- **Permalink:** https://www.instagram.com/reel/Dfin9xxPArA/
+- **Formato:** reel 9:16 (IG lo registra 720×1280; fuente 1080×1920), video sin audio, cover = primer frame
 - **Pie:** pie.txt completo (⛵, hashtags) — verificado en el post
+- **Historial:** v1 (DfiJjDIMrjd) y v2 (DfimxJ-JZC9) **borradas**: salieron recortadas a cuadrado (IG aplica crop 1:1 por defecto en el paso "Crop" del dialog). v3 = grabado con viewport 9:16 nativo (432×768, `02-grabar.mjs`) + en el paso Crop se eligió **Select crop → Original**.
+- **Notas:** Métricas de v1/v2 sin valor (posts borrados); el cron de monitoreo apunta al permalink de v3.
 - **Plataforma:** Instagram (cuenta a cargo de Diego)
 - **Paquete listo:** sí (reel.mp4, portada.jpg, pie.txt)
 - **Vistas:** 

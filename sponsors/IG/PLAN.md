@@ -26,7 +26,7 @@
 ## Calendario
 | Fecha | Posteo | Estado | Notas |
 |---|---|---|---|
-| 2026-10-30 | 2026-10-30-optimizar (demo-07) | **PUBLICADO 2026-11-09** — reel https://www.instagram.com/reel/DfiJjDIMrjd/ | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints. Paquete en `posteos/2026-10-30-optimizar/` |
+| 2026-10-30 | 2026-10-30-optimizar (demo-07) | **PUBLICADO 2026-11-09** — reel https://www.instagram.com/reel/Dfin9xxPArA/ | Optimizar ruta Montevideo→Florianópolis, hoja colapsa, ruta completa visible, scroll waypoints. Paquete en `posteos/2026-10-30-optimizar/` |
 | TBD (solo si el reel de demo-07 no rindió) | Post de **imagen simple** con el beat del post de Ko-fi | MATERIA PRIMA lista | No es reel: imagen + pie corto. Misma imagen 2:1 de `../KOFI/post-introduccion-1200x600.png` (beat de demo-07), recomponer a 1080×1350 (4:5) o 1080×1080 sin cortar el texto del card. Ver "Plan B" abajo |
 | TBD | demo-06 (ruta propia + click derecho en mapa) | CANDIDATO PRÓXIMO | Siguiente candidato según instrucción |
 
