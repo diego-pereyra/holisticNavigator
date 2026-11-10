@@ -75,3 +75,10 @@ La llave nunca vive acá: si algún día se automatiza, el token queda fuera del
 
 ### Criterio de origen (cuándo se revisa)
 Revisar esta sección si: (a) se sostienen 2+ posteos/semana, o (b) el calendario empieza a atrasarse **por** el trabajo manual de publicar. Antes de eso, no se toca.
+
+## 2026-11-10 — 3 reels de contenido
+
+- Optimizar (punto costero, tema día): https://www.instagram.com/reel/DfkrA1vNVUc/
+- Rutas del libro (Cornell 400): https://www.instagram.com/reel/DfkpIhLMJ13/
+- Recomendaciones (Consejo): https://www.instagram.com/reel/DfkreczMWNq/
+- v4 DfkOP2RvEGs se borra tras el VEREDICTO de 48h (~2026-11-11 17:00).
