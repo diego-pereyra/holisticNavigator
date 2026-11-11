@@ -6,11 +6,13 @@ import {
   distanceBetween,
   optTrack,
   positionAt,
-  simulateDays,
+  simulateSteps,
+  timedTrack,
   trackUntil,
   type TrackPoint,
 } from "./sim-days.ts";
-import type { IsoMultiResult } from "./isochrones.ts";
+import { traverseRoute, type IsoMultiResult } from "./isochrones.ts";
+import { genericPolar } from "./polar.ts";
 
 const wind12 = () => ({ dir: 270, speed: 12 });
 
@@ -31,41 +33,62 @@ test("positionAt interpola dentro del tramo y clava los extremos", () => {
   assert.equal(positionAt(t, 9 * DAY_MS)!.lat, 2, "después del fin → destino");
 });
 
-test("simulateDays: recta de 2 días → 2 días de ~60 nm a 2,5 kn", () => {
-  const days = simulateDays(straight(), wind12);
-  assert.equal(days.length, 2);
-  const d1 = days[0]!;
-  assert.equal(d1.day, 1);
-  assert.ok(Math.abs(d1.nm - 60) < 0.5, `millas del día 1 (${d1.nm.toFixed(1)})`);
-  assert.ok(Math.abs(d1.sogKn - 2.5) < 0.05, `SOG del día 1 (${d1.sogKn.toFixed(2)})`);
-  assert.ok(Math.abs(d1.cogDeg - 0) < 0.5, `rumbo del día 1 (${d1.cogDeg.toFixed(1)})`);
-  assert.equal(d1.twsKn, 12);
-  assert.equal(d1.twdDeg, 270);
-  assert.equal(d1.partial, false);
-  assert.ok(Math.abs(d1.lat - 1) < 1e-6, "al cierre del día 1 está en lat 1");
+test("simulateSteps: recta de 2 días → 16 pasos de 3 h a 2,5 kn", () => {
+  const steps = simulateSteps(straight(), wind12);
+  assert.equal(steps.length, 16, "2 días cada 3 h");
+  const s1 = steps[0]!;
+  assert.equal(s1.index, 0);
+  assert.equal(s1.day, 1);
+  assert.ok(Math.abs(s1.nm - 7.5) < 0.1, `millas del paso 1 (${s1.nm.toFixed(2)})`);
+  assert.ok(Math.abs(s1.sogKn - 2.5) < 0.05, `SOG del paso 1 (${s1.sogKn.toFixed(2)})`);
+  assert.ok(Math.abs(s1.cogDeg - 0) < 0.5, `rumbo del paso 1 (${s1.cogDeg.toFixed(1)})`);
+  assert.equal(s1.twsKn, 12);
+  assert.equal(s1.twdDeg, 270);
+  assert.equal(s1.partial, false);
+  assert.ok(Math.abs(s1.tMs - 3 * 3600_000) < 1, "cierra a las 3 h");
+  assert.equal(steps[7]!.day, 1, "el paso 8 sigue en el día 1");
+  assert.equal(steps[8]!.day, 2, "el paso 9 ya es día 2");
+  assert.equal(steps[15]!.day, 2);
+  assert.ok(Math.abs(steps[15]!.lat - 2) < 1e-6, "llega al destino");
 });
 
-test("simulateDays: llegada a mitad de día → último día partial", () => {
+test("simulateSteps: llegada a mitad de paso → último paso partial", () => {
   const t: TrackPoint[] = [
     { lat: 0, lon: 0, tMs: 0 },
     { lat: 1, lon: 0, tMs: DAY_MS },
-    { lat: 1.5, lon: 0, tMs: 1.5 * DAY_MS },
+    { lat: 1.5, lon: 0, tMs: DAY_MS + 4 * 3600_000 },
   ];
-  const days = simulateDays(t, null);
-  assert.equal(days.length, 2);
-  assert.equal(days[0]!.partial, false);
-  assert.equal(days[1]!.partial, true);
-  assert.equal(days[1]!.twsKn, null, "sin campo de viento → null, no inventa");
+  const steps = simulateSteps(t, null);
+  assert.equal(steps.length, 10, "9 pasos de 3 h + el corte de llegada");
+  assert.equal(steps[8]!.partial, false);
+  assert.equal(steps[9]!.partial, true);
+  assert.equal(steps[9]!.twsKn, null, "sin campo de viento → null, no inventa");
 });
 
-test("simulateDays: sin viento ni movimiento → lista vacía, no revienta", () => {
-  assert.deepEqual(simulateDays([], wind12), []);
-  assert.deepEqual(simulateDays([{ lat: 0, lon: 0, tMs: 0 }], wind12), []);
+test("simulateSteps: sin viento ni movimiento → lista vacía, no revienta", () => {
+  assert.deepEqual(simulateSteps([], wind12), []);
+  assert.deepEqual(simulateSteps([{ lat: 0, lon: 0, tMs: 0 }], wind12), []);
   const same: TrackPoint[] = [
     { lat: 0, lon: 0, tMs: 0 },
     { lat: 0, lon: 0, tMs: 0 },
   ];
-  assert.deepEqual(simulateDays(same, wind12), []);
+  assert.deepEqual(simulateSteps(same, wind12), []);
+});
+
+test("timedTrack coincide con traverseRoute del optimizador", () => {
+  const coords: [number, number][] = [
+    [0, 0],
+    [0.5, 1],
+    [0.2, 2],
+  ];
+  const wind = () => ({ dir: 250, speed: 14 });
+  const polar = genericPolar();
+  const track = timedTrack(coords, 1000, wind, polar);
+  const agg = traverseRoute(coords, 1000, wind, polar);
+  assert.equal(track.length, 3);
+  assert.equal(track[0]!.tMs, 1000);
+  assert.ok(Math.abs(track[2]!.tMs - agg.etaMs) < 1, "misma ETA que el optimizador");
+  assert.ok(track[1]!.tMs > track[0]!.tMs && track[2]!.tMs > track[1]!.tMs, "tiempos crecientes");
 });
 
 test("distanceBetween suma las patas (un zigzag navega más que su cuerda)", () => {

@@ -1,5 +1,5 @@
 {
- "version": 9,
+ "version": 10,
  "viewport": {
   "width": 432,
   "height": 768
@@ -372,8 +372,8 @@
   {
    "orden": "11",
    "id": "version-costera-sim",
-   "titulo": "Versión nueva: preferir la costa y simular la travesía día a día",
-   "narracion": "Dos cosas nuevas. Una: preferir la costa. El optimizador puede abrazar el litoral con tres pesos, baja, media o alta, y elige el corredor costero cuando el viento lo permite. Dos: simular la travesía día a día. Después de optimizar, la app recorre el trazado con su reloj real: día uno, día dos, día tres, con las millas navegadas, la velocidad media y el viento que vas a tener al cierre de cada jornada. El barco se mueve sobre la carta y vos ves cómo se arma la travesía.",
+   "titulo": "Versión nueva: preferir la costa y simular la travesía cada 3 horas",
+   "narracion": "Dos cosas nuevas. Una: preferir la costa. El optimizador puede abrazar el litoral con tres pesos, baja, media o alta; en alta la costa queda a la vista. Dos: simular la travesía, ahora cada tres horas y sobre la ruta elegida. Primero ves la sugerencia del optimizador corriendo con el pronóstico: cada paso mueve el reloj y las flechitas de viento. Después la aplicás y la misma simulación recorre tu ruta, con las millas de cada tramo, la velocidad y el viento que vas a tener.",
    "acciones": [
     {
      "t": "click-sel",
@@ -603,7 +603,7 @@
     },
     {
      "t": "click-sel",
-     "sel": ".hn-opt-coast button:has-text(\"Media\")"
+     "sel": ".hn-opt-coast button:has-text(\"Alta\")"
     },
     {
      "t": "wait",
@@ -615,7 +615,7 @@
     },
     {
      "t": "esperar-texto",
-     "v": "Simular día a día",
+     "v": "Simular la sugerencia",
      "ms": 90000
     },
     {
@@ -624,20 +624,48 @@
     },
     {
      "t": "click-texto",
-     "v": "Simular día a día"
+     "v": "Simular la sugerencia"
     },
     {
      "t": "wait",
-     "v": 1500
+     "v": 2500
+    },
+    {
+     "t": "wait",
+     "v": 13000
+    },
+    {
+     "t": "click-sel",
+     "sel": "button:has-text(\"Aplicar optimización\")"
+    },
+    {
+     "t": "wait",
+     "v": 2500
     },
     {
      "t": "scroll-ruta",
-     "sel": ".hn-sim-days",
+     "sel": ".hn-own-total",
      "ms": 2500
     },
     {
      "t": "wait",
-     "v": 10000
+     "v": 1000
+    },
+    {
+     "t": "click-texto",
+     "v": "Simular travesía"
+    },
+    {
+     "t": "wait",
+     "v": 2500
+    },
+    {
+     "t": "wait",
+     "v": 13000
+    },
+    {
+     "t": "wait",
+     "v": 1500
     }
    ],
    "dur_ms": 4000

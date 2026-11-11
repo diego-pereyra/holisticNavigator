@@ -58,14 +58,11 @@ export interface IsoConfig {
   /** Viento fuerte: por encima de `heavyTwsKn`, factor `heavyPenalty` (Infinity = ninguno). */
   heavyTwsKn: number;
   heavyPenalty: number;
-  /** Preferencia costera: por debajo de esta distancia a la costa (nm) no hay
-   * penalización. 0 = preferencia desactivada. */
-  coastNearNm: number;
-  /** Preferencia costera: a esta distancia (o más) la penalización es máxima. */
-  coastFarNm: number;
-  /** Preferencia costera: penalización máxima, en minutos por paso de 3 h
-   * (se escala linealmente con Δt y con la distancia entre near y far). */
-  coastPenaltyMin: number;
+  /** Preferencia costera: distancia objetivo a la costa (nm) a la que se
+   *  arriman los puntos de paso que se insertan en cada tramo. 0 = apagada. */
+  coastTargetNm: number;
+  /** Preferencia costera: separación máxima (nm) entre esos puntos de paso. */
+  coastLegNm: number;
 }
 
 export const DEFAULT_ISO_CONFIG: IsoConfig = {
@@ -89,9 +86,8 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   beatPenaltyMin: 1,
   heavyTwsKn: Infinity,
   heavyPenalty: 1,
-  coastNearNm: 0,
-  coastFarNm: 300,
-  coastPenaltyMin: 0,
+  coastTargetNm: 0,
+  coastLegNm: 45,
 };
 
 // E12.6 — modos de ponderación del optimizador (reglas de Diego): cada uno es un
@@ -133,17 +129,19 @@ export function routingModeConfig(mode: RoutingMode): Partial<IsoConfig> {
   return (ROUTING_MODES.find((m) => m.id === mode) ?? ROUTING_MODES[1]!).config;
 }
 
-// Preferencia costera (regla de Diego): se suma al preset del modo activo y hace
-// que el trazado abrace la costa — hasta 40 nm no paga nada y desde 300 nm hacia
-// afuera paga el peso completo. Con viento parejo el optimizador elige el
-// corredor costero; con ceñida fuerte puede seguir abriéndose igual.
-// "Baja" cuesta 20 min por paso de 3 h, "Media" 45 y "Alta" 90.
+// Preferencia costera (regla de Diego): se suma al preset del modo activo y
+// hace que el trazado abrace el litoral. El optimizador calcula el trazado
+// normal y después inserta puntos de paso arrimados a la costa cada
+// `coastLegNm`; cada tramo se optimiza entre esos puntos, así la ruta queda
+// "pegada" al litoral aunque el corredor directo se abra mar adentro.
+// "Baja" corre a ~30 nm de la costa, "Media" a ~15 y "Alta" a ~8 (costa a la
+// vista). Si un tramo no se puede arrimar, se deja el trazado normal.
 export type CoastalWeight = "baja" | "media" | "alta";
 
 export const COASTAL_WEIGHTS: Record<CoastalWeight, Partial<IsoConfig>> = {
-  baja: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 20 },
-  media: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 45 },
-  alta: { coastNearNm: 40, coastFarNm: 300, coastPenaltyMin: 90 },
+  baja: { coastTargetNm: 30, coastLegNm: 70 },
+  media: { coastTargetNm: 15, coastLegNm: 45 },
+  alta: { coastTargetNm: 8, coastLegNm: 35 },
 };
 
 // Atajo histórico del peso medio (tests y llamadas directas).
@@ -312,7 +310,7 @@ function advance(lat: number, lon: number, headingDeg: number, nm: number): { la
 }
 
 // Rumbo relativo (TWA) con signo, en [-180, 180].
-function relative(heading: number, windDir: number): number {
+export function relative(heading: number, windDir: number): number {
   let a = ((heading - windDir + 540) % 360) - 180;
   if (a === -180) a = 180;
   return a;
@@ -648,6 +646,7 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     frontier = [{ lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, parent: null }];
   }
   let reachedNode: Node | null = null;
+  let reachedDist = Infinity;
   let closestNode: Node = frontier[0]!;
   let closestDist = haversineNm(frontier[0]!.lat, frontier[0]!.lon, dest.lat, dest.lon);
   let step = 0;
@@ -671,8 +670,6 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     tack: number;
     ice: number;
   }
-  let reachedCandidate: Node | null = null;
-  let reachedDist = Infinity;
   let deathPos: { lat: number; lon: number } | null = null;
   let deathDeaths: Deaths | null = null;
 
@@ -727,15 +724,6 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
       }
       const penaltyMin = maneuver === "gybe" ? cfg.gybePenaltyMin : cfg.tackPenaltyMin;
       let t = p.t + dtMs + (maneuver ? penaltyMin * 60_000 : 0);
-      // Preferencia costera: penalización proporcional a la distancia al
-      // litoral (lineal entre `coastNearNm` y `coastFarNm`), normalizada por
-      // paso de 3 h para que un Δt chico cerca de costa pague su parte justa.
-      if (cfg.coastPenaltyMin > 0) {
-        const dNm = land.coastDistanceNm(q.lat, q.lon);
-        const span = Math.max(1, cfg.coastFarNm - cfg.coastNearNm);
-        const k = Math.min(1, Math.max(0, (dNm - cfg.coastNearNm) / span));
-        if (k > 0) t += cfg.coastPenaltyMin * k * (dtH / 3) * 60_000;
-      }
       const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p, ...(isRetry ? { retry: true } : {}) };
       out.push(node);
 
@@ -745,10 +733,16 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
       // distancia real al destino para informar progreso.
       const dEnd = approach === dest ? d : haversineNm(q.lat, q.lon, approach.lat, approach.lon);
       if ((dEnd <= advanceNm * 1.2 || dEnd < 1) && reachableEnd(q.lat, q.lon, node.t)) {
-        // Con varios puntos que llegan a la vez, elige el que queda más cerca
-        // del destino (evita un último tramo torcido).
-        if (!reachedCandidate || dEnd < reachedDist - 0.05 || (Math.abs(dEnd - reachedDist) <= 0.05 && node.t < reachedCandidate.t)) {
-          reachedCandidate = node;
+        // Con varios puntos que llegan a la vez, gana el de MENOR ETA (costo
+        // real, con penalización costera); a igual ETA, el más cerca del
+        // destino. Antes ganaba el más cerca aunque fuera la rama más lenta y
+        // el sesgo costero se perdía en el último tramo.
+        if (
+          !reachedNode ||
+          node.t < reachedNode.t - 60_000 ||
+          (Math.abs(node.t - reachedNode.t) <= 60_000 && dEnd < reachedDist - 0.05)
+        ) {
+          reachedNode = node;
           reachedDist = dEnd;
         }
       }
@@ -760,10 +754,20 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     return out.length - startLen;
   };
 
-  while (step < cfg.maxSteps && frontier.length > 0 && !reachedNode) {
+  // Terminación tipo Dijkstra: no alcanza con "algún nodo llegó". Los nodos
+  // costeros avanzan con `stepCoastH` (1 h) y los oceánicos con `stepOceanH`
+  // (3 h), así que el primero en llegar por cantidad de iteraciones puede ser
+  // la rama más lenta en horas. Se sigue expandiendo mientras quede frontera
+  // con `t` menor que la mejor llegada; así gana el MENOR ETA real (con la
+  // penalización costera incluida) y no la rama de pasos más largos.
+  const frontierMinT = (nodes: Node[]): number => {
+    let m = Infinity;
+    for (const n of nodes) if (n.t < m) m = n.t;
+    return m;
+  };
+  const reachedT = (): number => (reachedNode ? reachedNode.t : Infinity);
+  while (step < cfg.maxSteps && frontier.length > 0 && frontierMinT(frontier) < reachedT()) {
     const candidates: Node[] = [];
-    reachedCandidate = null;
-    reachedDist = Infinity;
 
     for (const p of frontier) {
       const nd: Deaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
@@ -856,7 +860,6 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     });
 
     step++;
-    if (reachedCandidate) reachedNode = reachedCandidate;
     yield {
       ratio: Math.min(1, step / cfg.maxSteps),
       step,
@@ -914,6 +917,102 @@ export interface IsoMultiInput {
   config?: Partial<IsoConfig>;
 }
 
+// Preferencia costera: punto a `nm` millas y rumbo `brgDeg` desde (lat, lon).
+function destPoint(lat: number, lon: number, brgDeg: number, nm: number): LonLat {
+  const R = 3440.065;
+  const d = nm / R;
+  const br = (brgDeg * Math.PI) / 180;
+  const p1 = (lat * Math.PI) / 180;
+  const l1 = (lon * Math.PI) / 180;
+  const p2 = Math.asin(Math.sin(p1) * Math.cos(d) + Math.cos(p1) * Math.sin(d) * Math.cos(br));
+  const l2 = l1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(p1), Math.cos(d) - Math.sin(p1) * Math.sin(p2));
+  return [(((l2 * 180) / Math.PI + 540) % 360) - 180, (p2 * 180) / Math.PI];
+}
+
+// Preferencia costera: mueve `p` hacia el litoral hasta quedar a `targetNm`
+// de la costa (gradiente de la transformada de distancia, pasos de 6 nm).
+// Devuelve el punto de agua más cercano al objetivo; si no puede, el original.
+function pullToCoast(land: Landmask, p: LonLat, targetNm: number): LonLat {
+  let cur = p;
+  for (let it = 0; it < 160; it++) {
+    const d = land.coastDistanceNm(cur[1], cur[0]);
+    if (Math.abs(d - targetNm) <= 1) return cur;
+    let best = cur;
+    let bestErr = Math.abs(d - targetNm);
+    const step = d > targetNm ? 6 : -6;
+    for (let k = 0; k < 16; k++) {
+      const q = destPoint(cur[1], cur[0], k * 22.5, step);
+      if (land.isLand(q[1], q[0])) continue;
+      const err = Math.abs(land.coastDistanceNm(q[1], q[0]) - targetNm);
+      if (err < bestErr - 1e-9) {
+        bestErr = err;
+        best = q;
+      }
+    }
+    if (best === cur) return cur;
+    cur = best;
+  }
+  return cur;
+}
+
+// Preferencia costera: puntos de paso arrimados al litoral para un tramo
+// obligatorio. Usa el trazado normal como referencia y va "tirando" sus
+// waypoints hacia la costa, separados al menos `coastLegNm`.
+function coastalVias(
+  from: LonLat,
+  to: LonLat,
+  ctx: { startMs: number; wind: WindField; polar: Polar; land: Landmask; ice?: (lat: number, lon: number, tMs: number) => number | null; cfg: IsoConfig },
+): LonLat[] {
+  const { cfg, land } = ctx;
+  const base = routeOptimal({
+    from,
+    to,
+    startMs: ctx.startMs,
+    wind: ctx.wind,
+    polar: ctx.polar,
+    land,
+    ice: ctx.ice,
+    config: { ...cfg, coastTargetNm: 0 },
+  });
+  if (!base.reached) return [];
+  // La salida optimizada solo trae las esquinas: hay que muestrear el trazado
+  // (no sus waypoints) para tener puntos de control a lo largo de la costa.
+  const samples: LonLat[] = [];
+  const stepNm = Math.max(8, cfg.coastLegNm * 0.4);
+  for (let i = 0; i + 1 < base.waypoints.length; i++) {
+    const a = base.waypoints[i]!;
+    const b = base.waypoints[i + 1]!;
+    const legNm = haversineNm(a.lat, a.lon, b.lat, b.lon);
+    const n = Math.max(1, Math.ceil(legNm / stepNm));
+    for (let k = 1; k < n; k++) {
+      const f = k / n;
+      samples.push([a.lon + (b.lon - a.lon) * f, a.lat + (b.lat - a.lat) * f]);
+    }
+    samples.push([b.lon, b.lat]);
+  }
+  const vias: LonLat[] = [];
+  let last = from;
+  for (const p of samples) {
+    if (haversineNm(p[1], p[0], to[1], to[0]) < 2) continue;
+    const d = land.coastDistanceNm(p[1], p[0]);
+    if (d <= cfg.coastTargetNm * 1.4) {
+      if (haversineNm(p[1], p[0], last[1], last[0]) < cfg.coastLegNm) continue;
+      vias.push(p);
+      last = p;
+      continue;
+    }
+    if (haversineNm(p[1], p[0], last[1], last[0]) < cfg.coastLegNm * 0.6) continue;
+    const q = pullToCoast(land, p, cfg.coastTargetNm);
+    if (haversineNm(q[1], q[0], last[1], last[0]) < cfg.coastLegNm * 0.6) continue;
+    if (haversineNm(q[1], q[0], to[1], to[0]) < cfg.coastLegNm * 0.4) continue;
+    vias.push(q);
+    last = q;
+  }
+  return vias;
+}
+
+const viaKey = (lon: number, lat: number): string => `${lon.toFixed(5)},${lat.toFixed(5)}`;
+
 export function routeOptimalMulti(opts: IsoMultiInput): IsoMultiResult {
   const gen = routeOptimalMultiSteps(opts);
   let r = gen.next();
@@ -923,8 +1022,54 @@ export function routeOptimalMulti(opts: IsoMultiInput): IsoMultiResult {
 
 export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgress, IsoMultiResult, void> {
   const anchors = opts.anchors;
-  const n = Math.max(1, anchors.length - 1);
-  const segments: IsoLegSegment[] = [];
+  const cfg: IsoConfig = { ...DEFAULT_ISO_CONFIG, ...(opts.config ?? {}) };
+
+  // Preferencia costera: cada tramo obligatorio se subdivide en sub-tramos que
+  // pasan por puntos arrimados al litoral. Los puntos viajan dentro del tramo
+  // padre (`segments[i].points`) para que "Aplicar" los conserve en la ruta.
+  interface SubLeg {
+    from: LonLat;
+    to: LonLat;
+    leg: number;
+    last: boolean;
+  }
+  const subLegs: SubLeg[] = [];
+  const viaKeys = new Set<string>();
+  for (let leg = 0; leg + 1 < anchors.length; leg++) {
+    const a = anchors[leg]!;
+    const b = anchors[leg + 1]!;
+    const vias =
+      cfg.coastTargetNm > 0
+        ? coastalVias(a, b, {
+            startMs: opts.startMs,
+            wind: opts.wind,
+            polar: opts.polar,
+            land: opts.land,
+            ice: opts.ice,
+            cfg,
+          })
+        : [];
+    let prev = a;
+    for (const v of vias) {
+      if (haversineNm(prev[1], prev[0], v[1], v[0]) < 2) continue;
+      subLegs.push({ from: prev, to: v, leg, last: false });
+      viaKeys.add(viaKey(v[0], v[1]));
+      prev = v;
+    }
+    subLegs.push({ from: prev, to: b, leg, last: true });
+  }
+
+  const n = Math.max(1, subLegs.length);
+  const segments: IsoLegSegment[] = anchors.slice(0, -1).map(() => ({
+    reached: false,
+    etaMs: opts.startMs,
+    nm: 0,
+    tacks: 0,
+    gybes: 0,
+    windMax: null,
+    points: [],
+    isochrones: [],
+  }));
   const isochrones: IsochroneLine[] = [];
   let startMs = opts.startMs;
   let nm = 0;
@@ -935,10 +1080,12 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
   let windMax: number | null = null;
   let reason: string | undefined;
 
-  for (let leg = 0; leg + 1 < anchors.length; leg++) {
+  for (let i = 0; i < subLegs.length; i++) {
+    const sl = subLegs[i]!;
+    const seg = segments[sl.leg]!;
     const gen = routeOptimalSteps({
-      from: anchors[leg]!,
-      to: anchors[leg + 1]!,
+      from: sl.from,
+      to: sl.to,
       startMs,
       wind: opts.wind,
       polar: opts.polar,
@@ -949,7 +1096,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     let cur = gen.next();
     while (!cur.done) {
       yield {
-        ratio: Math.min(1, (leg + cur.value.ratio) / n),
+        ratio: Math.min(1, (i + cur.value.ratio) / n),
         step: cur.value.step,
         maxSteps: cur.value.maxSteps,
         reached: cur.value.reached,
@@ -957,21 +1104,26 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       cur = gen.next();
     }
     const r = cur.value;
-    // El primer punto es el ancla de salida; si llegó, el último también es el
-    // ancla de llegada (los aporta la UI). Sin llegar, se conserva el último.
-    const points = r.reached ? r.waypoints.slice(1, -1) : r.waypoints.slice(1);
-    segments.push({
-      reached: r.reached,
-      etaMs: r.etaMs,
-      nm: r.nm,
-      tacks: r.tacks,
-      gybes: r.gybes,
-      windMax: r.windMax,
-      points,
-      isochrones: r.isochrones,
-      ...(r.reached ? {} : { reason: r.reason }),
-    });
-    for (const iso of r.isochrones) isochrones.push(iso);
+    // El primer punto es la salida del sub-tramo. Un sub-tramo intermedio
+    // termina en un punto costero que también viaja en la lista (si no, la
+    // ruta aplicada perdería el arrimado); el último termina en el ancla.
+    const points = r.reached ? (sl.last ? r.waypoints.slice(1, -1) : r.waypoints.slice(1)) : r.waypoints.slice(1);
+    for (const p of points) {
+      const lastP = seg.points[seg.points.length - 1];
+      if (lastP && haversineNm(lastP.lat, lastP.lon, p.lat, p.lon) < 0.3) continue;
+      seg.points.push(p);
+    }
+    seg.etaMs = r.etaMs;
+    seg.nm += r.nm;
+    seg.tacks += r.tacks;
+    seg.gybes += r.gybes;
+    seg.reached = r.reached;
+    if (r.windMax !== null) seg.windMax = seg.windMax === null ? r.windMax : Math.max(seg.windMax, r.windMax);
+    if (!r.reached && !seg.reason) seg.reason = r.reason;
+    for (const iso of r.isochrones) {
+      seg.isochrones.push(iso);
+      isochrones.push(iso);
+    }
     startMs = r.etaMs;
     nm += r.nm;
     tacks += r.tacks;
@@ -981,8 +1133,11 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     if (!r.reached) {
       reached = false;
       if (!reason) reason = r.reason;
+      for (let k = sl.leg + 1; k < segments.length; k++) segments[k]!.reached = false;
+      break;
     }
   }
+  for (const sg of segments) if (!sg.reached && !sg.reason) sg.reason = reason;
 
   // E12.10 — la salida final es un solo trazado, no un tramo por tramo: tras
   // concatenar, un punto de paso solo queda donde el rumbo vira de verdad (o
@@ -997,6 +1152,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
     lat: number;
     etaMs: number;
     anchor: boolean;
+    via: boolean;
     maneuver: "tack" | "gybe" | null;
     seg: number;
   }
@@ -1007,11 +1163,20 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       lat: anchors[i]![1],
       etaMs: i === 0 ? opts.startMs : (segments[i - 1]?.etaMs ?? opts.startMs),
       anchor: true,
+      via: false,
       maneuver: null,
       seg: -1,
     });
     for (const p of segments[i]?.points ?? []) {
-      g.push({ lon: p.lon, lat: p.lat, etaMs: p.etaMs, anchor: false, maneuver: p.maneuver ?? null, seg: i });
+      g.push({
+        lon: p.lon,
+        lat: p.lat,
+        etaMs: p.etaMs,
+        anchor: false,
+        via: viaKeys.has(viaKey(p.lon, p.lat)),
+        maneuver: p.maneuver ?? null,
+        seg: i,
+      });
     }
   }
   const turnG = (a: number, b: number, c: number): number => {
@@ -1026,7 +1191,7 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       const c = kept[kept.length - 1]!;
       const b = kept[kept.length - 2]!;
       const a = kept[kept.length - 3]!;
-      if (g[b]!.anchor || g[b]!.maneuver !== null) break;
+      if (g[b]!.anchor || g[b]!.via || g[b]!.maneuver !== null) break;
       const t = turnG(a, b, c);
       // Virada chica: no cambia el rumbo del trazado. Virada mediana en pata
       // corta: se fusiona el segmento sin perder la esquina de verdad.
@@ -1034,12 +1199,12 @@ export function* routeOptimalMultiSteps(opts: IsoMultiInput): Generator<IsoProgr
       kept.splice(kept.length - 2, 1);
     }
   }
-  let stepCount = kept.filter((i) => !g[i]!.anchor && g[i]!.maneuver === null).length;
+  let stepCount = kept.filter((i) => !g[i]!.anchor && !g[i]!.via && g[i]!.maneuver === null).length;
   if (stepCount > MAX_STEP_WAYPOINTS) {
     const turns = new Map<number, number>();
     for (let k = 1; k + 1 < kept.length; k++) {
       const i = kept[k]!;
-      if (!g[i]!.anchor && g[i]!.maneuver === null) turns.set(i, turnG(kept[k - 1]!, i, kept[k + 1]!));
+      if (!g[i]!.anchor && !g[i]!.via && g[i]!.maneuver === null) turns.set(i, turnG(kept[k - 1]!, i, kept[k + 1]!));
     }
     const droppable = [...turns.keys()].sort((a, b) => turns.get(a)! - turns.get(b)!);
     const drop = new Set<number>();

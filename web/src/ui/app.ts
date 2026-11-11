@@ -140,7 +140,7 @@ import {
   type RouteEstimate,
   type RoutingMode,
 } from "../core/routing/isochrones.ts";
-import { optTrack, simulateDays, type SimDay, type TrackPoint } from "../core/routing/sim-days.ts";
+import { optTrack, simulateSteps, timedTrack, type SimStep, type TrackPoint } from "../core/routing/sim-days.ts";
 import { kinematics, type Fix, type Kinematics } from "../core/kinematics.ts";
 import {
   DEFAULT_ALARMS,
@@ -4293,9 +4293,11 @@ function optRender(
       acts.append(apply);
     }
     if (r.reached) {
-      const simBtn = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Simular día a día");
-      simBtn.title = "Recorre el trazado optimizado día por día con el viento de cada momento";
-      simBtn.addEventListener("click", () => optSimOpen(ui, panel, job));
+      const simBtn = el("button", { class: "hn-btn hn-btn-mini", type: "button" }, "Simular la sugerencia");
+      simBtn.title = "Recorre la sugerencia del optimizador cada 3 h con el viento de cada momento";
+      simBtn.addEventListener("click", () => {
+        optSimOpen(ui, panel, optTrack(job.result!, job.startMs), simWindFor(ui, !job.climateOnly), "opt");
+      });
       acts.append(simBtn);
     }
     const close = el("button", { class: "hn-btn hn-btn-mini hn-btn-ghost", type: "button" }, "Descartar");
@@ -4341,21 +4343,25 @@ function optMount(
   optRender(ui, panel, code, kind, coords, names);
 }
 
-// ----------------------------------- simulación día a día del optimizado
+// -------------------------------- simulación de la travesía (pasos de 3 h)
 
 // A diferencia de "Recorrer" (6 kn fijos sobre la geometría), esta simulación
-// camina por el reloj del optimizador: cada día cierra donde el trazado llega a
-// las 24 h, y muestra el viento que hay ahí en ese momento. La barra vive en el
-// panel de optimización y muere con "✕ Terminar" o al repintar el panel.
+// camina por el reloj del optimizador o de la ruta elegida: cada 3 h cierra
+// donde el trazado llega, y muestra el viento que hay ahí en ese momento. Si la
+// app está en Pronóstico, además mueve el deslizador de hora para que las
+// flechitas del mapa sigan el paso simulado (el pronóstico cambia).
 const optSim = {
   ui: null as UiState | null,
-  days: [] as SimDay[],
+  target: "opt" as "opt" | "ficha",
+  steps: [] as SimStep[],
   idx: 0,
   running: false,
   timer: null as number | null,
   prevPosition: null as Position | null,
   prevGps: false,
   prevStatus: "off" as PositionStatus,
+  prevHour: null as number | null,
+  prevWeather: null as WeatherMode | null,
   row: null as HTMLElement | null,
   playBtn: null as HTMLButtonElement | null,
   label: null as HTMLElement | null,
@@ -4363,35 +4369,43 @@ const optSim = {
   slider: null as HTMLInputElement | null,
 };
 
-// Mismas piezas que el worker: pronóstico si lo hubo, si no climatología.
-function optSimWind(ui: UiState, job: OptJob): WindField | null {
-  const pkg = job.climateOnly ? null : ui.forecast();
+// Viento de la simulación: el pronóstico manda mientras haya paquete; la
+// climatología del mes es el respaldo (igual que el optimizador).
+function simWindFor(ui: UiState, allowForecast = true): WindField | null {
+  const pkg = allowForecast ? ui.forecast() : null;
   const clim = ui.clim.get(ui.month()) ?? null;
   if (pkg) return forecastWindField(pkg, clim);
   return clim ? climateWindField(clim) : null;
 }
 
-function optSimOpen(ui: UiState, panel: HTMLElement, job: OptJob): void {
-  const result = job.result;
-  if (!result?.reached) return;
+function optSimOpen(
+  ui: UiState,
+  host: HTMLElement,
+  track: TrackPoint[],
+  wind: WindField | null,
+  target: "opt" | "ficha",
+): void {
   if (optSim.ui) optSimStop();
-  const track: TrackPoint[] = optTrack(result, job.startMs);
-  const days = simulateDays(track, optSimWind(ui, job));
-  if (days.length === 0) return;
+  if (track.length < 2) return;
+  const steps = simulateSteps(track, wind);
+  if (steps.length === 0) return;
   optSim.ui = ui;
-  optSim.days = days;
+  optSim.target = target;
+  optSim.steps = steps;
   optSim.idx = 0;
   optSim.running = false;
   optSim.prevPosition = ui.position();
   optSim.prevGps = ui.gpsStop !== null;
   optSim.prevStatus = ui.gpsStatus();
+  optSim.prevHour = ui.forecastHour();
+  optSim.prevWeather = ui.weather();
   stopGps(ui);
-  optSimRowBuild(panel);
+  optSimRowBuild(host);
   optSimApply();
   optSimPlay();
 }
 
-function optSimRowBuild(panel: HTMLElement): void {
+function optSimRowBuild(host: HTMLElement): void {
   const row = el("div", { class: "hn-sim hn-sim-days" });
   const play = el("button", { class: "hn-sim-btn", type: "button" }, "▶");
   play.title = "Reproducir o pausar la simulación";
@@ -4402,21 +4416,21 @@ function optSimRowBuild(panel: HTMLElement): void {
     class: "hn-sim-days-slider",
     type: "range",
     min: "1",
-    max: String(optSim.days.length),
+    max: String(optSim.steps.length),
     step: "1",
     value: "1",
-    "aria-label": "Día de la travesía",
+    "aria-label": "Paso de la travesía (cada 3 h)",
   }) as HTMLInputElement;
   const info = el("div", { class: "hn-sim-days-info" });
   play.addEventListener("click", () => optSimToggle());
   stop.addEventListener("click", () => optSimStop());
   slider.addEventListener("input", () => {
     optSimPause();
-    optSim.idx = Math.max(1, Math.min(optSim.days.length, Number(slider.value))) - 1;
+    optSim.idx = Math.max(1, Math.min(optSim.steps.length, Number(slider.value))) - 1;
     optSimApply();
   });
   row.append(play, label, stop, slider, info);
-  panel.append(row);
+  host.append(row);
   optSim.row = row;
   optSim.playBtn = play;
   optSim.label = label;
@@ -4424,40 +4438,57 @@ function optSimRowBuild(panel: HTMLElement): void {
   optSim.slider = slider;
 }
 
+// Hora local del paso, para que el reloj se lea de un vistazo.
+function clockText(tMs: number): string {
+  const d = new Date(tMs);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+function optSimSyncWx(tMs: number): void {
+  const ui = optSim.ui;
+  const pkg = ui?.forecast();
+  if (!ui || !pkg) return;
+  if (ui.weather() !== "forecast") ui.weather.set("forecast");
+  const slot = nearestSlot(pkg, tMs);
+  if (ui.forecastHour() !== slot) ui.forecastHour.set(slot);
+}
+
 function optSimApply(): void {
   const ui = optSim.ui;
-  const d = optSim.days[optSim.idx];
-  if (!ui || !d) return;
-  const pos: Position = { lat: d.lat, lon: d.lon, accuracyM: 0, source: "simulated", t: d.tMs };
+  const st = optSim.steps[optSim.idx];
+  if (!ui || !st) return;
+  const pos: Position = { lat: st.lat, lon: st.lon, accuracyM: 0, source: "simulated", t: st.tMs };
   ui.position.set(pos);
-  setSource(ui.map, "me", featureCollection([pointFeature(d.lon, d.lat)]));
-  if (optSim.label) optSim.label.textContent = `Día ${d.day} de ${optSim.days.length}`;
+  setSource(ui.map, "me", featureCollection([pointFeature(st.lon, st.lat)]));
+  optSimSyncWx(st.tMs);
+  if (optSim.label) optSim.label.textContent = `Día ${st.day} · ${clockText(st.tMs)}`;
   if (optSim.info) {
     const viento =
-      d.twsKn === null
+      st.twsKn === null
         ? "sin dato de viento"
-        : `viento ${POINT_CARDINALS[Math.round((d.twdDeg ?? 0) / 22.5) % 16] ?? "—"} ${spd(ui, d.twsKn, false)}`;
-    optSim.info.textContent = `${dst(ui, d.nm, false)} · ${d.sogKn.toFixed(1).replace(".", ",")} kn · rumbo ${rumboTexto(d.cogDeg)}° · ${viento}`;
+        : `viento ${POINT_CARDINALS[Math.round((st.twdDeg ?? 0) / 22.5) % 16] ?? "—"} ${spd(ui, st.twsKn, false)}`;
+    optSim.info.textContent = `${dst(ui, st.nm, false)} en 3 h · ${st.sogKn.toFixed(1).replace(".", ",")} kn · rumbo ${rumboTexto(st.cogDeg)}° · ${viento}`;
   }
-  if (optSim.slider) optSim.slider.value = String(d.day);
+  if (optSim.slider) optSim.slider.value = String(st.index + 1);
 }
 
 function optSimPlay(): void {
   if (!optSim.ui || optSim.timer !== null) return;
-  if (optSim.idx >= optSim.days.length - 1) {
+  if (optSim.idx >= optSim.steps.length - 1) {
     optSim.idx = 0;
     optSimApply();
   }
   optSim.running = true;
   optSimUpdatePlay();
+  // 3 h por paso: ~22 s para una travesía de 7 días con el pronóstico corriendo.
   optSim.timer = window.setInterval(() => {
-    if (optSim.idx >= optSim.days.length - 1) {
+    if (optSim.idx >= optSim.steps.length - 1) {
       optSimPause();
       return;
     }
     optSim.idx++;
     optSimApply();
-  }, 1100);
+  }, 450);
 }
 
 function optSimPause(): void {
@@ -4490,9 +4521,11 @@ function optSimStop(): void {
   const prev = optSim.prevPosition;
   const wasGps = optSim.prevGps;
   const prevStatus = optSim.prevStatus;
+  const prevHour = optSim.prevHour;
+  const prevWeather = optSim.prevWeather;
   optSim.ui = null;
   optSim.running = false;
-  optSim.days = [];
+  optSim.steps = [];
   optSim.idx = 0;
   optSim.row?.remove();
   optSim.row = null;
@@ -4500,7 +4533,11 @@ function optSimStop(): void {
   optSim.label = null;
   optSim.info = null;
   optSim.slider = null;
+  optSim.prevHour = null;
+  optSim.prevWeather = null;
   if (!ui) return;
+  if (prevWeather) ui.weather.set(prevWeather);
+  if (prevHour !== null) ui.forecastHour.set(prevHour);
   ui.position.set(null);
   setSource(ui.map, "me", featureCollection([]));
   if (wasGps) {
@@ -4543,7 +4580,19 @@ function renderFicha(ui: UiState, body: HTMLElement, code: string, chapter: stri
     body.append(head);
     const host = el("div", { class: "hn-ficha-host" });
     body.append(host);
-    renderOwnFicha(host, ownCtx(ui), own);
+    renderOwnFicha(host, ownCtx(ui), own, (acts) => {
+      const simBtn = el("button", { class: "hn-btn", type: "button" }, "Simular travesía");
+      simBtn.title = "Recorre la ruta elegida cada 3 h con el viento de cada momento";
+      simBtn.addEventListener("click", () => {
+        const cur = ownRouteById(own.id);
+        const wind = simWindFor(ui);
+        if (!cur || cur.waypoints.length < 2 || !wind) return;
+        const coords = cur.waypoints.map((w) => [w.lon, w.lat] as LonLat);
+        const track = timedTrack(coords, Date.now(), wind, polarActual(ui));
+        optSimOpen(ui, host, track, wind, "ficha");
+      });
+      acts.append(simBtn);
+    });
     // UX-N.5b: el pronóstico de esta ruta vive en su ficha (también en las propias).
     routeForecastBlock(ui, own.id, host);
     const coords = own.waypoints.map((w) => [w.lon, w.lat] as LonLat);
@@ -4612,6 +4661,18 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   const recorrer = el("button", { class: "hn-btn" }, "Recorrer");
   recorrer.addEventListener("click", () => simOpen(ui, d, head));
 
+  // Pedido de Diego 2026-11-11: la simulación también corre sobre la ruta
+  // elegida (la del libro o la propia), cada 3 h y con el pronóstico cambiando.
+  const simular = el("button", { class: "hn-btn", type: "button" }, "Simular travesía");
+  simular.title = "Recorre la ruta elegida cada 3 h con el viento de cada momento";
+  simular.addEventListener("click", () => {
+    const g = selectedGeometry(ui, d.code);
+    const wind = simWindFor(ui);
+    if (!g || g.coords.length < 2 || !wind) return;
+    const track = timedTrack(g.coords, Date.now(), wind, polarActual(ui));
+    optSimOpen(ui, head, track, wind, "ficha");
+  });
+
   // E11.5 — la ruta del libro es de solo lectura: se copia a "Mis rutas" para
   // editarla. El botón va junto a la nota de solo lectura (abajo del título).
   const copiar = el("button", { class: "hn-btn hn-btn-mini" }, "Copiar ruta");
@@ -4628,7 +4689,7 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
     enlace.textContent = "Copiado";
   });
 
-  actions.append(seguir, exportar, recorrer, enlace);
+  actions.append(seguir, exportar, recorrer, simular, enlace);
   head.append(actions);
 
   const readonly = el("div", { class: "hn-readonly" });
@@ -4655,6 +4716,8 @@ function renderFichaDetail(ui: UiState, head: HTMLElement, host: HTMLElement, d:
   // SIM: si el simulador sigue en camino de esta misma ruta, la fila de control
   // vuelve a la ficha (que se rearma al cambiar de variante).
   if (sim.ui === ui && sim.code === d.code && sim.row) head.append(sim.row);
+  // La simulación de 3 h también vuelve a la ficha si se rearma (cambio de mes).
+  if (optSim.ui === ui && optSim.target === "ficha" && optSim.row) head.append(optSim.row);
 
   // Datos en rejilla (W4.5 #2): la tira de meses va encima.
   const w = d.whenInfo;

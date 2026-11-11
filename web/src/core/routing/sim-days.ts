@@ -11,7 +11,8 @@
 // resolvió en la geometría; acá solo interpolamos en el tiempo.
 
 import { haversineNm, initialBearingDeg, type LonLat } from "../navigation.ts";
-import type { IsoMultiResult } from "./isochrones.ts";
+import { relative, type IsoMultiResult } from "./isochrones.ts";
+import { boatSpeed, type Polar } from "./polar.ts";
 import type { WindField } from "./windfield.ts";
 
 export interface TrackPoint {
@@ -20,27 +21,33 @@ export interface TrackPoint {
   tMs: number;
 }
 
-export interface SimDay {
+export interface SimStep {
+  /** Paso 0-based desde la partida. */
+  index: number;
   /** Día 1-based desde la partida. */
   day: number;
   /** Momento en que cierra el día (capado a la llegada). */
   tMs: number;
   lat: number;
   lon: number;
-  /** Millas navegadas durante el día. */
+  /** Millas navegadas durante el paso. */
   nm: number;
-  /** Velocidad media sobre el fondo del día (kn). */
+  /** Velocidad media sobre el fondo del paso (kn). */
   sogKn: number;
-  /** Rumbo medio del día (grados verdaderos, 0 = norte). */
+  /** Rumbo medio del paso (grados verdaderos, 0 = norte). */
   cogDeg: number;
-  /** Viento al cierre del día; null si el campo no tiene dato. */
+  /** Viento en ese instante; null si el campo no tiene dato. */
   twsKn: number | null;
   twdDeg: number | null;
-  /** El día quedó corto porque el barco llegó antes de las 24 h. */
+  /** El paso quedó corto porque el barco llegó antes del cierre. */
   partial: boolean;
 }
 
 export const DAY_MS = 24 * 3600_000;
+// La travesía se muestra cada 3 h (pedido de Diego 2026-11-11): alcanza para
+// ver cambiar el pronóstico sin una lista interminable de puntos.
+export const STEP_H = 3;
+export const STEP_MS = STEP_H * 3600_000;
 
 // Trazado completo del resultado multi-tramo con tiempos absolutos. Los
 // anclas intermedias ya vienen en `segments[i].etaMs` (fin del tramo i).
@@ -97,27 +104,63 @@ export function distanceBetween(track: TrackPoint[], t0: number, t1: number): nu
   return nm;
 }
 
-// Un día = bloque de 24 h desde la partida; el último se corta en la llegada.
-export function simulateDays(track: TrackPoint[], wind: WindField | null): SimDay[] {
+// Trazado con tiempos absolutos a partir de una ruta elegida (la del libro o
+// la propia): camina pata por pata con el viento del punto medio, igual que
+// `traverseRoute`, pero conservando cada waypoint con su ETA para simular.
+export function timedTrack(
+  coords: LonLat[],
+  startMs: number,
+  wind: WindField,
+  polar: Polar,
+): TrackPoint[] {
+  const pts: TrackPoint[] = [];
+  if (coords.length === 0) return pts;
+  let t = startMs;
+  pts.push({ lat: coords[0]![1], lon: coords[0]![0], tMs: t });
+  for (let i = 0; i + 1 < coords.length; i++) {
+    const [alon, alat] = coords[i]!;
+    const [blon, blat] = coords[i + 1]!;
+    const legNm = haversineNm(alat, alon, blat, blon);
+    if (legNm <= 0) continue;
+    const heading = initialBearingDeg(alat, alon, blat, blon);
+    const wp = wind((alat + blat) / 2, (alon + blon) / 2, t);
+    let speed = wp ? boatSpeed(polar, Math.abs(relative(heading, wp.dir)), wp.speed) : 0;
+    if (speed <= 0) speed = boatSpeed(polar, polar.config.deadAngle, wp?.speed ?? 0);
+    if (speed <= 0) speed = 0.1;
+    t += (legNm / speed) * 3600_000;
+    pts.push({ lat: blat, lon: blon, tMs: t });
+  }
+  return pts;
+}
+
+// Un paso = bloque de `stepH` horas desde la partida; el último se corta en la
+// llegada. Cada paso informa posición, millas, SOG, rumbo y el viento que hay
+// en ese instante, para que la UI muestre el pronóstico cambiando.
+export function simulateSteps(
+  track: TrackPoint[],
+  wind: WindField | null,
+  stepH: number = STEP_H,
+): SimStep[] {
   if (track.length < 2) return [];
+  const stepMs = Math.max(1, stepH) * 3600_000;
   const start = track[0]!.tMs;
   const end = track[track.length - 1]!.tMs;
   const total = end - start;
   if (total <= 0) return [];
-  const days: SimDay[] = [];
+  const steps: SimStep[] = [];
   let t0 = start;
-  let day = 1;
+  let index = 0;
   while (t0 < end) {
-    const plannedEnd = start + day * DAY_MS;
-    const t1 = Math.min(plannedEnd, end);
+    const t1 = Math.min(start + (index + 1) * stepMs, end);
     const a = positionAt(track, t0);
     const b = positionAt(track, t1);
     if (a && b) {
       const nm = distanceBetween(track, t0, t1);
       const hours = (t1 - t0) / 3600_000;
       const w = wind ? wind(b.lat, b.lon, t1) : null;
-      days.push({
-        day,
+      steps.push({
+        index,
+        day: 1 + Math.floor((t1 - start - 1) / DAY_MS),
         tMs: t1,
         lat: b.lat,
         lon: b.lon,
@@ -126,15 +169,15 @@ export function simulateDays(track: TrackPoint[], wind: WindField | null): SimDa
         cogDeg: nm > 0.01 ? initialBearingDeg(a.lat, a.lon, b.lat, b.lon) : 0,
         twsKn: w ? w.speed : null,
         twdDeg: w ? w.dir : null,
-        partial: t1 - t0 < DAY_MS - 60_000,
+        partial: t1 - t0 < stepMs - 60_000,
       });
     }
-    // Llegada exacta en el borde del día: no agregar un día vacío.
+    // Llegada exacta en el borde del paso: no agregar un paso vacío.
     if (t1 >= end - 60_000) break;
     t0 = t1;
-    day++;
+    index++;
   }
-  return days;
+  return steps;
 }
 
 // Coordenadas [lon, lat] del tramo ya navegado hasta `days`, para dibujar la

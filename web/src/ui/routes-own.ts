@@ -216,7 +216,12 @@ export function renderMisRutas(host: HTMLElement, ctx: OwnCtx): void {
 
 // ----------------------------------------------------------- ficha/editor
 
-export function renderOwnFicha(host: HTMLElement, ctx: OwnCtx, base: OwnRoute): void {
+export function renderOwnFicha(
+  host: HTMLElement,
+  ctx: OwnCtx,
+  base: OwnRoute,
+  extraActions?: (actions: HTMLElement) => void,
+): void {
   const editing = ownEdit();
   const r = editing && editing.id === base.id ? editing : base;
 
@@ -327,6 +332,7 @@ export function renderOwnFicha(host: HTMLElement, ctx: OwnCtx, base: OwnRoute): 
   const borrar = el("button", { class: "hn-btn", type: "button" }, "Eliminar ruta");
   borrar.addEventListener("click", () => confirmDeleteOwnRoute(ctx, r));
   actions.append(add, inv, exp, copiar, seguir, borrar);
+  extraActions?.(actions);
   host.append(actions);
 }
 
