@@ -11,7 +11,7 @@ on:
 jobs:
   demo:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 45
     permissions:
       contents: write
     steps:
@@ -19,17 +19,30 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Deps web + Playwright + ffmpeg
-        # Los mirrors de npm/apt a veces fallan de forma transitoria: reintentar
-        # sin cambiar nada (la corrida 43034118544 murió acá, no en el caso).
+      - name: Deps npm
+        # Los mirrors de npm/apt fallan de forma transitoria. Reintentos por
+        # bloque y timeout holgado: la corrida 43036826836 murió en el piso de
+        # 25 min reintentando npm+apt completos.
         run: |
           for i in 1 2 3; do
-            (cd web && npm ci && npm i --no-save playwright) \
-              && npx playwright install --with-deps chromium \
-              && sudo apt-get update -qq \
-              && sudo apt-get install -y -qq ffmpeg \
-              && exit 0
-            echo "intento $i falló; reintento en 20 s"; sleep 20
+            (cd web && npm ci) && exit 0
+            echo "npm ci intento $i falló; 15 s"; sleep 15
+          done
+          exit 1
+      - name: Deps Playwright
+        run: |
+          cd web && npm i --no-save playwright
+          cd ..
+          for i in 1 2 3; do
+            npx playwright install --with-deps chromium && exit 0
+            echo "playwright intento $i falló; 20 s"; sleep 20
+          done
+          exit 1
+      - name: Deps ffmpeg
+        run: |
+          for i in 1 2 3; do
+            (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) && exit 0
+            echo "ffmpeg intento $i falló; 20 s"; sleep 20
           done
           exit 1
       - name: Build
