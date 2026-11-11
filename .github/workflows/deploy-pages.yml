@@ -61,7 +61,13 @@ jobs:
 
       - name: Smoke test en browser real (bloquea el deploy si la app no arranca)
         run: |
-          cd web && npm i --no-save playwright && npx playwright install --with-deps chromium && cd ..
+          cd web && npm i --no-save playwright && cd ..
+          # El install con deps baja apt+navegador: hoy los mirrors se cuelgan.
+          # Reintentos con tope por intento para no comerse el job entero.
+          for i in 1 2 3; do
+            timeout 900 npx playwright install --with-deps chromium && break
+            echo "playwright intento $i falló; 20 s"; sleep 20
+          done
           mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator
           # El smoke sirve la dist con un servidor que soporta HTTP Range: las
           # teselas PMTiles se piden por rangos (206) y `python3 -m http.server`

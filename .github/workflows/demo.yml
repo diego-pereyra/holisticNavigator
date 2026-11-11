@@ -34,14 +34,14 @@ jobs:
           cd web && npm i --no-save playwright
           cd ..
           for i in 1 2 3; do
-            npx playwright install --with-deps chromium && exit 0
+            timeout 900 npx playwright install --with-deps chromium && exit 0
             echo "playwright intento $i falló; 20 s"; sleep 20
           done
           exit 1
       - name: Deps ffmpeg
         run: |
           for i in 1 2 3; do
-            (sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg) && exit 0
+            timeout 300 bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg' && exit 0
             echo "ffmpeg intento $i falló; 20 s"; sleep 20
           done
           exit 1
