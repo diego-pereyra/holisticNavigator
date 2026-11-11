@@ -4001,8 +4001,11 @@ function optOwnAnchors(code: string): LonLat[] {
 function optConfig(ui: UiState): Partial<IsoConfig> {
   const mode = ui.settings.routingMode ?? DEFAULT_ROUTING_MODE;
   const bias = ui.settings.coastalBias;
-  if (mode === "regata") return routingModeConfig(mode);
   return bias ? { ...routingModeConfig(mode), ...COASTAL_WEIGHTS[bias] } : routingModeConfig(mode);
+}
+
+function optCompareDirect(ui: UiState): boolean {
+  return (ui.settings.routingMode ?? DEFAULT_ROUTING_MODE) === "regata" && !!ui.settings.coastalBias;
 }
 
 async function optStart(
@@ -4058,6 +4061,7 @@ async function optStart(
     landBytes: bytes,
     climateOnly: !pkg,
     config: optConfig(ui),
+    compareDirect: optCompareDirect(ui),
   });
   optRefreshPanel(ui);
 }

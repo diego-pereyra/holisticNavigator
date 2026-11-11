@@ -231,6 +231,8 @@ export interface IsoWorkerRun {
   /** Sin pronóstico: solo climatología (botón "Ruta del mes"). */
   climateOnly: boolean;
   config?: Partial<IsoConfig>;
+  /** Regata + preferencia costera: corre directa y costera, se queda con la ETA más rápida. */
+  compareDirect?: boolean;
 }
 
 export type IsoWorkerRequest = IsoWorkerRun | { type: "cancel"; id: number };

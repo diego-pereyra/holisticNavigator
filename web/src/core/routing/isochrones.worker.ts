@@ -12,6 +12,8 @@ import {
   routeOptimalMultiSteps,
   traverseRoute,
   type IsoBaseline,
+  type IsoConfig,
+  type IsoMultiResult,
   type IsoWorkerRequest,
   type IsoWorkerResponse,
 } from "./isochrones.ts";
@@ -53,33 +55,56 @@ async function run(msg: Extract<IsoWorkerRequest, { type: "run" }>): Promise<voi
         }
       : undefined;
 
-    const gen = routeOptimalMultiSteps({
-      anchors: msg.anchors,
-      startMs: msg.startMs,
-      wind,
-      polar: msg.polar,
-      land,
-      ice,
-      config: msg.config,
-    });
+    const buildGen = (config: Partial<IsoConfig> | undefined) =>
+      routeOptimalMultiSteps({
+        anchors: msg.anchors,
+        startMs: msg.startMs,
+        wind,
+        polar: msg.polar,
+        land,
+        ice,
+        config,
+      });
 
-    let lastPost = 0;
-    let cur = gen.next();
-    while (!cur.done) {
-      if (cancelled) {
-        post({ type: "cancelled", id: msg.id });
-        return;
+    const runOne = async (config: Partial<IsoConfig> | undefined): Promise<IsoMultiResult | null> => {
+      const gen = buildGen(config);
+      let cur = gen.next();
+      let lastPost = 0;
+      while (!cur.done) {
+        if (cancelled) {
+          post({ type: "cancelled", id: msg.id });
+          return null;
+        }
+        const now = Date.now();
+        if (now - lastPost > 60) {
+          post({ type: "progress", id: msg.id, progress: cur.value });
+          lastPost = now;
+          await tick();
+        }
+        cur = gen.next();
       }
-      const now = Date.now();
-      if (now - lastPost > 60) {
-        post({ type: "progress", id: msg.id, progress: cur.value });
-        lastPost = now;
-        await tick();
-      }
-      cur = gen.next();
+      return cur.value;
+    };
+
+    const coastal = await runOne(msg.config);
+    if (!coastal) return;
+
+    // Regata + preferencia costera: se queda con el trazado de llegada más
+    // temprano, sea directo o arrimado a la costa.
+    let result: IsoMultiResult = coastal;
+    if (
+      msg.compareDirect &&
+      msg.config &&
+      typeof msg.config.coastTargetNm === "number" &&
+      msg.config.coastTargetNm > 0
+    ) {
+      const direct = await runOne({ ...msg.config, coastTargetNm: 0 });
+      if (!direct) return;
+      if (direct.etaMs < coastal.etaMs) result = direct;
     }
+
     const baseline: IsoBaseline = traverseRoute(msg.original, msg.startMs, wind, msg.polar);
-    post({ type: "done", id: msg.id, result: cur.value, baseline });
+    post({ type: "done", id: msg.id, result, baseline });
   } catch (err) {
     post({ type: "error", id: msg.id, message: err instanceof Error ? err.message : String(err) });
   }
