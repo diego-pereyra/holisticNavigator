@@ -1,11 +1,11 @@
 {
- "version": 8,
+ "version": 9,
  "viewport": {
   "width": 432,
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
- "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo). Versión: post-fix label del optimizador (el paquete de la vista ya no se pisa con null al elegir la ruta propia).",
+ "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo). Versión: incluye preferencia costera (chip Costera con peso) y simulación día a día del trazado optimizado.",
  "casos": [
   {
    "orden": "05",
@@ -368,6 +368,279 @@
      "v": 4000
     }
    ]
+  },
+  {
+   "orden": "11",
+   "id": "version-costera-sim",
+   "titulo": "Versión nueva: preferir la costa y simular la travesía día a día",
+   "narracion": "Dos cosas nuevas. Una: preferir la costa. El optimizador puede abrazar el litoral con tres pesos, baja, media o alta, y elige el corredor costero cuando el viento lo permite. Dos: simular la travesía día a día. Después de optimizar, la app recorre el trazado con su reloj real: día uno, día dos, día tres, con las millas navegadas, la velocidad media y el viento que vas a tener al cierre de cada jornada. El barco se mueve sobre la carta y vos ves cómo se arma la travesía.",
+   "acciones": [
+    {
+     "t": "click-sel",
+     "sel": "button.hn-ctx-theme"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-tab:has-text('Rutas')"
+    },
+    {
+     "t": "wait",
+     "v": 2200
+    },
+    {
+     "t": "click-texto",
+     "v": "+ Nueva ruta"
+    },
+    {
+     "t": "wait",
+     "v": 1000
+    },
+    {
+     "t": "tap-map",
+     "x": 0.45,
+     "y": 0.25
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "tap-map",
+     "x": 0.58,
+     "y": 0.38
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-fixband button"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "fill",
+     "label": "Latitud del waypoint 1",
+     "v": "-34.66"
+    },
+    {
+     "t": "fill",
+     "label": "Longitud del waypoint 1",
+     "v": "-54.17"
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "fill",
+     "label": "Latitud del waypoint 2",
+     "v": "-27.14"
+    },
+    {
+     "t": "fill",
+     "label": "Longitud del waypoint 2",
+     "v": "-48.55"
+    },
+    {
+     "t": "check",
+     "label": "Waypoint 1 obligatorio"
+    },
+    {
+     "t": "check",
+     "label": "Waypoint 2 obligatorio"
+    },
+    {
+     "t": "wait",
+     "v": 800
+    },
+    {
+     "t": "key",
+     "v": "Escape"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-own-row button"
+    },
+    {
+     "t": "wait",
+     "v": 2500
+    },
+    {
+     "t": "wheel",
+     "v": -400,
+     "x": 0.5,
+     "y": 0.18
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "wheel",
+     "v": -400,
+     "x": 0.5,
+     "y": 0.18
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "wheel",
+     "v": -400,
+     "x": 0.5,
+     "y": 0.18
+    },
+    {
+     "t": "wait",
+     "v": 1000
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-context button:has-text(\"≈\")"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-context button:has-text(\"≈\")"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-wx-dl"
+    },
+    {
+     "t": "esperar-paquete"
+    },
+    {
+     "t": "key",
+     "v": "Escape"
+    },
+    {
+     "t": "wait",
+     "v": 1000
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-context button:has-text(\"≈\")"
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-own-row button"
+    },
+    {
+     "t": "wait",
+     "v": 2500
+    },
+    {
+     "t": "pan",
+     "v": [
+      0.5,
+      0.22
+     ]
+    },
+    {
+     "t": "wait",
+     "v": 2000
+    },
+    {
+     "t": "wheel",
+     "v": 900,
+     "x": 0.5,
+     "y": 0.32
+    },
+    {
+     "t": "wait",
+     "v": 600
+    },
+    {
+     "t": "wheel",
+     "v": 600,
+     "x": 0.5,
+     "y": 0.32
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "wait",
+     "v": 1200
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-opt-coast button:has-text(\"Costera\")"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "click-sel",
+     "sel": ".hn-opt-coast button:has-text(\"Media\")"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "click-texto",
+     "v": "Optimizar con el viento"
+    },
+    {
+     "t": "esperar-texto",
+     "v": "Simular día a día",
+     "ms": 90000
+    },
+    {
+     "t": "wait",
+     "v": 3000
+    },
+    {
+     "t": "click-texto",
+     "v": "Simular día a día"
+    },
+    {
+     "t": "wait",
+     "v": 1500
+    },
+    {
+     "t": "scroll-ruta",
+     "sel": ".hn-sim-days",
+     "ms": 2500
+    },
+    {
+     "t": "wait",
+     "v": 10000
+    }
+   ],
+   "dur_ms": 4000
   }
  ]
 }
