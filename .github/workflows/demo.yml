@@ -30,21 +30,17 @@ jobs:
           done
           exit 1
       - name: Deps Playwright
+        # El runner ubuntu-latest ya trae Chromium y sus libs; el `--with-deps`
+        # dispara apt, que hoy se cuelga (runs 43034118544 y 43041697475).
+        # Instalar sin deps es instantáneo; si hiciera falta un binario nuevo,
+        # el timeout evita comerse el job.
         run: |
-          cd web && npm i --no-save playwright
-          cd ..
-          for i in 1 2 3; do
-            timeout 900 npx playwright install --with-deps chromium && exit 0
-            echo "playwright intento $i falló; 20 s"; sleep 20
-          done
-          exit 1
+          cd web && npm i --no-save playwright && cd ..
+          timeout 180 npx playwright install chromium || echo "chromium ya presente o sin red (sigo)"
       - name: Deps ffmpeg
         run: |
-          for i in 1 2 3; do
-            timeout 300 bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg' && exit 0
-            echo "ffmpeg intento $i falló; 20 s"; sleep 20
-          done
-          exit 1
+          command -v ffmpeg >/dev/null && exit 0
+          timeout 300 sudo apt-get install -y -qq ffmpeg
       - name: Build
         run: bash scripts/build-web.sh
       - name: Teselas de la release (para que la carta de detalle responda)
