@@ -125,3 +125,7 @@ node publicar-reels.cjs <video.mp4> <pie.txt> [cookies.json]
   tiers GitHub Sponsors, Mercado Pago UY.
 - v1/v2/v3 borrados (crop cuadrado). Receta completa con el paso Crop:
   `sponsors/IG/CREAR-CUENTA.md`.
+- 2026-11-11: el deploy de Pages de f928171/59eb58f falló en `deploy-pages`
+  (el build y el smoke test pasaron; probable choque con el run cancelado por
+  concurrencia). Se re-dispara con un push; verificar que el run quede en
+  success y que la web muestre el chip "Costera".
