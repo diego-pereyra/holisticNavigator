@@ -40,7 +40,10 @@ jobs:
       - name: Deps ffmpeg
         run: |
           command -v ffmpeg >/dev/null && exit 0
-          timeout 300 sudo apt-get install -y -qq ffmpeg
+          # Sin `apt-get update` las listas vienen vacías y el install falla
+          # (run 43050380908). Todo el bloque con tope de 7 min.
+          timeout 420 bash -c 'sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg' \
+            || echo "ffmpeg no instalado: el paso de conversión ya tolera .webm"
       - name: Build
         run: bash scripts/build-web.sh
       - name: Teselas de la release (para que la carta de detalle responda)
