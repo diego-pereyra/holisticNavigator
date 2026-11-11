@@ -129,3 +129,27 @@ node publicar-reels.cjs <video.mp4> <pie.txt> [cookies.json]
   (el build y el smoke test pasaron; probable choque con el run cancelado por
   concurrencia). Se re-dispara con un push; verificar que el run quede en
   success y que la web muestre el chip "Costera".
+
+- **2026-11-11 (corrección costera + simulación 3 h):**
+  - Diego: la ruta "costera" seguía alejándose del litoral; "alta" tiene que
+    tener la costa a la vista. Se descartó la penalización por tiempo (no
+    cambiaba la forma) y el corredor duro (táctica absurda, ETA 575 h).
+  - **Diseño final — corredor de vias:** se calcula el trazado normal, se
+    muestrea su polilínea y cada muestra lejana se "tira" al litoral con
+    `pullToCoast` (gradiente de `coastDistanceNm`); esos puntos entran como
+    anclas de sub-tramos. `IsoConfig.coastTargetNm` (0=off) + `coastLegNm`;
+    `COASTAL_WEIGHTS` baja {30,70}, media {15,45}, alta {8,35}. Los vias
+    viajan dentro de `segments[i].points` (`StepPoint.via`) y sobreviven a
+    "Aplicar". Medias medidas: La Paloma→Porto Belo alta 6 nm (máx 15),
+    Buenos Aires→Mar del Plata 6 (10), Montevideo 7 (21), Rio→Salvador 8 (28).
+  - Terminación tipo Dijkstra (`frontierMinT`) y desempate por ETA; antes
+    ganaba la rama de pasos de 3 h, no la de menor ETA.
+  - **Simulación**: ahora cada **3 h**, sobre la **ruta elegida** (botón
+    "Simular travesía" en la ficha propia y del libro) y sobre la sugerencia
+    del optimizador ("Simular la sugerencia"). Mueve el deslizador de hora del
+    pronóstico en cada paso, así las flechitas de viento cambian con la
+    simulación. `timedTrack` + `simulateSteps` en `routing/sim-days.ts`.
+  - Tests reescritos (costa con máscara sintética `westCoast`, sim de 3 h):
+    `npm test` **258/258**, build OK. Caso demo 11 actualizado (Costera Alta →
+    Simular la sugerencia → Aplicar → Simular travesía), version 10.
+  - Commit a59a879; demo run 43034118544 y Pages 43034118558 en curso.
