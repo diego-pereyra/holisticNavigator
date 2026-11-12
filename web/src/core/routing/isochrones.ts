@@ -49,6 +49,10 @@ export interface IsoConfig {
   turnTackDeg: number;
   /** E12.11 — coste de una trasluchada (maniobra en empopada), en minutos. */
   gybePenaltyMin: number;
+  /** E12.14 — ancho del beam de Pareto por clave de poda (nodos no dominados conservados). */
+  paretoBeam: number;
+  /** E12.14 — tamaño de celda del grid espacial de poda (grados). */
+  paretoCellDeg: number;
   // E12.6 — penalizaciones de los modos de enrutado (Confort/Crucero/Regata).
   // Ceñida: por debajo de `beatTwaDeg`, la velocidad se multiplica por un factor
   // que baja linealmente de 1 en `beatTwaDeg` hasta `beatPenaltyMin` en el cono
@@ -88,6 +92,8 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   heavyPenalty: 1,
   coastTargetNm: 0,
   coastLegNm: 45,
+  paretoBeam: 200,
+  paretoCellDeg: 0.25,
 };
 
 // E12.6 — modos de ponderación del optimizador (reglas de Diego): cada uno es un
@@ -283,12 +289,15 @@ export type IsoWorkerResponse =
   | { type: "cancelled"; id: number }
   | { type: "error"; id: number; message: string };
 
+type LadoAmura = "babor" | "estribor" | "ninguno";
+
 interface Node {
   lat: number;
   lon: number;
   t: number;
   heading: number;
   tacks: number;
+  ladoAmura: LadoAmura;
   parent: Node | null;
   /** E12.9 — salió de un reintento con Δt reducido (paso de tortuga). */
   retry?: boolean;
@@ -639,13 +648,14 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         t,
         heading: cur ? initialBearingDeg(cur.lat, cur.lon, p.lat, p.lon) : NaN,
         tacks: 0,
+        ladoAmura: "ninguno",
         parent: cur,
         esc: true,
       };
     }
     frontier = [cur!];
   } else {
-    frontier = [{ lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, parent: null }];
+    frontier = [{ lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, ladoAmura: "ninguno", parent: null }];
   }
   let reachedNode: Node | null = null;
   let reachedDist = Infinity;
@@ -726,7 +736,11 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
       }
       const penaltyMin = maneuver === "gybe" ? cfg.gybePenaltyMin : cfg.tackPenaltyMin;
       let t = p.t + dtMs + (maneuver ? penaltyMin * 60_000 : 0);
-      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, parent: p, ...(isRetry ? { retry: true } : {}) };
+      // E12.14 — lado de amura solo cambia con maniobra física, nunca con rolde del viento.
+      const ladoAmura: LadoAmura = maneuver
+        ? p.ladoAmura === "babor" ? "estribor" : p.ladoAmura === "estribor" ? "babor" : "ninguno"
+        : p.ladoAmura;
+      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, ladoAmura, parent: p, ...(isRetry ? { retry: true } : {}) };
       out.push(node);
 
       const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
