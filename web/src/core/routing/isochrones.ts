@@ -594,6 +594,13 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   const { wind, polar, land, ice } = opts;
   const origin = { lat: opts.from[1], lon: opts.from[0] };
   const dest = { lat: opts.to[1], lon: opts.to[0] };
+  // E12.14 — presupuesto determinista: máximo 3 × pasos esperados. Evita bucles
+  // infinitos con la espera y acota el cómputo en el navegador.
+  const distTotal = haversineNm(origin.lat, origin.lon, dest.lat, dest.lon);
+  const bsMedia = 6; // nudos, estimado para presupuesto
+  const pasosEsperados = Math.max(1, distTotal / (bsMedia * 1));
+  const maxExpansiones = Math.max(20000, Math.floor(20 * pasosEsperados));
+  let expansiones = 0;
   // E12.6/E12.7 — extremos exentos: el puerto de salida y la llegada pueden estar
   // en tierra o a <3 nm de la costa; la costa del medio sigue validada.
   const exempt: LonLat[] = [opts.from, opts.to];
@@ -782,10 +789,16 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     return m;
   };
   const reachedT = (): number => (reachedNode ? reachedNode.t : Infinity);
-  while (step < cfg.maxSteps && frontier.length > 0 && frontierMinT(frontier) < reachedT()) {
+  while (
+    step < cfg.maxSteps &&
+    frontier.length > 0 &&
+    frontierMinT(frontier) < reachedT() &&
+    expansiones < maxExpansiones
+  ) {
     const candidates: Node[] = [];
 
     for (const p of frontier) {
+      expansiones++;
       const nd: Deaths = { land: 0, wind: 0, tws: 0, tack: 0, ice: 0 };
       let dtH = nearCoast(land, p.lat, p.lon, cfg.coastDeg) ? cfg.stepCoastH : cfg.stepOceanH;
       let produced = expand(p, dtH, candidates, nd, false);
