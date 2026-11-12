@@ -93,7 +93,7 @@ export const DEFAULT_ISO_CONFIG: IsoConfig = {
   coastTargetNm: 0,
   coastLegNm: 45,
   paretoBeam: 200,
-  paretoCellDeg: 0.25,
+  paretoCellDeg: 0.5,
 };
 
 // E12.6 — modos de ponderación del optimizador (reglas de Diego): cada uno es un
@@ -303,6 +303,14 @@ interface Node {
   retry?: boolean;
   /** E12.9 — forma parte de la caminata de escape de un puerto. */
   esc?: boolean;
+  /** E12.14 — identidad de creación para desempates deterministas. */
+  id: number;
+  /** E12.14 — distancia al destino (nm), cacheada para la poda. */
+  dist: number;
+  /** E12.14 — nodo de espera (misma posición, +1 h). */
+  wait?: boolean;
+  /** E12.14 — nodo podado por dominancia; no se expande. */
+  dead?: boolean;
 }
 
 function normLon(lon: number): number {
@@ -594,13 +602,16 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   const { wind, polar, land, ice } = opts;
   const origin = { lat: opts.from[1], lon: opts.from[0] };
   const dest = { lat: opts.to[1], lon: opts.to[0] };
-  // E12.14 — presupuesto determinista: máximo 3 × pasos esperados. Evita bucles
-  // infinitos con la espera y acota el cómputo en el navegador.
+  const startMs = opts.startMs;
+  const HOUR_MS = 3_600_000;
+  // E12.14 — presupuesto determinista: máximo 20 × pasos esperados (piso 75.000).
+  // Evita bucles infinitos con la espera y acota el cómputo en el navegador.
   const distTotal = haversineNm(origin.lat, origin.lon, dest.lat, dest.lon);
   const bsMedia = 6; // nudos, estimado para presupuesto
   const pasosEsperados = Math.max(1, distTotal / (bsMedia * 1));
-  const maxExpansiones = Math.max(20000, Math.floor(20 * pasosEsperados));
+  const maxExpansiones = Math.max(75000, Math.floor(20 * pasosEsperados));
   let expansiones = 0;
+  let nextId = 0;
   // E12.6/E12.7 — extremos exentos: el puerto de salida y la llegada pueden estar
   // en tierra o a <3 nm de la costa; la costa del medio sigue validada.
   const exempt: LonLat[] = [opts.from, opts.to];
@@ -615,6 +626,13 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
   // Con un número par de rumbos el rumbo directo no cae exacto en la muestra;
   // agregarlo evita un zigzag espurio con viento uniforme.
   headings.push(directBearing);
+
+  // E12.14 — cota superior de velocidad para ordenar el frente (t + dist/BS_max).
+  let bsMax = Math.max(0.1, polar.config.motorKn);
+  for (const row of polar.table) {
+    for (const v of row) if (v > bsMax) bsMax = v;
+  }
+  bsMax *= Math.max(0.1, polar.config.factorRealismo);
 
   // E12.9 — velocidad de la maniobra de escape (salida/entrada a puerto): a
   // través con el viento que haya, nunca por debajo de la de motor.
@@ -658,11 +676,25 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         ladoAmura: "ninguno",
         parent: cur,
         esc: true,
+        id: nextId++,
+        dist: haversineNm(p.lat, p.lon, dest.lat, dest.lon),
       };
     }
     frontier = [cur!];
   } else {
-    frontier = [{ lat: origin.lat, lon: origin.lon, t: opts.startMs, heading: NaN, tacks: 0, ladoAmura: "ninguno", parent: null }];
+    frontier = [
+      {
+        lat: origin.lat,
+        lon: origin.lon,
+        t: opts.startMs,
+        heading: NaN,
+        tacks: 0,
+        ladoAmura: "ninguno",
+        parent: null,
+        id: nextId++,
+        dist: distTotal,
+      },
+    ];
   }
   let reachedNode: Node | null = null;
   let reachedDist = Infinity;
@@ -747,10 +779,20 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
       const ladoAmura: LadoAmura = maneuver
         ? p.ladoAmura === "babor" ? "estribor" : p.ladoAmura === "estribor" ? "babor" : "ninguno"
         : p.ladoAmura;
-      const node: Node = { lat: q.lat, lon: q.lon, t, heading: h, tacks, ladoAmura, parent: p, ...(isRetry ? { retry: true } : {}) };
-      out.push(node);
-
       const d = haversineNm(q.lat, q.lon, dest.lat, dest.lon);
+      const node: Node = {
+        lat: q.lat,
+        lon: q.lon,
+        t,
+        heading: h,
+        tacks,
+        ladoAmura,
+        parent: p,
+        id: nextId++,
+        dist: d,
+        ...(isRetry ? { retry: true } : {}),
+      };
+      out.push(node);
       // E12.9 — la llegada se mide contra el punto de agua del destino (si el
       // destino está bloqueado, contra `approach`); `d` sigue siendo la
       // distancia real al destino para informar progreso.
@@ -818,6 +860,25 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
         deathDeaths.tack += nd.tack;
         deathDeaths.ice += nd.ice;
       }
+      // E12.14 — espera como transición: 1 h en el lugar, sin costo de maniobra
+      // y sin tope de esperas consecutivas. Solo se genera si el pronóstico
+      // cambia: con viento constante esperar no puede mejorar la travesía.
+      const wNow = wind(p.lat, p.lon, p.t);
+      const wNext = wind(p.lat, p.lon, p.t + HOUR_MS);
+      if (wNow && wNext && (Math.abs(relative(wNext.dir, wNow.dir)) > 0.5 || Math.abs(wNext.speed - wNow.speed) > 0.1)) {
+        candidates.push({
+          lat: p.lat,
+          lon: p.lon,
+          t: p.t + HOUR_MS,
+          heading: p.heading,
+          tacks: p.tacks,
+          ladoAmura: p.ladoAmura,
+          parent: p,
+          wait: true,
+          id: nextId++,
+          dist: p.dist,
+        });
+      }
     }
 
     if (candidates.length === 0) {
@@ -832,54 +893,125 @@ export function* routeOptimalSteps(opts: IsoInput): Generator<IsoProgress, IsoRe
     deathPos = null;
     deathDeaths = null;
 
-    // Poda por sectores angulares desde el origen. E12.9 — dos reglas para no
-    // envenenar la frontera:
-    //  1. Los micro-pasos del reintento adaptativo (Δt 0,25 h) NO compiten por
-    //     ETA cruda: como su `t` es chico ganaban el sector aunque avanzaran a
-    //     paso de tortuga. Solo entran en sectores sin normales, y ahí por
-    //     PROGRESO hacia el destino.
-    //  2. Entre los normales conserva además al de mayor progreso (no dominado).
-    //     Justificación: los nodos costeros caminan con `stepCoastH` (1 h) y los
-    //     oceánicos con `stepOceanH` (3 h); un descendiente costero de la misma
-    //     edad en un sector radial tenía ~2 h menos de `t` que la rama que ya
-    //     salió a alta mar, la mataba y la frontera se reiniciaba sin avanzar
-    //     nunca (por eso un viaje Canarias→Barbados se quedaba orbitando la
-    //     isla los 700 pasos). Conservar el no dominado impide ese reinicio.
-    const sectors = Math.max(1, Math.round(360 / cfg.sectorDeg));
-    const distToDest = (n: Node): number => haversineNm(n.lat, n.lon, dest.lat, dest.lon);
-    const bySector = new Map<number, Node[]>();
-    for (const c of candidates) {
-      const brg = initialBearingDeg(origin.lat, origin.lon, c.lat, c.lon);
-      const key = Math.round(brg / cfg.sectorDeg) % sectors;
-      const list = bySector.get(key);
-      if (list) list.push(c);
-      else bySector.set(key, [c]);
-    }
-    const nextFrontier: Node[] = [];
-    for (const list of bySector.values()) {
-      const normals = list.filter((n) => n.retry !== true);
-      if (normals.length === 0) {
-        // Solo micro-pasos: por progreso, desempate por ETA.
-        let bestRetry = list[0]!;
-        for (const n of list) {
-          const nd = distToDest(n);
-          const bd = distToDest(bestRetry);
-          if (nd < bd - 0.5 || (Math.abs(nd - bd) <= 0.5 && n.t < bestRetry.t)) bestRetry = n;
+    // E12.14 — poda por grid espacial-temporal: una clave por (celda, paso de
+    // 1 h, lado de amura) conserva el frente de Pareto de (t, distancia al
+    // destino). A domina a B si no llega más tarde ni queda más lejos. Dentro de
+    // la clave se reserva un representante por cuadrante de rumbo: así la
+    // bordada que abre hacia afuera no se pierde por una rama de mejor ETA.
+    const cellDeg = Math.max(0.01, cfg.paretoCellDeg);
+    const paretoBeam = Math.max(1, cfg.paretoBeam);
+    const cuadrante = (h: number): number => {
+      if (!Number.isFinite(h)) return 0;
+      return Math.floor(((((h % 360) + 360) % 360) / 90)) % 4;
+    };
+    const score = (n: Node): number => n.t - startMs + (n.dist / bsMax) * HOUR_MS;
+    const cmp = (a: Node, b: Node): number => {
+      const sa = score(a);
+      const sb = score(b);
+      if (sa !== sb) return sa - sb;
+      if (a.t !== b.t) return a.t - b.t;
+      if (a.dist !== b.dist) return a.dist - b.dist;
+      return a.id - b.id;
+    };
+    const pareto = new Map<string, Node[]>();
+    const keyOf = (n: Node): string => {
+      const paso = Math.floor((n.t - startMs) / HOUR_MS);
+      return `${Math.floor(n.lat / cellDeg)}|${Math.floor(n.lon / cellDeg)}|${paso}|${n.ladoAmura}`;
+    };
+    const dominates = (a: Node, b: Node): boolean =>
+      a.t <= b.t && a.dist <= b.dist && (a.t < b.t || a.dist < b.dist);
+    const accept = (node: Node): boolean => {
+      const key = keyOf(node);
+      let list = pareto.get(key);
+      if (!list) {
+        list = [];
+        pareto.set(key, list);
+      }
+      for (const other of list) {
+        if (dominates(other, node)) return false;
+        if (other.t === node.t && other.dist === node.dist && other.id < node.id) return false;
+      }
+      for (let i = list.length - 1; i >= 0; i--) {
+        const other = list[i]!;
+        if (dominates(node, other) || (other.t === node.t && other.dist === node.dist)) {
+          other.dead = true;
+          list.splice(i, 1);
         }
-        nextFrontier.push(bestRetry);
-        continue;
       }
-      let bestT = normals[0]!;
-      let bestD = normals[0]!;
-      for (const n of normals) {
-        const nd = distToDest(n);
-        const td = distToDest(bestT);
-        if (n.t < bestT.t - 1 || (Math.abs(n.t - bestT.t) <= 1 && nd < td)) bestT = n;
-        const dd = distToDest(bestD);
-        if (nd < dd - 0.5 || (Math.abs(nd - dd) <= 0.5 && n.t < bestD.t)) bestD = n;
+      list.push(node);
+      if (list.length > paretoBeam) {
+        list.sort(cmp);
+        const keep: Node[] = [];
+        const seen = new Set<number>();
+        for (const n of list) {
+          const q = cuadrante(n.heading);
+          if (seen.has(q)) continue;
+          seen.add(q);
+          keep.push(n);
+          if (keep.length >= paretoBeam) break;
+        }
+        for (const n of list) {
+          if (keep.length >= paretoBeam) break;
+          if (!keep.includes(n)) keep.push(n);
+        }
+        for (const n of list) if (!keep.includes(n)) n.dead = true;
+        list.length = 0;
+        for (const n of keep) list.push(n);
       }
-      nextFrontier.push(bestT);
-      if (bestD !== bestT) nextFrontier.push(bestD);
+      return true;
+    };
+    const accepted: Node[] = [];
+    for (const c of candidates) {
+      if (c.dead === true) continue;
+      if (accept(c)) accepted.push(c);
+    }
+
+    // E12.14 — tope global del frente. Se arma una ronda por celda (y dentro de
+    // cada celda, primero un representante por cuadrante de rumbo) para no
+    // quedarse solo con las celdas de mejor score. La espera tiene su reserva
+    // aparte: no compite con las maniobras, así no se queda esperando siempre.
+    const globalCap = 160;
+    const normals = accepted.filter((n) => n.dead !== true && n.wait !== true);
+    const waits = accepted.filter((n) => n.dead !== true && n.wait === true);
+    const byCell = new Map<string, Node[]>();
+    for (const n of normals) {
+      const key = `${Math.floor(n.lat / cellDeg)}|${Math.floor(n.lon / cellDeg)}`;
+      const list = byCell.get(key);
+      if (list) list.push(n);
+      else byCell.set(key, [n]);
+    }
+    for (const list of byCell.values()) {
+      list.sort(cmp);
+      const byQuad = new Map<number, Node>();
+      for (const n of list) {
+        const q = cuadrante(n.heading);
+        if (!byQuad.has(q)) byQuad.set(q, n);
+      }
+      const reps = [...byQuad.values()].sort(cmp);
+      const rest = list.filter((n) => !reps.includes(n));
+      list.length = 0;
+      list.push(...reps, ...rest);
+    }
+    const waitReserve = waits.length > 0 ? Math.min(waits.length, Math.max(4, Math.floor(globalCap * 0.1))) : 0;
+    const normalCap = globalCap - waitReserve;
+    const cells = [...byCell.values()].sort((a, b) => cmp(a[0]!, b[0]!));
+    const nextFrontier: Node[] = [];
+    let idx = 0;
+    let added = true;
+    while (added && nextFrontier.length < normalCap) {
+      added = false;
+      for (const list of cells) {
+        const n = list[idx];
+        if (!n) continue;
+        nextFrontier.push(n);
+        added = true;
+        if (nextFrontier.length >= normalCap) break;
+      }
+      idx++;
+    }
+    if (waitReserve > 0) {
+      waits.sort(cmp);
+      for (let i = 0; i < waits.length && nextFrontier.length < globalCap; i++) nextFrontier.push(waits[i]!);
     }
     frontier = nextFrontier;
 
