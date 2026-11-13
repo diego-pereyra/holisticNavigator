@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Holistic Navigator" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>AN98 · Cristobal (Panamá) → Miami</name>
+    <desc>Ruta Cornell AN98A: paso de Barlovento, oeste de Navassa, canal Viejo. 1254 nm. Historia IG de Holistic Navigator.</desc>
+  </metadata>
+  <rte>
+    <name>AN98 · Cristobal → Miami (oeste de Cuba)</name>
+    <rtept lat="9.388333" lon="-79.918333"><name>Cristobal</name></rtept>
+    <rtept lat="9.441667" lon="-79.908333"><name>Cristobal N</name></rtept>
+    <rtept lat="9.666667" lon="-79.641667"><name>Farallones</name></rtept>
+    <rtept lat="17.266667" lon="-75.933333"><name>Jamaica SE</name></rtept>
+    <rtept lat="18.416667" lon="-75.133333"><name>Navassa W</name></rtept>
+    <rtept lat="20.166667" lon="-73.95"><name>Cuba E</name></rtept>
+    <rtept lat="20.433333" lon="-74.188333"><name>Fraile N</name></rtept>
+    <rtept lat="22.175" lon="-77.458333"><name>Old S</name></rtept>
+    <rtept lat="22.85" lon="-78.758333"><name>Old N</name></rtept>
+    <rtept lat="24.133333" lon="-79.5"><name>Santaren</name></rtept>
+    <rtept lat="25.766667" lon="-80.075"><name>Cut</name></rtept>
+    <rtept lat="25.763333" lon="-80.131667"><name>Miami</name></rtept>
+  </rte>
+</gpx>
