@@ -133,7 +133,10 @@ async function run() {
   }
   await page.mouse.click(p.x, p.y);
   await page.waitForTimeout(3000);
-  const input = page.locator('input[type="file"][accept*="image"]').first();
+  // El diálogo expone 3 inputs: jpeg simple, jpeg/png simple y el de carrusel
+  // (multiple). Para varias fotos hay que usar el multiple.
+  let input = page.locator('input[type="file"][multiple]').first();
+  if (!(await input.count())) input = page.locator('input[type="file"][accept*="image"]').first();
   await input.setInputFiles(PHOTOS);
   console.log('FOTOS SET', PHOTOS.length, PHOTOS.join(' '));
   await page.waitForTimeout(12000);
