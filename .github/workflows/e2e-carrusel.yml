@@ -1,7 +1,8 @@
 name: e2e-carrusel
-# Carrusel de Instagram: abre la app en un browser real, importa el GPX de
-# AN98A (Cristobal → Miami) y deja las cuatro placas en un artefacto. No
-# bloquea el deploy: se dispara a mano o cuando cambia el test o su GPX.
+# Carrusel de Instagram: abre la app en un browser real para cada ruta de la
+# matriz, importa su GPX (o lo genera desde el catálogo) y deja las cuatro
+# placas en un artefacto por ruta. No bloquea el deploy: se dispara a mano o
+# cuando cambia el test, el catálogo o los GPX de sponsors.
 on:
   workflow_dispatch:
   push:
@@ -9,12 +10,18 @@ on:
     paths:
       - "web/e2e/**"
       - ".github/workflows/e2e-carrusel.yml"
-      - "sponsors/IG/posteos/2026-11-11-costera/ruta-panama-miami.gpx"
+      - "web/public/catalog/facts/**"
+      - "sponsors/IG/posteos/**/ruta-*.gpx"
 
 jobs:
   carrusel:
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        # Códigos del libro con carrusel propio. Se amplía acá, a mano.
+        route: ["AN98", "AN54", "AN62", "AN73"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v5
@@ -46,11 +53,11 @@ jobs:
           mkdir -p /tmp/site && ln -s "$PWD/web/dist" /tmp/site/holisticNavigator
           python3 scripts/serve-range.py 8087 /tmp/site >/dev/null 2>&1 &
           sleep 2
-      - name: Carrusel IG (4 placas)
-        run: node web/e2e/carrusel-ig.mjs http://localhost:8087/holisticNavigator/ e2e-screenshots
+      - name: Carrusel IG ${{ matrix.route }} (4 placas)
+        run: node web/e2e/carrusel-ig.mjs http://localhost:8087/holisticNavigator/ e2e-screenshots ${{ matrix.route }}
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: carrusel-ig
+          name: carrusel-ig-${{ matrix.route }}
           path: e2e-screenshots
           if-no-files-found: warn

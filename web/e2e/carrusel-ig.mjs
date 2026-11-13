@@ -1,45 +1,151 @@
-// E2E del carrusel de Instagram: abre la app, importa el GPX de AN98A y deja
-// las cuatro placas de la historia en e2e-screenshots/ (390×844, 2×).
+// E2E del carrusel de Instagram: abre la app, importa el GPX de la ruta pedida
+// y deja las cuatro placas de la historia en el directorio de salida
+// (390×844, 2×). Sirve para cualquier ruta del libro con variante en el
+// catálogo; los textos y los waypoints salen de los facts, no del código.
 //
-// Uso: node web/e2e/carrusel-ig.mjs [url] [salida]
-// Requiere Playwright (solo en CI: `npm i --no-save playwright`). En WSL no hay
-// browser real: lo corre .github/workflows/e2e-carrusel.yml contra un build
-// servido con HTTP Range, igual que el smoke y el UAT.
+// Uso: node web/e2e/carrusel-ig.mjs [url] [salida] [codigoRuta] [variante]
+//   código   AN98 | AN54 | AN62 | AN73 | … (por defecto AN98)
+//   variante la primera del catálogo si se omite
+//
+// GPX: si existe sponsors/IG/posteos/*/ruta-<código>.gpx se usa ese archivo.
+// Si no, se genera al vuelo desde los waypoints de la variante y se deja en el
+// directorio de salida. Requiere Playwright (solo en CI: `npm i --no-save
+// playwright`). En WSL no hay browser real: lo corre
+// .github/workflows/e2e-carrusel.yml contra un build servido con HTTP Range,
+// igual que el smoke y el UAT.
 //
 // Placas:
-//   01 mejor momento del libro (marzo/abril/diciembre, ciclones junio–noviembre)
-//   02 consejo (Navassa, canal Viejo, evitar agosto–octubre)
-//   03 ruta AN98A en el mapa + tabla de waypoints
-//   04 ruta propia importada (MIA-…), optimización al viento y simulación
-import { chromium } from "playwright";
-import { existsSync, mkdirSync } from "node:fs";
+//   01 mejor momento del libro (meses y ciclones de la ruta cargada)
+//   02 consejo del libro (el tip de la ruta cargada)
+//   03 ruta de la variante en el mapa + tabla de waypoints
+//   04 ruta propia importada del GPX, optimización al viento y simulación
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { chromium } from "playwright";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
 const base = process.argv[2] ?? "http://localhost:8087/holisticNavigator/";
 const out = resolve(root, process.argv[3] ?? "e2e-screenshots");
-const gpx = join(
-  root,
-  "sponsors/IG/posteos/2026-11-11-costera/ruta-panama-miami.gpx",
-);
+const code = (process.argv[4] ?? "AN98").trim().toUpperCase();
+const variantArg = (process.argv[5] ?? "").trim();
 
-if (!existsSync(gpx)) {
-  console.error(`[carrusel] falta el GPX de AN98A: ${gpx}`);
-  process.exit(2);
+const MONTH_NAME = [
+  "enero",
+  "febrero",
+  "marzo",
+  "abril",
+  "mayo",
+  "junio",
+  "julio",
+  "agosto",
+  "septiembre",
+  "octubre",
+  "noviembre",
+  "diciembre",
+];
+
+// --- catálogo: la ruta y su variante son la fuente de nombres y textos ---
+function leerFact(codigo) {
+  const dir = join(root, "web/public/catalog/facts");
+  const capitulo = /^[A-Za-z]+/.exec(codigo)?.[0]?.toUpperCase() ?? codigo;
+  const candidatos = [
+    join(dir, `${capitulo}.jsonl`),
+    ...readdirSync(dir)
+      .filter((n) => n.endsWith(".jsonl") && n !== `${capitulo}.jsonl`)
+      .sort()
+      .map((n) => join(dir, n)),
+  ];
+  for (const archivo of candidatos) {
+    if (!existsSync(archivo)) continue;
+    for (const linea of readFileSync(archivo, "utf8").split(/\r?\n/)) {
+      if (linea.trim() === "") continue;
+      const o = JSON.parse(linea);
+      if (o.code === codigo) return o;
+    }
+  }
+  throw new Error(`no encuentro la ruta ${codigo} en web/public/catalog/facts/`);
 }
+
+const ruta = leerFact(code);
+const variantes = Array.isArray(ruta.variants) ? ruta.variants : [];
+if (variantes.length === 0) throw new Error(`la ruta ${code} no tiene variantes en el catálogo`);
+const variante = variantArg
+  ? variantes.find((v) => v.id === variantArg)
+  : variantes[0];
+if (!variante) {
+  throw new Error(
+    `la ruta ${code} no tiene la variante ${variantArg}; hay: ${variantes.map((v) => v.id).join(", ")}`,
+  );
+}
+const variantId = variante.id;
+const cuando = ruta.when ?? {};
+const bestMonths = Array.isArray(cuando.bestMonths) ? cuando.bestMonths : [];
+const bestEs = typeof cuando.bestEs === "string" ? cuando.bestEs : "";
+const stormsEs = typeof cuando.stormsEs === "string" ? cuando.stormsEs : "";
+const tip = typeof ruta.tip === "string" && ruta.tip !== "" ? ruta.tip : ruta.chapterTip ?? "";
+const mes = bestMonths[0] ?? new Date().getUTCMonth() + 1;
+const mesNombre = MONTH_NAME[mes - 1] ?? "";
+
+// --- GPX: el de sponsors si ya existe para la ruta; si no, se genera ---
+function gpxXml() {
+  const esc = (s) =>
+    String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  const nombreMeta = `${code} · ${ruta.from ?? variante.from} → ${ruta.to ?? variante.to}`;
+  const desc = `${ruta.title ?? nombreMeta}. Ruta Cornell ${variantId}: ${variante.nm ?? 0} nm. Historia IG de Holistic Navigator.`;
+  const lineas = [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<gpx version="1.1" creator="Holistic Navigator" xmlns="http://www.topografix.com/GPX/1/1">',
+    "  <metadata>",
+    `    <name>${esc(nombreMeta)}</name>`,
+    `    <desc>${esc(desc)}</desc>`,
+    "  </metadata>",
+    "  <rte>",
+    `    <name>${esc(`${code} · ${variante.from} → ${variante.to}`)}</name>`,
+  ];
+  for (const wp of variante.waypoints ?? []) {
+    lineas.push(
+      `    <rtept lat="${wp.lat}" lon="${wp.lon}"><name>${esc(wp.name)}</name></rtept>`,
+    );
+  }
+  lineas.push("  </rte>", "</gpx>", "");
+  return lineas.join("\n");
+}
+
+function buscarGpxDeLaRuta(codigo) {
+  const dir = join(root, "sponsors/IG/posteos");
+  for (const entrada of readdirSync(dir, { withFileTypes: true })) {
+    if (!entrada.isDirectory()) continue;
+    const candidato = join(dir, entrada.name, `ruta-${codigo}.gpx`);
+    if (existsSync(candidato)) return candidato;
+  }
+  return null;
+}
+
+mkdirSync(out, { recursive: true });
+let gpx = buscarGpxDeLaRuta(code);
+let gpxPropio = false;
+if (!gpx) {
+  gpx = join(out, `ruta-${code}.gpx`);
+  writeFileSync(gpx, gpxXml(), "utf8");
+  gpxPropio = true;
+}
+const gpxTexto = readFileSync(gpx, "utf8");
+const wpsGpx = (gpxTexto.match(/<(?:trkpt|rtept|wpt)\b/gi) ?? []).length;
 
 const VIEWPORT = { width: 390, height: 844 };
 const DPR = 2;
 const SHOT = {
-  momento: "carrusel-01-momento.png",
-  consejos: "carrusel-02-consejos.png",
-  ruta: "carrusel-03-ruta.png",
-  optimiza: "carrusel-04-optimiza.png",
+  momento: `carrusel-${code}-01-momento.png`,
+  consejos: `carrusel-${code}-02-consejos.png`,
+  ruta: `carrusel-${code}-03-ruta.png`,
+  optimiza: `carrusel-${code}-04-optimiza.png`,
 };
-
-mkdirSync(out, { recursive: true });
 
 const fallas = [];
 const avisos = [];
@@ -79,7 +185,7 @@ try {
 
   const debug = async (name) => {
     await page
-      .screenshot({ path: join(out, `carrusel-99-error-${name}.png`) })
+      .screenshot({ path: join(out, `carrusel-${code}-99-error-${name}.png`) })
       .catch(() => undefined);
     const text = await page
       .evaluate(() => document.body.innerText.slice(0, 700))
@@ -158,8 +264,20 @@ try {
     return head;
   };
 
-  // --- arranque: AN98 del libro (la ficha trae mejor época, ciclones y consejo) ---
-  await page.goto(new URL("?route=AN98&variant=AN98A", base).toString(), {
+  const escaparRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  // Fila de waypoint por nombre exacto (tolera el prefijo ⚑ del destino).
+  const filaWaypoint = (name) =>
+    page
+      .locator(".hn-wps .hn-wp-item")
+      .filter({
+        has: page.locator(".hn-wp-name", {
+          hasText: new RegExp(`^(?:⚑\\s*)?${escaparRegex(name)}$`),
+        }),
+      })
+      .first();
+
+  // --- arranque: la ruta del libro en la variante pedida ---
+  await page.goto(new URL(`?route=${code}&variant=${variantId}`, base).toString(), {
     waitUntil: "load",
     timeout: 30_000,
   });
@@ -170,66 +288,74 @@ try {
   await page.waitForSelector(".hn-context", { timeout: 15_000 });
   await page
     .locator(".hn-ficha-head .hn-h2")
-    .filter({ hasText: "AN98" })
+    .filter({ hasText: code })
     .waitFor({ timeout: 20_000 });
   await page.locator(".hn-facts").waitFor({ timeout: 20_000 });
-  log("ficha AN98 cargada");
+  log(`ficha ${code} cargada (variante ${variantId})`);
+  log(gpxPropio ? `GPX generado desde el catálogo: ${gpx}` : `GPX de sponsors: ${gpx}`);
 
   // El arranque por URL abre la ficha antes de que llegue la geometría: al
-  // tocar la variante se dibuja y se encuadra la ruta AN98A en el mapa.
-  await fase("encuadrar AN98A", async () => {
+  // tocar la variante se dibuja y se encuadra la ruta en el mapa.
+  await fase(`encuadrar ${variantId}`, async () => {
     await abrirAcordeon("Variantes");
-    const an98a = page.locator(".hn-variant").filter({ hasText: "AN98A" }).first();
-    await an98a.waitFor({ state: "visible", timeout: 10_000 });
-    await an98a.click();
+    const boton = page.locator(".hn-variant").filter({ hasText: variantId }).first();
+    await boton.waitFor({ state: "visible", timeout: 10_000 });
+    await boton.click();
     await page.waitForTimeout(900);
   });
 
-  // Placa 1: mejor momento. El libro dice marzo/abril/diciembre; el mes de
-  // planificación se pone en marzo para que el veredicto lo confirme.
+  // Placa 1: mejor momento de esta ruta (los meses y el veredicto vienen de
+  // los facts; el mes elegido es el primero de la mejor época del libro).
   await fase("placa 1 · mejor momento", async () => {
-    const marzo = page.locator('.hn-months .hn-month[title="marzo"]').first();
-    await scrollFichaTo(marzo, "center");
-    await marzo.click();
-    await waitText("marzo está en la mejor época");
-    await waitText("marzo a abril, diciembre");
-    await waitText("junio a noviembre");
+    const botonMes = page.locator(`.hn-months .hn-month[title="${mesNombre}"]`).first();
+    await scrollFichaTo(botonMes, "center");
+    await botonMes.click();
+    await waitText(`${mesNombre} está en la mejor época`);
+    if (bestEs) await waitText(bestEs);
+    if (stormsEs) await waitText(stormsEs);
     await setSheet("full");
     await scrollFichaTo(page.locator(".hn-months").first());
     await page.waitForTimeout(400);
     await shot(SHOT.momento);
   });
 
-  // Placa 2: el consejo del libro (viento, Navassa, canal Viejo, agosto-octubre).
+  // Placa 2: el consejo del libro para esta ruta (texto del catálogo).
   await fase("placa 2 · consejos", async () => {
     const consejo = await abrirAcordeon("Consejo");
-    await waitText("Navassa");
-    await waitText("canal Viejo");
+    if (tip) await waitText(tip);
     await scrollFichaTo(consejo);
     await page.waitForTimeout(400);
     await shot(SHOT.consejos);
   });
 
-  // Placa 3: la ruta AN98A en el mapa, con la tabla de waypoints a la vista.
+  // Placa 3: la variante en el mapa, con la tabla de waypoints a la vista.
+  // Los puntos que verificamos salen de la variante, no de AN98.
   await fase("placa 3 · ruta", async () => {
     await setSheet("half");
     await abrirAcordeon("Waypoints");
     const lista = page.locator(".hn-wps").first();
     await lista.waitFor({ state: "visible", timeout: 10_000 });
     const count = await page.locator(".hn-wps .hn-wp-item").count();
-    if (count < 12) {
-      throw new Error(`la tabla de waypoints tiene ${count} filas, esperaba al menos 12`);
+    const esperados = (variante.waypoints ?? []).length;
+    if (count < esperados) {
+      throw new Error(
+        `la tabla de waypoints tiene ${count} filas, esperaba ${esperados} de ${variantId}`,
+      );
     }
-    await waitText("Cristobal");
-    await waitText("Miami");
-    // El tramo que importa de la historia: oeste de Cuba (Cuba E → Old S/N).
-    const cuba = page
-      .locator(".hn-wps .hn-wp-item")
-      .filter({ hasText: "Cuba E" })
-      .first();
-    await scrollFichaTo(cuba, "center");
+    const waypoints = variante.waypoints ?? [];
+    const primero = waypoints[0];
+    const ultimo = waypoints[waypoints.length - 1];
+    const medio = waypoints[Math.floor((waypoints.length - 1) / 2)];
+    for (const wp of [primero, medio, ultimo]) {
+      if (wp?.name) {
+        await filaWaypoint(wp.name).waitFor({ state: "visible", timeout: 10_000 });
+      }
+    }
+    const fila = medio?.name ? filaWaypoint(medio.name) : lista;
+    await scrollFichaTo(fila, "center");
     await page.waitForTimeout(400);
-    await shot(SHOT.ruta);  });
+    await shot(SHOT.ruta);
+  });
 
   // Placa 4: importar el GPX como ruta propia (MIA-…), optimizar al viento y
   // simular el recorrido. La ruta propia abre su editor con el panel de modos.
@@ -258,8 +384,8 @@ try {
       timeout: 15_000,
     });
     await page.waitForFunction(
-      () => document.querySelectorAll(".hn-own-wp").length >= 12,
-      null,
+      (n) => document.querySelectorAll(".hn-own-wp").length >= n,
+      Math.max(2, wpsGpx),
       { timeout: 10_000 },
     );
 
@@ -340,7 +466,7 @@ try {
     console.error(`CARRUSEL FAIL · ${fallas.length} problema(s)`);
     for (const f of fallas) console.error(" - " + f);
   } else {
-    console.log(`CARRUSEL OK · 4 capturas en ${out}`);
+    console.log(`CARRUSEL OK · ${code} · 4 capturas en ${out}`);
   }
   for (const a of avisos) console.log(" [aviso] " + a);
   if (fallas.length > 0) process.exitCode = 1;
