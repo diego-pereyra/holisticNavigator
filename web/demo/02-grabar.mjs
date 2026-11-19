@@ -111,6 +111,81 @@ async function actuar(page, a) {
         await sleep(400);
         return true;
       }
+      case "check-sel": {
+        // Interruptores del mini-panel de capas (por id fijo hn-wxlay-*).
+        const loc = page.locator(a.sel).first();
+        await loc.check({ timeout: 8000 });
+        const on = await loc.isChecked();
+        if (!on) console.log(`  [aviso] ${a.sel} no quedó encendido`);
+        return on;
+      }
+      case "cerrar-acc": {
+        // El acordeón "Consejo" trae el texto del capítulo del libro (puede
+        // hablar de otra cuenca). Si está abierto, se cierra antes de grabar.
+        const head = page.locator(a.sel).first();
+        if ((await head.getAttribute("aria-expanded").catch(() => null)) === "true") {
+          await head.click({ timeout: 8000 });
+          await sleep(500);
+        }
+        const state = await head.getAttribute("aria-expanded").catch(() => null);
+        console.log(`  [acordeón] ${a.sel}: aria-expanded=${state}`);
+        return state !== "true";
+      }
+      case "poner-tiempo": {
+        // Tiempo: Apagado → Pilot chart → Pronóstico. Se chequea el título real
+        // del botón en vez de contar toques a ciegas.
+        const btn = page.locator("button.hn-ctx-wx").first();
+        for (let i = 0; i < 3; i++) {
+          const title = (await btn.getAttribute("title").catch(() => "")) ?? "";
+          if (/Pronóstico/.test(title)) return true;
+          await btn.click({ timeout: 8000 });
+          await sleep(700);
+        }
+        console.log("  [aviso] no se pudo poner Tiempo en Pronóstico");
+        return false;
+      }
+      case "verificar-viewport": {
+        // Una cosa es que el elemento exista en el DOM y otra que se VEA:
+        // medimos su boundingBox contra el viewport antes de seguir grabando.
+        const sels = Array.isArray(a.sel) ? a.sel : [a.sel];
+        const margen = a.margen ?? 2;
+        let ok = true;
+        for (const s of sels) {
+          const box = await page.locator(s).first().boundingBox().catch(() => null);
+          if (!box) {
+            console.log(`  [aviso] viewport: ${s} sin boundingBox`);
+            ok = false;
+            continue;
+          }
+          const dentro =
+            box.width > 0 &&
+            box.height > 0 &&
+            box.x >= -margen &&
+            box.y >= -margen &&
+            box.x + box.width <= vp.width + margen &&
+            box.y + box.height <= vp.height + margen;
+          console.log(
+            `  [viewport] ${s}: ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)} ${dentro ? "OK" : "FUERA"}`,
+          );
+          if (!dentro) ok = false;
+        }
+        return ok;
+      }
+      case "verificar-ausente": {
+        // Texto fuera de tema (p. ej. el consejo del capítulo): tiene que NO
+        // estar visible, aunque siga en el DOM dentro de un acordeón cerrado.
+        const visible = await page.evaluate((t) => {
+          const buscado = t.toUpperCase();
+          return [...document.querySelectorAll("body *")].some((e) => {
+            if (e.children.length || !(e.textContent || "").toUpperCase().includes(buscado)) return false;
+            const s = getComputedStyle(e);
+            const r = e.getBoundingClientRect();
+            return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
+          });
+        }, a.v);
+        if (visible) console.log(`  [aviso] "${a.v}" sigue visible en pantalla`);
+        return !visible;
+      }
       case "esperar-paquete": {
         // Descarga con pacing: tarda minutos. Esperamos la señal real (aparece
         // el deslizador) y anotamos el tramo aburrido para RECORTARLO del video
@@ -223,8 +298,12 @@ async function actuar(page, a) {
 }
 
 // Arranque de la app dentro de un contexto (estilo smoke + diagnóstico).
-async function bootCase(page, casoId, problemas) {
-  await page.goto(BASE, { waitUntil: "domcontentloaded", timeout: 60000 });
+// `caso.arranque` permite entrar directo a una ruta/variante (?route=…&variant=…)
+// para que el primer frame ya muestre la ruta y no la cuenca por defecto.
+async function bootCase(page, caso, problemas) {
+  const casoId = caso.id;
+  const destino = caso.arranque ? new URL(caso.arranque, BASE).toString() : BASE;
+  await page.goto(destino, { waitUntil: "domcontentloaded", timeout: 60000 });
   const ok = await page
     .waitForSelector(".hn-context", { state: "visible", timeout: 45000 })
     .then(() => true, () => false);
@@ -239,6 +318,14 @@ async function bootCase(page, casoId, problemas) {
     mkdirSync(OUT, { recursive: true });
     writeFileSync(join(OUT, `diagnostico-${casoId}.txt`), diag.join("\n") + "\n");
     throw new Error(`la app no monto en el caso ${casoId} — diagnostico-${casoId}.txt en el artefacto`);
+  }
+  if (caso.arranqueTexto) {
+    const listo = await page
+      .getByText(caso.arranqueTexto, { exact: false })
+      .first()
+      .waitFor({ state: "visible", timeout: 30000 })
+      .then(() => true, () => false);
+    if (!listo) console.log(`  [aviso] arranque: no apareció "${caso.arranqueTexto}"`);
   }
   await sleep(2500); // que el mapa termine de pintar
 }
@@ -264,7 +351,7 @@ for (const caso of espec.casos) {
     isMobile: true,
     deviceScaleFactor: 2, // pantalla de celular nítida
     permissions: ["geolocation"],
-    geolocation: { latitude: -34.9, longitude: -56.2, accuracy: 50 },
+    geolocation: caso.geoloc ?? { latitude: -34.9, longitude: -56.2, accuracy: 50 },
     recordVideo: { dir: OUT, size: vp },
   });
   const page = await ctx.newPage();
@@ -274,7 +361,7 @@ for (const caso of espec.casos) {
   page.on("pageerror", (e) => problemas.push("pageerror: " + String(e?.message ?? e).slice(0, 140)));
 
   try {
-    await bootCase(page, caso.id, problemas);
+    await bootCase(page, caso, problemas);
     await page.screenshot({ path: join(OUT, "shots", `${caso.id}.png`) }).catch(() => undefined);
     let fallos = 0;
     for (const a of caso.acciones) {

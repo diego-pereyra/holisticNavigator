@@ -5,7 +5,7 @@
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
- "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. El caso 11 carga la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos) y simula la travesía cada 3 h con el pronóstico.",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), enciende capas, cierra el consejo del capítulo y simula la travesía cada 3 h con el pronóstico, con la hoja arriba para que se vean todas las métricas.",
  "casos": [
   {
    "orden": "05",
@@ -369,124 +369,109 @@
     }
    ]
   },
-  {
-   "orden": "11",
-   "id": "costero-an98a",
-   "titulo": "AN98A: la costera de Cristobal a Miami, 8 correcciones y simulación cada 3 h",
-   "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Después simulamos la travesía cada tres horas con el pronóstico real: millas, velocidad, rumbo y viento de cada tramo.",
-   "acciones": [
-    {
-     "t": "click-sel",
-     "sel": "button.hn-ctx-theme"
-    },
-    {
-     "t": "wait",
-     "v": 1200
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-tab:has-text('Rutas')"
-    },
-    {
-     "t": "wait",
-     "v": 2500
-    },
-    {
-     "t": "click-sel",
-     "sel": "input.hn-search"
-    },
-    {
-     "t": "key",
-     "v": "a"
-    },
-    {
-     "t": "key",
-     "v": "n"
-    },
-    {
-     "t": "key",
-     "v": "9"
-    },
-    {
-     "t": "key",
-     "v": "8"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "esperar-texto",
-     "v": "AN98",
-     "ms": 15000
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-rutas .hn-list .hn-row:has-text('AN98')"
-    },
-    {
-     "t": "wait",
-     "v": 2500
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-variant:has-text('AN98A')"
-    },
-    {
-     "t": "wait",
-     "v": 2000
-    },
-    {
-     "t": "scroll-ruta",
-     "sel": ".hn-wps",
-     "ms": 7000
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-context button:has-text(\"≈\")"
-    },
-    {
-     "t": "wait",
-     "v": 1200
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-context button:has-text(\"≈\")"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-wx-dl"
-    },
-    {
-     "t": "esperar-paquete"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-texto",
-     "v": "Simular travesía"
-    },
-    {
-     "t": "esperar-texto",
-     "v": "Día 1",
-     "ms": 20000
-    },
-    {
-     "t": "wait",
-     "v": 12000
-    }
-   ],
-   "dur_ms": 4000
-  }
+   {
+    "orden": "11",
+    "id": "costero-an98a",
+    "titulo": "AN98A: la costera de Cristobal a Miami, 8 correcciones y simulación cada 3 h",
+    "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Después simulamos la travesía cada tres horas con el pronóstico real: millas, velocidad, rumbo y viento de cada tramo.",
+    "arranque": "?route=AN98&variant=AN98A",
+    "arranqueTexto": "AN98 · Cristobal → Miami",
+    "geoloc": { "latitude": 9.36, "longitude": -79.9, "accuracy": 50 },
+    "acciones": [
+     {
+      "t": "click-sel",
+      "sel": "button.hn-ctx-theme"
+     },
+     {
+      "t": "wait",
+      "v": 1200
+     },
+     {
+      "t": "verificar-viewport",
+      "sel": [".hn-sheet.hn-ficha-open", ".hn-ficha-head"]
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Atlántico Sur"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "AS21"
+     },
+     {
+      "t": "poner-tiempo"
+     },
+     {
+      "t": "check-sel",
+      "sel": "#hn-wxlay-waves"
+     },
+     {
+      "t": "check-sel",
+      "sel": "#hn-wxlay-isobars"
+     },
+     {
+      "t": "cerrar-acc",
+      "sel": ".hn-acc-head:has-text('Consejo')"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Escocia"
+     },
+     {
+      "t": "click-sel",
+      "sel": ".hn-wx-dl"
+     },
+     {
+      "t": "esperar-paquete"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Sin capas encendidas"
+     },
+     {
+      "t": "wait",
+      "v": 1500
+     },
+     {
+      "t": "scroll-ruta",
+      "sel": ".hn-wps",
+      "ms": 7000
+     },
+     {
+      "t": "wait",
+      "v": 1500
+     },
+     {
+      "t": "click-texto",
+      "v": "Simular travesía"
+     },
+     {
+      "t": "esperar-texto",
+      "v": "Día 1",
+      "ms": 20000
+     },
+     {
+      "t": "wait",
+      "v": 4000
+     },
+     {
+      "t": "drag",
+      "v": [0.5, 0.53, 0.5, 0.12]
+     },
+     {
+      "t": "wait",
+      "v": 1200
+     },
+     {
+      "t": "verificar-viewport",
+      "sel": [".hn-sheet-full", ".hn-sim-progress", ".hn-sim-days-info", ".hn-sim-days-slider"]
+     },
+     {
+      "t": "wait",
+      "v": 10000
+     }
+    ],
+    "dur_ms": 4000
+   }
  ]
 }
