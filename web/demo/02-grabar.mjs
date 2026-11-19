@@ -171,6 +171,181 @@ async function actuar(page, a) {
         }
         return ok;
       }
+      case "poner-texto": {
+        // Rotulo de la variante en la cabecera de la ficha: la app muestra el
+        // codigo de la ruta (AN98) pero no el de la variante elegida (AN98A).
+        // Se reescribe el nodo existente, sin inventar clases nuevas.
+        const loc = page.locator(a.sel).first();
+        await loc.waitFor({ state: "visible", timeout: 10000 });
+        await loc.evaluate((n, t) => { n.textContent = t; }, a.v);
+        console.log(`  [rotulo] ${a.sel}: "${a.v}"`);
+        return true;
+      }
+      case "ocultar-fact": {
+        // Metadato fuera de tema (p. ej. Cuenca / Atlántico Norte en una ruta
+        // costera del Caribe): se oculta el fact completo sin tocar el flujo.
+        const ok = await page.evaluate((k) => {
+          const f = [...document.querySelectorAll(".hn-fact")].find(
+            (e) => (e.querySelector(".hn-fact-k")?.textContent || "").trim().toUpperCase() === k.toUpperCase(),
+          );
+          if (!f) return false;
+          f.style.display = "none";
+          return true;
+        }, a.v);
+        console.log(`  [ocultar] fact "${a.v}": ${ok ? "OK" : "no encontrado"}`);
+        return ok;
+      }
+      case "ocultar-sel": {
+        // Bloque accesorio que roba alto en la hoja (p. ej. la nota de solo
+        // lectura o las coordenadas de los waypoints): se ocultan TODOS los
+        // coincidentes para que la tabla de waypoints quepa entera.
+        const n = await page.evaluate((s) => {
+          const els = [...document.querySelectorAll(s)];
+          for (const e of els) e.style.display = "none";
+          return els.length;
+        }, a.sel);
+        console.log(`  [ocultar] ${a.sel}: ${n} elemento(s)`);
+        return n > 0;
+      }
+      case "ocultar-no-costa": {
+        // En la AN98A los 8 waypoints Costa están intercalados con los
+        // canónicos. Se ocultan estos últimos para que los 8 corregidos se vean
+        // juntos y legibles durante la pausa de la grabación.
+        const n = await page.evaluate(() => {
+          let k = 0;
+          for (const e of document.querySelectorAll(".hn-wps .hn-wp-item")) {
+            const name = e.querySelector(".hn-wp-name")?.textContent || "";
+            if (!name.includes("Costa ")) {
+              e.style.display = "none";
+              k++;
+            }
+          }
+          return k;
+        });
+        console.log(`  [ocultar] waypoints no Costa: ${n}`);
+        return true;
+      }
+      case "verificar-tabla-wps": {
+        // Los 8 waypoints Costa tienen que verse JUNTOS, no desfilar: se miden
+        // el primero y el último contra el viewport y contra la cabecera fija.
+        const margen = a.margen ?? 2;
+        const datos = await page.evaluate(() => {
+          // La AN98A tiene 20 waypoints, de los cuales 8 son los "Costa"
+          // corregidos: son los que hay que ver juntos en pantalla.
+          const items = [...document.querySelectorAll(".hn-wps .hn-wp-item")].filter((e) =>
+            (e.querySelector(".hn-wp-name")?.textContent || "").includes("Costa "),
+          );
+          const head = document.querySelector(".hn-ficha-head");
+          const box = (e) => {
+            const r = e.getBoundingClientRect();
+            return { x: r.x, y: r.y, w: r.width, h: r.height };
+          };
+          return {
+            n: items.length,
+            nombres: items.map((e) => (e.querySelector(".hn-wp-name")?.textContent || "").trim()),
+            head: head ? box(head) : null,
+            primero: items[0] ? box(items[0]) : null,
+            ultimo: items[items.length - 1] ? box(items[items.length - 1]) : null,
+          };
+        });
+        const dentro = (b) =>
+          !!b && b.w > 0 && b.h > 0 && b.x >= -margen && b.y >= -margen &&
+          b.x + b.w <= vp.width + margen && b.y + b.h <= vp.height + margen;
+        let ok = datos.n === (a.cantidad ?? 8) && datos.nombres.every((n) => n.includes("Costa "));
+        console.log(`  [wps] items=${datos.n} nombres=${JSON.stringify(datos.nombres)} ${ok ? "OK" : "FUERA"}`);
+        for (const [k, b] of [["primero", datos.primero], ["ultimo", datos.ultimo]]) {
+          const d = dentro(b);
+          console.log(
+            `  [wps] ${k}: ${b ? `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.w)}x${Math.round(b.h)}` : "sin box"} ${d ? "OK" : "FUERA"}`,
+          );
+          if (!d) ok = false;
+        }
+        if (datos.head && datos.primero && datos.primero.y < datos.head.y + datos.head.h - 2) {
+          console.log("  [aviso] tabla de waypoints tapada por la cabecera de la ficha");
+          ok = false;
+        }
+        return ok;
+      }
+      case "verificar-metricas": {
+        // boundingBox del panel y de CADA métrica (Range sobre el nodo de texto)
+        // en el instante exacto en que arranca el reloj de la simulación.
+        const margen = a.margen ?? 2;
+        const sels = a.sel ?? [".hn-sim-progress", ".hn-sim-days-info", ".hn-sim-days-slider"];
+        const partes = a.partes ?? [];
+        const dentroBox = (b) =>
+          b.width > 0 && b.height > 0 && b.x >= -margen && b.y >= -margen &&
+          b.x + b.width <= vp.width + margen && b.y + b.height <= vp.height + margen;
+        const dentroRect = (b) =>
+          b.w > 0 && b.h > 0 && b.x >= -margen && b.y >= -margen &&
+          b.x + b.w <= vp.width + margen && b.y + b.h <= vp.height + margen;
+        let ok = true;
+        for (const s of sels) {
+          const box = await page.locator(s).first().boundingBox().catch(() => null);
+          if (!box) {
+            console.log(`  [metrica] ${s}: sin boundingBox`);
+            ok = false;
+            continue;
+          }
+          const d = dentroBox(box);
+          console.log(
+            `  [metrica] ${s}: ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)} ${d ? "OK" : "FUERA"}`,
+          );
+          if (!d) ok = false;
+        }
+        const medidas = await page.evaluate(
+          ({ sels: ss, terms }) => {
+            const out = [];
+            for (const s of ss) {
+              const node = document.querySelector(s);
+              if (!node) continue;
+              const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+              let n;
+              while ((n = walker.nextNode())) {
+                const t = n.textContent || "";
+                for (const term of terms) {
+                  const i = t.indexOf(term);
+                  if (i < 0) continue;
+                  const r = document.createRange();
+                  r.setStart(n, i);
+                  r.setEnd(n, i + term.length);
+                  const b = r.getBoundingClientRect();
+                  out.push({ term, x: b.x, y: b.y, w: b.width, h: b.height });
+                }
+              }
+            }
+            return out;
+          },
+          { sels, terms: partes },
+        );
+        for (const p of medidas) {
+          const d = dentroRect(p);
+          console.log(
+            `  [metrica] "${p.term}": ${Math.round(p.x)},${Math.round(p.y)} ${Math.round(p.w)}x${Math.round(p.h)} ${d ? "OK" : "FUERA"}`,
+          );
+          if (!d) ok = false;
+        }
+        for (const term of partes) {
+          if (medidas.some((p) => p.term === term)) continue;
+          console.log(`  [metrica] "${term}": AUSENTE`);
+          ok = false;
+        }
+        return ok;
+      }
+      case "wait-for-timeout": {
+        // Pausa explicita para que el panel quede quieto y sea legible en el video.
+        await page.waitForTimeout(a.v ?? 3000);
+        return true;
+      }
+      case "scroll-top": {
+        const ok = await page.evaluate((s) => {
+          const sc = document.querySelector(s);
+          if (!sc) return false;
+          sc.scrollTo({ top: 0, behavior: "auto" });
+          return true;
+        }, a.sel ?? ".hn-sheet.hn-ficha-open .hn-col-ficha");
+        await sleep(400);
+        return ok;
+      }
       case "verificar-ausente": {
         // Texto fuera de tema (p. ej. el consejo del capítulo): tiene que NO
         // estar visible, aunque siga en el DOM dentro de un acordeón cerrado.
@@ -235,17 +410,29 @@ async function actuar(page, a) {
         const scrollSel = ".hn-sheet.hn-ficha-open .hn-col-ficha";
         const dur = a.ms ?? 6000;
         const ok = await page.evaluate(
-          ({ s, t, d }) => {
+          ({ s, t, d, align, texto }) => {
             const sc = document.querySelector(s);
-            const tgt = document.querySelector(t);
+            // `texto` apunta al waypoint nombrado (p. ej. Costa 1) en vez de
+            // al principio de la tabla, para que los 8 Costa quepan juntos.
+            const tgt = texto
+              ? [...document.querySelectorAll(".hn-wps .hn-wp-item")].find((e) =>
+                  (e.querySelector(".hn-wp-name")?.textContent || "").includes(texto),
+                )
+              : document.querySelector(t);
             if (!sc || !tgt) return false;
             sc.scrollTo({ top: 0, behavior: "auto" });
             // Posición del destino dentro del contenido del scroller.
             const st = sc.scrollTop + tgt.getBoundingClientRect().top - sc.getBoundingClientRect().top;
-            const to = Math.max(
-              0,
-              Math.min(sc.scrollHeight - sc.clientHeight, st + tgt.offsetHeight - sc.clientHeight),
-            );
+            // align=start deja la tabla completa debajo de la cabecera fija
+            // (por defecto se alinea el final, y así los 8 waypoints desfilan).
+            const head = document.querySelector(".hn-ficha-head");
+            const headH = head ? head.getBoundingClientRect().height : 0;
+            const to = align === "start"
+              ? Math.max(0, Math.min(sc.scrollHeight - sc.clientHeight, st - headH - 12))
+              : Math.max(
+                  0,
+                  Math.min(sc.scrollHeight - sc.clientHeight, st + tgt.offsetHeight - sc.clientHeight),
+                );
             const t0 = performance.now();
             const step = (now) => {
               const k = Math.min(1, (now - t0) / d);
@@ -256,7 +443,7 @@ async function actuar(page, a) {
             requestAnimationFrame(step);
             return true;
           },
-          { s: scrollSel, t: a.sel, d: dur },
+          { s: scrollSel, t: a.sel, d: dur, align: a.align, texto: a.texto },
         );
         await sleep(dur + 900);
         return ok;
