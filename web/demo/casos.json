@@ -1,11 +1,11 @@
 {
- "version": 10,
+ "version": 11,
  "viewport": {
   "width": 432,
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
- "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. Las coordenadas de la ruta propia son las reales (La Paloma y Porto Belo). Versión: incluye preferencia costera (chip Costera con peso) y simulación día a día del trazado optimizado.",
+ "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. El caso 11 carga la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos) y simula la travesía cada 3 h con el pronóstico.",
  "casos": [
   {
    "orden": "05",
@@ -371,9 +371,9 @@
   },
   {
    "orden": "11",
-   "id": "version-costera-sim",
-   "titulo": "Versión nueva: preferir la costa y simular la travesía cada 3 horas",
-   "narracion": "Dos cosas nuevas. Una: preferir la costa. El optimizador puede abrazar el litoral con tres pesos, baja, media o alta; en alta la costa queda a la vista. Dos: simular la travesía, ahora cada tres horas y sobre la ruta elegida. Primero ves la sugerencia del optimizador corriendo con el pronóstico: cada paso mueve el reloj y las flechitas de viento. Después la aplicás y la misma simulación recorre tu ruta, con las millas de cada tramo, la velocidad y el viento que vas a tener.",
+   "id": "costero-an98a",
+   "titulo": "AN98A: la costera de Cristobal a Miami, 8 correcciones y simulación cada 3 h",
+   "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Después simulamos la travesía cada tres horas con el pronóstico real: millas, velocidad, rumbo y viento de cada tramo.",
    "acciones": [
     {
      "t": "click-sel",
@@ -389,123 +389,61 @@
     },
     {
      "t": "wait",
-     "v": 2200
-    },
-    {
-     "t": "click-texto",
-     "v": "+ Nueva ruta"
-    },
-    {
-     "t": "wait",
-     "v": 1000
-    },
-    {
-     "t": "tap-map",
-     "x": 0.45,
-     "y": 0.25
-    },
-    {
-     "t": "wait",
-     "v": 600
-    },
-    {
-     "t": "tap-map",
-     "x": 0.58,
-     "y": 0.38
-    },
-    {
-     "t": "wait",
-     "v": 600
+     "v": 2500
     },
     {
      "t": "click-sel",
-     "sel": ".hn-fixband button"
+     "sel": "input.hn-search"
+    },
+    {
+     "t": "key",
+     "v": "a"
+    },
+    {
+     "t": "key",
+     "v": "n"
+    },
+    {
+     "t": "key",
+     "v": "9"
+    },
+    {
+     "t": "key",
+     "v": "8"
     },
     {
      "t": "wait",
      "v": 1500
     },
     {
-     "t": "fill",
-     "label": "Latitud del waypoint 1",
-     "v": "-34.66"
-    },
-    {
-     "t": "fill",
-     "label": "Longitud del waypoint 1",
-     "v": "-54.17"
-    },
-    {
-     "t": "wait",
-     "v": 600
-    },
-    {
-     "t": "fill",
-     "label": "Latitud del waypoint 2",
-     "v": "-27.14"
-    },
-    {
-     "t": "fill",
-     "label": "Longitud del waypoint 2",
-     "v": "-48.55"
-    },
-    {
-     "t": "check",
-     "label": "Waypoint 1 obligatorio"
-    },
-    {
-     "t": "check",
-     "label": "Waypoint 2 obligatorio"
-    },
-    {
-     "t": "wait",
-     "v": 800
-    },
-    {
-     "t": "key",
-     "v": "Escape"
-    },
-    {
-     "t": "wait",
-     "v": 1200
+     "t": "esperar-texto",
+     "v": "AN98",
+     "ms": 15000
     },
     {
      "t": "click-sel",
-     "sel": ".hn-own-row button"
+     "sel": ".hn-rutas .hn-list .hn-row:has-text('AN98')"
     },
     {
      "t": "wait",
      "v": 2500
     },
     {
-     "t": "wheel",
-     "v": -400,
-     "x": 0.5,
-     "y": 0.18
+     "t": "click-sel",
+     "sel": ".hn-variant:has-text('AN98A')"
     },
     {
      "t": "wait",
-     "v": 600
+     "v": 2000
     },
     {
-     "t": "wheel",
-     "v": -400,
-     "x": 0.5,
-     "y": 0.18
-    },
-    {
-     "t": "wait",
-     "v": 600
-    },
-    {
-     "t": "wheel",
-     "v": -400,
-     "x": 0.5,
-     "y": 0.18
+     "t": "scroll-ruta",
+     "sel": ".hn-wps",
+     "ms": 7000
     },
     {
      "t": "wait",
-     "v": 1000
+     "v": 1500
     },
     {
      "t": "click-sel",
@@ -531,141 +469,21 @@
      "t": "esperar-paquete"
     },
     {
-     "t": "key",
-     "v": "Escape"
-    },
-    {
-     "t": "wait",
-     "v": 1000
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-context button:has-text(\"≈\")"
-    },
-    {
-     "t": "wait",
-     "v": 1200
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-own-row button"
-    },
-    {
-     "t": "wait",
-     "v": 2500
-    },
-    {
-     "t": "pan",
-     "v": [
-      0.5,
-      0.22
-     ]
-    },
-    {
-     "t": "wait",
-     "v": 2000
-    },
-    {
-     "t": "wheel",
-     "v": 900,
-     "x": 0.5,
-     "y": 0.32
-    },
-    {
-     "t": "wait",
-     "v": 600
-    },
-    {
-     "t": "wheel",
-     "v": 600,
-     "x": 0.5,
-     "y": 0.32
-    },
-    {
      "t": "wait",
      "v": 1500
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "wait",
-     "v": 1200
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-opt-coast button:has-text(\"Costera\")"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-sel",
-     "sel": ".hn-opt-coast button:has-text(\"Alta\")"
-    },
-    {
-     "t": "wait",
-     "v": 1500
-    },
-    {
-     "t": "click-texto",
-     "v": "Optimizar con el viento"
-    },
-    {
-     "t": "esperar-texto",
-     "v": "Simular la sugerencia",
-     "ms": 90000
-    },
-    {
-     "t": "wait",
-     "v": 3000
-    },
-    {
-     "t": "click-texto",
-     "v": "Simular la sugerencia"
-    },
-    {
-     "t": "wait",
-     "v": 2500
-    },
-    {
-     "t": "wait",
-     "v": 13000
-    },
-    {
-     "t": "click-sel",
-     "sel": "button:has-text(\"Aplicar optimización\")"
-    },
-    {
-     "t": "wait",
-     "v": 2500
-    },
-    {
-     "t": "scroll-ruta",
-     "sel": ".hn-own-total",
-     "ms": 2500
-    },
-    {
-     "t": "wait",
-     "v": 1000
     },
     {
      "t": "click-texto",
      "v": "Simular travesía"
     },
     {
-     "t": "wait",
-     "v": 2500
+     "t": "esperar-texto",
+     "v": "Día 1",
+     "ms": 20000
     },
     {
      "t": "wait",
-     "v": 13000
-    },
-    {
-     "t": "wait",
-     "v": 1500
+     "v": 12000
     }
    ],
    "dur_ms": 4000
