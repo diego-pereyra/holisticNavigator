@@ -1,0 +1,79 @@
+name: publicar-carrusel
+# Publicación semanal de carruseles en Instagram. Cada día toca una ruta del
+# libro; el disparo manual permite repetir o elegir otra sin esperar al cron.
+# Las placas salen del run que generó los cuatro carruseles (id fijo más abajo).
+on:
+  schedule:
+    - cron: "0 14 * * 1" # lunes 14:00 UTC → AN54
+    - cron: "0 14 * * 3" # miércoles 14:00 UTC → AN62
+    - cron: "0 14 * * 5" # viernes 14:00 UTC → AN73
+  workflow_dispatch:
+    inputs:
+      route:
+        description: "Ruta a publicar (AN54, AN62 o AN73)"
+        required: true
+        type: choice
+        default: AN54
+        options:
+          - AN54
+          - AN62
+          - AN73
+
+# Nunca dos publicaciones al mismo tiempo: la segunda espera a la primera.
+concurrency:
+  group: publicar-carrusel-ig
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Elegir ruta según el día
+        id: ruta
+        run: |
+          case "${{ github.event.schedule }}" in
+            "0 14 * * 1") echo "route=AN54" >> "$GITHUB_OUTPUT" ;;
+            "0 14 * * 3") echo "route=AN62" >> "$GITHUB_OUTPUT" ;;
+            "0 14 * * 5") echo "route=AN73" >> "$GITHUB_OUTPUT" ;;
+            *) echo "route=${{ inputs.route }}" >> "$GITHUB_OUTPUT" ;;
+          esac
+
+      - name: Playwright sin agregar dependencias
+        run: |
+          cd web && npm ci && npm i --no-save playwright
+          # ubuntu-latest ya trae Chromium; `--with-deps` dispara apt y puede
+          # colgarse. Un timeout evita bloquear la publicación por la red.
+          timeout 180 npx playwright install chromium || echo "chromium ya presente o sin red (sigo)"
+
+      - name: Descargar las cuatro placas de ${{ steps.ruta.outputs.route }}
+        uses: actions/download-artifact@v4
+        with:
+          name: carrusel-ig-${{ steps.ruta.outputs.route }}
+          run-id: 43424857025
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: carrusel
+
+      - name: Publicar carrusel en Instagram
+        env:
+          IG_COOKIES: ${{ secrets.IG_COOKIES }}
+        run: |
+          # Las cookies viven sólo en el secret: nunca se escriben en el repo.
+          printf '%s' "$IG_COOKIES" > "$RUNNER_TEMP/ig-cookies.json"
+          RUTA="${{ steps.ruta.outputs.route }}"
+          xvfb-run -a env NODE_PATH="$PWD/web/node_modules" node publicar-fotos.cjs \
+            sponsors/IG/posteos/2026-11-11-costera/pie-carrusel.txt \
+            "carrusel/carrusel-$RUTA-01-momento.png" \
+            "carrusel/carrusel-$RUTA-02-consejos.png" \
+            "carrusel/carrusel-$RUTA-03-ruta.png" \
+            "carrusel/carrusel-$RUTA-04-optimiza.png" \
+            "$RUNNER_TEMP/ig-cookies.json"
