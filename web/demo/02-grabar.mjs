@@ -15,6 +15,7 @@ const OUT = args[2] ?? "web/demo/out";
 
 rmSync(OUT, { recursive: true, force: true });
 mkdirSync(join(OUT, "shots"), { recursive: true });
+mkdirSync(join(OUT, "descargas"), { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 // Viewport por caso: los casos de celular siguen usando el general de la
@@ -476,6 +477,62 @@ async function actuar(page, a) {
         // La app abre un input[type=file] oculto (pickTextFile): le setemos el archivo.
         await page.locator('input[type="file"]').first().setInputFiles(a.path);
         return true;
+      case "filechooser": {
+        // Importar GPX: el input se crea al tocar el botón, así que se caza el
+        // filechooser como en el e2e del carrusel (no existe antes del click).
+        const loc = a.sel
+          ? page.locator(a.sel).first()
+          : page.getByText(a.texto, { exact: true }).first();
+        await loc.scrollIntoViewIfNeeded({ timeout: 10000 });
+        const [chooser] = await Promise.all([
+          page.waitForEvent("filechooser", { timeout: 15000 }),
+          clickODiagnostico(page, loc, a.texto ?? a.sel),
+        ]);
+        await chooser.setFiles(a.path);
+        console.log(`  [importar] ${a.path}`);
+        return true;
+      }
+      case "esperar-cantidad": {
+        // Señal real de que la importación terminó: hay N waypoints en la ficha.
+        await page.waitForFunction(
+          ({ s, n }) => document.querySelectorAll(s).length >= n,
+          { s: a.sel, n: a.n },
+          { timeout: a.ms ?? 15000 },
+        );
+        const cant = await page.locator(a.sel).count();
+        console.log(`  [cantidad] ${a.sel}: ${cant} (esperado >= ${a.n})`);
+        return true;
+      }
+      case "verificar-export": {
+        // Descarga real del botón "Exportar GPX": se guarda el archivo y se
+        // comparan cantidad y nombres de waypoints contra el GPX importado.
+        const fixture = readFileSync(a.path, "utf8");
+        const nombresFixture = [...fixture.matchAll(/<rtept\b[^>]*>\s*<name>([^<]*)<\/name>/gi)].map(
+          (m) => m[1].trim(),
+        );
+        const loc = a.sel
+          ? page.locator(a.sel).first()
+          : page.getByText(a.texto ?? "Exportar GPX", { exact: true }).first();
+        await loc.scrollIntoViewIfNeeded({ timeout: 10000 });
+        const [download] = await Promise.all([
+          page.waitForEvent("download", { timeout: 15000 }),
+          clickODiagnostico(page, loc, a.texto ?? a.sel),
+        ]);
+        const guardado = join(OUT, "descargas", "exportado.gpx");
+        await download.saveAs(guardado);
+        const xml = readFileSync(guardado, "utf8");
+        const nombresExport = [...xml.matchAll(/<rtept\b[^>]*>\s*<name>([^<]*)<\/name>/gi)].map(
+          (m) => m[1].trim(),
+        );
+        const ok =
+          nombresExport.length === nombresFixture.length &&
+          nombresExport.every((n, i) => n === nombresFixture[i]);
+        console.log(`  ${ok ? "EXPORT OK" : "EXPORT FAIL"} · ${nombresExport.length} waypoints`);
+        console.log(
+          `  [export] ${download.suggestedFilename()} · bajado=${JSON.stringify(nombresExport)} · fixture=${JSON.stringify(nombresFixture)}`,
+        );
+        return ok;
+      }
       case "pan":
         await page.mouse.move(vp.width * a.v[0], vp.height * a.v[1]);
         await page.mouse.down();
@@ -620,7 +677,7 @@ let casosFallidos = 0;
 
 for (const caso of espec.casos) {
   vp = caso.viewport ?? espec.viewport;
-  const nombre = `demo-${caso.orden}-${caso.id}`;
+  const nombre = caso.id.startsWith(`demo-${caso.orden}-`) ? caso.id : `demo-${caso.orden}-${caso.id}`;
   console.log(`grabando ${nombre} — ${caso.titulo} · viewport ${vp.width}×${vp.height} @2x`);
   const ctx = await browser.newContext({
     viewport: vp,

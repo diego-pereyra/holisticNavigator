@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="Navionics · ejemplo para Holistic Navigator" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata>
+    <name>Ruta costera Caribe · importada de Navionics</name>
+    <desc>Ruta de ejemplo compatible con Navionics y OpenCPN: salida de San Juan, canal de la Mona y costa sur de La Española. Importala en Holistic Navigator, ajustala y exportala en GPX de vuelta al plotter.</desc>
+  </metadata>
+  <rte>
+    <name>Ruta costera Caribe · importada de Navionics</name>
+    <rtept lat="18.4655" lon="-66.1057"><name>Salida</name></rtept>
+    <rtept lat="18.62" lon="-66.38"><name>Paso Norte</name></rtept>
+    <rtept lat="18.21" lon="-67.55"><name>Canal</name></rtept>
+    <rtept lat="17.98" lon="-68.32"><name>Punta</name></rtept>
+    <rtept lat="17.72" lon="-68.9"><name>Fondeo</name></rtept>
+    <rtept lat="17.68" lon="-69.18"><name>Llegada</name></rtept>
+  </rte>
+</gpx>

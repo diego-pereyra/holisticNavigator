@@ -1,11 +1,11 @@
 {
-  "version": 14,
+  "version": 15,
  "viewport": {
   "width": 432,
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
-  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj. El caso 12 usa la misma ruta pero baja la hoja a peek apenas arranca la simulación: la carta ocupa el viewport y el marcador avanza por el corredor costero. Los casos 13 y 14 repiten ese contenido en tablet (820×1180): a ese ancho la app muestra el dock lateral de alto fijo, sin tirador de hoja, así que se mide la carta visible por ancho con boundingBox.",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj. El caso 12 usa la misma ruta pero baja la hoja a peek apenas arranca la simulación: la carta ocupa el viewport y el marcador avanza por el corredor costero. Los casos 13 y 14 repiten ese contenido en tablet (820×1180): a ese ancho la app muestra el dock lateral de alto fijo, sin tirador de hoja, así que se mide la carta visible por ancho con boundingBox. El caso 15 importa un GPX de ejemplo con filechooser, muestra la ruta en Mis rutas, ajusta los nombres de los waypoints en la ficha editable y verifica el GPX exportado contra el fixture (cantidad y nombres).",
  "casos": [
   {
    "orden": "05",
@@ -951,12 +951,120 @@
        "t": "verificar-reloj",
        "ms": 1600
       },
-      {
-       "t": "wait",
-       "v": 20000
-      }
-     ],
-     "dur_ms": 4000
-    }
-  ]
-}
+       {
+        "t": "wait",
+        "v": 20000
+       }
+      ],
+      "dur_ms": 4000
+     },
+     {
+      "orden": "15",
+      "id": "demo-15-import-export-gpx",
+      "titulo": "Importar y exportar GPX: de Navionics u OpenCPN a Mis rutas y de vuelta al plotter",
+      "narracion": "Traés una ruta de Navionics o OpenCPN en formato GPX y la importás en Holistic Navigator. Queda en Mis rutas con sus waypoints, lista para ajustar: cambiás los nombres de cada punto y exportás el GPX de vuelta al plotter. Sin cuenta, sin servidor, todo offline.",
+      "acciones": [
+       {
+        "t": "click-sel",
+        "sel": "button.hn-ctx-theme"
+       },
+       {
+        "t": "wait",
+        "v": 1000
+       },
+       {
+        "t": "click-sel",
+        "sel": ".hn-tab:has-text('Rutas')"
+       },
+       {
+        "t": "wait",
+        "v": 1800
+       },
+       {
+        "t": "filechooser",
+        "texto": "Importar GPX a Mis rutas",
+        "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
+       },
+       {
+        "t": "esperar-cantidad",
+        "sel": ".hn-own-wp",
+        "n": 6,
+        "ms": 15000
+       },
+       {
+        "t": "verificar-viewport",
+        "sel": [".hn-own-name", ".hn-own-wps"]
+       },
+       {
+        "t": "wait",
+        "v": 1500
+       },
+       {
+        "t": "click-sel",
+        "sel": ".hn-back"
+       },
+       {
+        "t": "wait",
+        "v": 1200
+       },
+       {
+        "t": "esperar-texto",
+        "v": "Ruta costera Caribe · importada de Navionics",
+        "ms": 10000
+       },
+       {
+        "t": "click-texto",
+        "v": "Ruta costera Caribe · importada de Navionics"
+       },
+       {
+        "t": "wait",
+        "v": 1200
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 1",
+        "v": "Salida"
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 2",
+        "v": "Paso Norte"
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 3",
+        "v": "Canal"
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 4",
+        "v": "Punta"
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 5",
+        "v": "Fondeo"
+       },
+       {
+        "t": "fill",
+        "label": "Nombre del waypoint 6",
+        "v": "Llegada"
+       },
+       {
+        "t": "wait",
+        "v": 1200
+       },
+       {
+        "t": "verificar-export",
+        "sel": ".hn-actions button:has-text('Exportar GPX')",
+        "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
+       },
+       {
+        "t": "wait",
+        "v": 2500
+       }
+      ],
+      "dur_ms": 5000
+     }
+   ]
+ }
