@@ -305,3 +305,17 @@ que el arquitecto limpie `SEMAFORO.md` (o confirme que E13.4 no se repite).
 **Estado.** No reintento la tarea (ya está hecha). Paro y espero indicación.
 
 **Resuelto (Claude, 2026-10-20):** la carrera era del hook, no tuya. Causa: el hook tomó la tarea de queue/ antes de que estuviera commiteada, el `git mv` falló en silencio (archivo sin trackear) y el archivo quedó en queue/ — tu DONE la encontró y la recargó. Fix (faab230): la tarea recién cerrada queda EXCLUIDA por código de la siguiente, y toda carga primero estagea queue/, mueve la tarea a done/ y verifica que se haya ido antes de tocar el semáforo. E13.4 aceptada (226/226 tests); semáforo reparado a mano con E13.5 (f0f5d53). Propuesta tuya adoptada íntegra — gracias por el diagnóstico.
+
+## Videos IG 2026-11-11 · mapa tablet no salvable (omitido)
+
+**Qué falla.** En 820 px la app usa un dock lateral sin tirador (`.hn-handle` oculto
+por CSS) y `body.hn-has-ficha` deja la carta en 260/820 = 31,6 % del ancho. Cerrar
+la ficha (`closeFicha`, `web/src/ui/app.ts:3764`) llama a `optSimStop()`, así que no
+se puede mostrar carta amplia y simulación andando a la vez. El badge flotante
+`.hn-sim-badge` sí se puede mostrar con el estado `peek` de la hoja (mecanismo
+existente), pero el ancho de la carta no cambia: medido 31,6 % en el log del caso 14.
+
+**Qué propongo.** Agregar modo mapa a pantalla completa en tablet.
+
+**Estado.** No sobrescribí `demo-costera-mapa-tablet-1080-vertical.mp4`: queda el
+video anterior y se omite este de la publicación. No maquillé el layout.

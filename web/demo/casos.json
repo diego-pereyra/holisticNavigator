@@ -5,7 +5,7 @@
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
-  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj. El caso 12 usa la misma ruta pero baja la hoja a peek apenas arranca la simulación: la carta ocupa el viewport y el marcador avanza por el corredor costero. Los casos 13 y 14 repiten ese contenido en tablet (820×1180): a ese ancho la app muestra el dock lateral de alto fijo, sin tirador de hoja, así que se mide la carta visible por ancho con boundingBox. El caso 15 importa un GPX de ejemplo con filechooser, muestra la ruta en Mis rutas, ajusta los nombres de los waypoints en la ficha editable y verifica el GPX exportado contra el fixture (cantidad y nombres). El caso 16 regraba el mapa costero: usa Pilot chart (sin descargar pronóstico, sin cartel 429), cierra todos los acordeones y oculta el panel Capas antes de bajar la hoja, y deja el reloj de la simulación en un badge flotante sobre la carta con la hoja en peek.",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj. El caso 12 usa la misma ruta pero baja la hoja a peek apenas arranca la simulación: la carta ocupa el viewport y el marcador avanza por el corredor costero. Los casos 13 y 14 repiten ese contenido en tablet (820×1180) con Pilot chart (sin descarga de pronóstico ni error HTTP): a ese ancho la app muestra el dock lateral de alto fijo, sin tirador de hoja, así que se mide la carta visible por ancho con boundingBox y se deja constancia del 31,6 % real. El caso 15 importa un GPX de ejemplo con filechooser, muestra el botón de importación y la ruta en Mis rutas, renombra la ruta y mueve un waypoint (con antes/después del total verificado por DOM) y captura el download del GPX exportado contra el fixture (cantidad y nombres). El caso 16 regraba el mapa costero: usa Pilot chart (sin descargar pronóstico, sin cartel 429), cierra todos los acordeones y oculta el panel Capas antes de bajar la hoja, y deja el reloj de la simulación en un badge flotante sobre la carta con la hoja en peek.",
  "casos": [
   {
    "orden": "05",
@@ -416,36 +416,34 @@
        "t": "verificar-ausente",
        "v": "AS21"
       },
-      {
-       "t": "poner-tiempo"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-waves"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-isobars"
-      },
-      {
-       "t": "cerrar-acc",
-       "sel": ".hn-acc-head:has-text('Consejo')"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Escocia"
-      },
-      {
-       "t": "click-sel",
-       "sel": ".hn-wx-dl"
-      },
-      {
-       "t": "esperar-paquete"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Sin capas encendidas"
-      },
+       {
+        "t": "poner-tiempo",
+        "v": "Pilot chart"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-waves"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-isobars"
+       },
+       {
+        "t": "cerrar-acc",
+        "sel": ".hn-acc-head:has-text('Consejo')"
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Escocia"
+       },
+       {
+        "t": "verificar-sin-error",
+        "v": ["HTTP 400", "error de viento", "Reintentar", "Bajando…", "Bajando..."]
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Sin capas encendidas"
+       },
       {
        "t": "wait",
        "v": 1500
@@ -662,13 +660,17 @@
        "t": "verificar-reloj",
        "ms": 1600
       },
-      {
-       "t": "wait",
-       "v": 20000
-      }
-     ],
-     "dur_ms": 4000
-    },
+        {
+         "t": "wait",
+         "v": 20000
+        },
+        {
+         "t": "verificar-sin-error",
+         "v": ["HTTP 400", "error de viento", "Reintentar", "Bajando…", "Bajando..."]
+        }
+       ],
+       "dur_ms": 4000
+      },
     {
      "orden": "13",
      "id": "costera-tablet",
@@ -717,36 +719,34 @@
        "t": "verificar-ausente",
        "v": "AS21"
       },
-      {
-       "t": "poner-tiempo"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-waves"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-isobars"
-      },
-      {
-       "t": "cerrar-acc",
-       "sel": ".hn-acc-head:has-text('Consejo')"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Escocia"
-      },
-      {
-       "t": "click-sel",
-       "sel": ".hn-wx-dl"
-      },
-      {
-       "t": "esperar-paquete"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Sin capas encendidas"
-      },
+       {
+        "t": "poner-tiempo",
+        "v": "Pilot chart"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-waves"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-isobars"
+       },
+       {
+        "t": "cerrar-acc",
+        "sel": ".hn-acc-head:has-text('Consejo')"
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Escocia"
+       },
+       {
+        "t": "verificar-sin-error",
+        "v": ["HTTP 400", "error de viento", "Reintentar", "Bajando…", "Bajando..."]
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Sin capas encendidas"
+       },
       {
        "t": "wait",
        "v": 1500
@@ -807,19 +807,23 @@
        "t": "wait-for-timeout",
        "v": 3500
       },
-      {
-       "t": "wait",
-       "v": 10000
-      }
-     ],
-     "dur_ms": 4000
-    },
-    {
-     "orden": "14",
+       {
+        "t": "wait",
+        "v": 10000
+       },
+       {
+        "t": "verificar-sin-error",
+        "v": ["HTTP 400", "error de viento", "Reintentar", "Bajando…", "Bajando..."]
+       }
+      ],
+      "dur_ms": 4000
+     },
+     {
+      "orden": "14",
      "id": "costera-mapa-tablet",
      "titulo": "AN98A: el mapa costero con la simulación avanzando",
-     "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Con el pronóstico y las capas de ola e isobaras encendidas, arrancamos la simulación cada tres horas y bajamos la hoja: la carta queda entera y el punto va avanzando por el corredor costero.",
-     "viewport": { "width": 820, "height": 1180 },
+      "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Con el pilot chart del mes y las capas encendidas, arrancamos la simulación cada tres horas y el reloj queda en el badge flotante sobre la carta. En tablet la app no tiene tirador de hoja, así que la carta sigue en un 31,6 % del ancho.",
+      "viewport": { "width": 820, "height": 1180 },
      "arranque": "?route=AN98&variant=AN98A",
      "arranqueTexto": "AN98 · Cristobal → Miami",
      "geoloc": { "latitude": 9.36, "longitude": -79.9, "accuracy": 50 },
@@ -862,36 +866,34 @@
        "t": "verificar-ausente",
        "v": "AS21"
       },
-      {
-       "t": "poner-tiempo"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-waves"
-      },
-      {
-       "t": "check-sel",
-       "sel": "#hn-wxlay-isobars"
-      },
-      {
-       "t": "cerrar-acc",
-       "sel": ".hn-acc-head:has-text('Consejo')"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Escocia"
-      },
-      {
-       "t": "click-sel",
-       "sel": ".hn-wx-dl"
-      },
-      {
-       "t": "esperar-paquete"
-      },
-      {
-       "t": "verificar-ausente",
-       "v": "Sin capas encendidas"
-      },
+       {
+        "t": "poner-tiempo",
+        "v": "Pilot chart"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-waves"
+       },
+       {
+        "t": "check-sel",
+        "sel": "#hn-wxlay-isobars"
+       },
+       {
+        "t": "cerrar-acc",
+        "sel": ".hn-acc-head:has-text('Consejo')"
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Escocia"
+       },
+       {
+        "t": "verificar-sin-error",
+        "v": ["HTTP 400", "error de viento", "Reintentar", "Bajando…", "Bajando..."]
+       },
+       {
+        "t": "verificar-ausente",
+        "v": "Sin capas encendidas"
+       },
       {
        "t": "wait",
        "v": 1500
@@ -935,22 +937,24 @@
        "v": "Día 1",
        "ms": 8000
       },
-      {
-       "t": "set-sheet",
-       "v": "peek"
-      },
-      {
-       "t": "verificar-hoja-mapa",
-       "min_pct": 60
-      },
-      {
-       "t": "screenshot",
-       "v": "demo-14-costera-mapa-tablet-dock.png"
-      },
-      {
-       "t": "verificar-reloj",
-       "ms": 1600
-      },
+       {
+        "t": "forzar-peek"
+       },
+       {
+        "t": "medir-mapa"
+       },
+       {
+        "t": "verificar-badge",
+        "ms": 1600
+       },
+       {
+        "t": "screenshot",
+        "v": "demo-14-costera-mapa-tablet-badge.png"
+       },
+       {
+        "t": "verificar-reloj",
+        "ms": 1600
+       },
        {
         "t": "wait",
         "v": 20000
@@ -962,108 +966,156 @@
       "orden": "15",
       "id": "demo-15-import-export-gpx",
       "titulo": "Importar y exportar GPX: de Navionics u OpenCPN a Mis rutas y de vuelta al plotter",
-      "narracion": "Traés una ruta de Navionics o OpenCPN en formato GPX y la importás en Holistic Navigator. Queda en Mis rutas con sus waypoints, lista para ajustar: cambiás los nombres de cada punto y exportás el GPX de vuelta al plotter. Sin cuenta, sin servidor, todo offline.",
-      "acciones": [
-       {
-        "t": "click-sel",
-        "sel": "button.hn-ctx-theme"
-       },
-       {
-        "t": "wait",
-        "v": 1000
-       },
-       {
-        "t": "click-sel",
-        "sel": ".hn-tab:has-text('Rutas')"
-       },
-       {
-        "t": "wait",
-        "v": 1800
-       },
-       {
-        "t": "filechooser",
-        "texto": "Importar GPX a Mis rutas",
-        "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
-       },
-       {
-        "t": "esperar-cantidad",
-        "sel": ".hn-own-wp",
-        "n": 6,
-        "ms": 15000
-       },
-       {
-        "t": "verificar-viewport",
-        "sel": [".hn-own-name", ".hn-own-wps"]
-       },
-       {
-        "t": "wait",
-        "v": 1500
-       },
-       {
-        "t": "click-sel",
-        "sel": ".hn-back"
-       },
-       {
-        "t": "wait",
-        "v": 1200
-       },
-       {
-        "t": "esperar-texto",
-        "v": "Ruta costera Caribe · importada de Navionics",
-        "ms": 10000
-       },
-       {
-        "t": "click-texto",
-        "v": "Ruta costera Caribe · importada de Navionics"
-       },
-       {
-        "t": "wait",
-        "v": 1200
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 1",
-        "v": "Salida"
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 2",
-        "v": "Paso Norte"
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 3",
-        "v": "Canal"
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 4",
-        "v": "Punta"
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 5",
-        "v": "Fondeo"
-       },
-       {
-        "t": "fill",
-        "label": "Nombre del waypoint 6",
-        "v": "Llegada"
-       },
-       {
-        "t": "wait",
-        "v": 1200
-       },
-       {
-        "t": "verificar-export",
-        "sel": ".hn-actions button:has-text('Exportar GPX')",
-        "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
-       },
-       {
-        "t": "wait",
-        "v": 2500
-       }
-      ],
+       "narracion": "Traés una ruta de Navionics o OpenCPN en formato GPX y la importás en Holistic Navigator. Queda en Mis rutas con sus waypoints: la renombrás, movés un punto y ves cómo cambian las millas, y exportás el GPX de vuelta al plotter. Sin cuenta: el catálogo del libro se descarga una vez y después funciona offline.",
+       "acciones": [
+        {
+         "t": "click-sel",
+         "sel": "button.hn-ctx-theme"
+        },
+        {
+         "t": "wait",
+         "v": 1000
+        },
+        {
+         "t": "click-sel",
+         "sel": ".hn-tab:has-text('Rutas')"
+        },
+        {
+         "t": "wait",
+         "v": 1800
+        },
+        {
+         "t": "scroll-lista",
+         "sel": ".hn-row-import",
+         "ms": 1800
+        },
+        {
+         "t": "verificar-viewport",
+         "sel": [".hn-row-import"]
+        },
+        {
+         "t": "wait",
+         "v": 2500
+        },
+        {
+         "t": "filechooser",
+         "texto": "Importar GPX a Mis rutas",
+         "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
+        },
+        {
+         "t": "esperar-cantidad",
+         "sel": ".hn-own-wp",
+         "n": 6,
+         "ms": 15000
+        },
+        {
+         "t": "verificar-viewport",
+         "sel": [".hn-own-name", ".hn-own-wps"]
+        },
+        {
+         "t": "wait",
+         "v": 3000
+        },
+        {
+         "t": "click-sel",
+         "sel": ".hn-back"
+        },
+        {
+         "t": "wait",
+         "v": 1200
+        },
+        {
+         "t": "esperar-texto",
+         "v": "Ruta costera Caribe · importada de Navionics",
+         "ms": 10000
+        },
+        {
+         "t": "click-texto",
+         "v": "Ruta costera Caribe · importada de Navionics"
+        },
+        {
+         "t": "wait",
+         "v": 1200
+        },
+        {
+         "t": "scroll-ruta",
+         "sel": ".hn-own-total",
+         "ms": 2500
+        },
+        {
+         "t": "leer-total"
+        },
+        {
+         "t": "wait",
+         "v": 1200
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 1",
+         "v": "Salida"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 2",
+         "v": "Paso Norte"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 3",
+         "v": "Canal"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 4",
+         "v": "Punta"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 5",
+         "v": "Fondeo"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre del waypoint 6",
+         "v": "Llegada"
+        },
+        {
+         "t": "fill",
+         "label": "Nombre de la ruta",
+         "v": "Ruta importada de Navionics"
+        },
+        {
+         "t": "verificar-input",
+         "label": "Nombre de la ruta",
+         "v": "Ruta importada de Navionics"
+        },
+        {
+         "t": "fill",
+         "label": "Latitud del waypoint 2",
+         "v": "19.2"
+        },
+        {
+         "t": "verificar-total"
+        },
+        {
+         "t": "scroll-ruta",
+         "sel": ".hn-own-total",
+         "ms": 1800
+        },
+        {
+         "t": "wait",
+         "v": 2500
+        },
+        {
+         "t": "verificar-export",
+         "sel": ".hn-actions button:has-text('Exportar GPX')",
+         "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"
+        },
+        {
+         "t": "wait",
+         "v": 1000
+        }
+       ],
        "dur_ms": 5000
       },
       {

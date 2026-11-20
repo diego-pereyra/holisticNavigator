@@ -1,4 +1,4 @@
-Traés tu ruta de Navionics o OpenCPN, la importás en Holistic Navigator, la ajustás a tu gusto y la exportás en GPX de vuelta al plotter. Sin cuenta, sin servidor, funciona offline.
+Traés tu ruta de Navionics o OpenCPN, la importás en Holistic Navigator, la ajustás a tu gusto y la exportás en GPX de vuelta al plotter. Sin cuenta: el catálogo del libro se descarga una vez y después funciona offline.
 
 Tu trazado no se queda en la app: entra, lo editás y sale en el mismo formato con el que trabajás siempre. Los nombres de cada punto, las millas y el rumbo viajan con vos.
 

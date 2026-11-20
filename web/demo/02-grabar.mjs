@@ -18,6 +18,17 @@ mkdirSync(join(OUT, "shots"), { recursive: true });
 mkdirSync(join(OUT, "descargas"), { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// Log de verificaciones: se publica como artifact para poder comprobar las
+// señales reales (sin 400, edición, EXPORT OK, ancho de carta) sin browser en WSL.
+const consolaOriginal = console.log.bind(console);
+const lineasVerificacion = [];
+console.log = (...args) => {
+  const linea = args.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" ");
+  lineasVerificacion.push(linea);
+  consolaOriginal(linea);
+};
+
 // Viewport por caso: los casos de celular siguen usando el general de la
 // especificación; los de tablet traen su propio {"width":820,"height":1180}.
 let vp = espec.viewport;
@@ -638,6 +649,17 @@ async function actuar(page, a) {
         console.log(
           `  [export] ${download.suggestedFilename()} · bajado=${JSON.stringify(nombresExport)} · fixture=${JSON.stringify(nombresFixture)}`,
         );
+        // La app no muestra confirmación de descarga: banda temporal SOLO en la
+        // grabación (usa .hn-fixband, que ya existe) para que se vea el archivo.
+        const banda = await page.evaluateHandle((t) => {
+          const n = document.createElement("div");
+          n.className = "hn-fixband";
+          n.textContent = t;
+          document.body.append(n);
+          return n;
+        }, `GPX descargado: ${download.suggestedFilename()}`);
+        await sleep(3500);
+        await banda.evaluate((n) => n.remove());
         return ok;
       }
       case "pan":
@@ -722,6 +744,83 @@ async function actuar(page, a) {
         if (val !== a.v) console.log(`  [aviso] ${a.label}: quedó "${val}" (esperado "${a.v}")`);
         await sleep(700);
         return true;
+      }
+      case "forzar-peek": {
+        // En tablet el tirador de la hoja está oculto por CSS, pero el estado
+        // peek es el mismo que usa la app en celular: se pone por DOM para que
+        // el badge flotante de la simulación aparezca sobre la carta. No cambia
+        // el layout ni cierra la ficha (cerrarla detendría la simulación).
+        const antes = await page.evaluate(() => document.body.dataset.hnSheet ?? "");
+        await page.evaluate(() => { document.body.dataset.hnSheet = "peek"; });
+        console.log(`  [hoja] dataset hn-sheet: "${antes}" → "peek" (tablet sin tirador)`);
+        return true;
+      }
+      case "medir-mapa": {
+        // Mide la carta realmente visible SIN exigir umbral: en tablet el dock
+        // lateral fija el ancho y no hay gesto que lo reduzca.
+        const hoja = await page.locator(".hn-sheet").first().boundingBox().catch(() => null);
+        const mapa = await page.locator("#map").first().boundingBox().catch(() => null);
+        if (!hoja || !mapa) {
+          console.log("  [mapa] sin boundingBox de hoja o carta");
+          return false;
+        }
+        const dock = !(await page.locator(".hn-handle").first().isVisible().catch(() => false));
+        const libre = dock
+          ? Math.max(0, Math.min(mapa.x + mapa.width, vp.width) - Math.max(mapa.x, hoja.x + hoja.width))
+          : Math.max(0, Math.min(mapa.y + mapa.height, hoja.y) - Math.max(0, mapa.y));
+        const total = dock ? vp.width : vp.height;
+        const pct = (libre / total) * 100;
+        console.log(
+          `  [mapa] ${dock ? "dock lateral sin tirador" : "hoja"}: carta visible ${pct.toFixed(1)}% del ${dock ? "ancho" : "alto"} (${Math.round(libre)}/${total}px)`,
+        );
+        if (dock) {
+          console.log("  [mapa] AVISO: en tablet no hay hoja baja ni tirador; ampliar la carta exigiría cambiar el layout");
+        }
+        return true;
+      }
+      case "leer-total": {
+        const txt = ((await page.locator(".hn-own-total").first().textContent().catch(() => "")) ?? "").trim();
+        globalThis.__totalAntes = txt;
+        console.log(`  [total] antes de editar: "${txt}"`);
+        return !!txt;
+      }
+      case "verificar-total": {
+        const txt = ((await page.locator(".hn-own-total").first().textContent().catch(() => "")) ?? "").trim();
+        const antes = globalThis.__totalAntes ?? "";
+        const ok = !!txt && txt !== antes;
+        console.log(`  ${ok ? "EDIT OK" : "EDIT FAIL"} · total "${antes}" → "${txt}"`);
+        return ok;
+      }
+      case "verificar-input": {
+        const val = await page.getByLabel(a.label, { exact: true }).first().inputValue().catch(() => null);
+        const ok = val === a.v;
+        console.log(`  [input] ${a.label}: "${val}" ${ok ? "OK" : "DISTINTO"}`);
+        return ok;
+      }
+      case "scroll-lista": {
+        // Deja atrás las filas largas del catálogo y muestra la zona limpia de
+        // "Mis rutas" con el botón de importación antes de tocar el archivo.
+        const ok = await page.evaluate(
+          ({ s, d }) => {
+            const sc = document.querySelector(".hn-col-list .hn-sheet-body");
+            const tgt = document.querySelector(s);
+            if (!sc || !tgt) return false;
+            const st = sc.scrollTop + tgt.getBoundingClientRect().top - sc.getBoundingClientRect().top;
+            const to = Math.max(0, Math.min(sc.scrollHeight - sc.clientHeight, st - 12));
+            const t0 = performance.now();
+            const step = (now) => {
+              const k = Math.min(1, (now - t0) / d);
+              sc.scrollTop = to * k;
+              if (k < 1) requestAnimationFrame(step);
+            };
+            requestAnimationFrame(step);
+            return true;
+          },
+          { s: a.sel, d: a.ms ?? 1500 },
+        );
+        await sleep((a.ms ?? 1500) + 500);
+        console.log(`  [lista] scroll a ${a.sel}: ${ok ? "OK" : "no encontrado"}`);
+        return ok;
       }
       case "wheel":
         // Sobre el mapa, no sobre la hoja (posición configurable).
@@ -837,6 +936,7 @@ for (const caso of espec.casos) {
 await browser.close();
 writeFileSync(join(OUT, "demo-narracion.md"), narracion.join("\n") + (casosFallidos ? `\n> Aviso: ${casosFallidos} caso(s) con acciones no encontradas\n` : ""));
 console.log(`DEMO LISTA — ${OutVideos()} · casos con acciones fallidas: ${casosFallidos}`);
+writeFileSync(join(OUT, "verificaciones.log"), lineasVerificacion.join("\n") + "\n");
 function OutVideos() {
   return readdirSync(OUT).filter((f) => f.endsWith(".webm")).map((f) => join(OUT, f)).join(" · ");
 }
