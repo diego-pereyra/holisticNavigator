@@ -190,6 +190,35 @@ async function actuar(page, a) {
         console.log(`  [acordeones] cerrados ${abiertos.length} de ${abiertos.length} · quedan abiertos: ${JSON.stringify(quedan)}`);
         return quedan.length === 0;
       }
+      case "bajar-hoja": {
+        // Igual gesto que setSheet (tirador .hn-handle) pero con un solo
+        // movimiento por drag: el set-sheet con steps:10 tarda ~19 s en CI con
+        // swiftshader y se come el presupuesto de duración del video.
+        const destino = a.v ?? "peek";
+        const orden = ["peek", "half", "full"];
+        for (let i = 0; i < 4; i++) {
+          const cur = await sheetState(page);
+          if (cur === destino) break;
+          const box = await page.locator(".hn-handle").first().boundingBox().catch(() => null);
+          if (!box) break;
+          const x = box.x + box.width / 2;
+          const y = box.y + box.height / 2;
+          const dy = orden.indexOf(destino) > orden.indexOf(cur) ? -400 : 400;
+          await page.mouse.move(x, y);
+          await page.mouse.down();
+          await page.mouse.move(x, y + dy);
+          await page.mouse.up();
+          await sleep(250);
+        }
+        let state = await sheetState(page);
+        if (state !== destino) {
+          // Fallback al gesto probado del carrusel si el drag rápido no prendió.
+          await setSheet(page, destino);
+          state = await sheetState(page);
+        }
+        console.log(`  [hoja] bajada rápida: estado=${state} (esperado ${destino})`);
+        return state === destino;
+      }
       case "verificar-acordeones": {
         // Señal real durante la simulación: ningún .hn-acc-head con aria-expanded=true.
         const abiertos = await page.evaluate(() =>

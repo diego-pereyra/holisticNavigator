@@ -1067,169 +1067,170 @@
        "dur_ms": 5000
       },
       {
-       "orden": "16",
-       "id": "costera-mapa-v2",
-       "titulo": "AN98A: el mapa costero con el reloj de la simulación siempre a la vista",
-       "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Con el pilot chart del mes y las capas encendidas, arrancamos la simulación cada tres horas, cerramos los paneles y bajamos la hoja: la carta queda entera, el reloj sigue avanzando en un badge sobre el mapa y el punto recorre el corredor costero.",
-       "arranque": "?route=AN98&variant=AN98A",
-       "arranqueTexto": "AN98 · Cristobal → Miami",
-       "geoloc": { "latitude": 9.36, "longitude": -79.9, "accuracy": 50 },
-       "acciones": [
-        {
-         "t": "click-sel",
-         "sel": "button.hn-ctx-theme"
-        },
-        {
-         "t": "wait",
-         "v": 1200
-        },
-        {
-         "t": "poner-texto",
-         "sel": ".hn-ficha-head .hn-h2",
-         "v": "AN98A · Cristobal → Miami"
-        },
-        {
-         "t": "poner-texto",
-         "sel": ".hn-ficha-head .hn-title-en",
-         "v": "variante costera AN98A · por el oeste de Cuba"
-        },
-        {
-         "t": "ocultar-fact",
-         "v": "Cuenca"
-        },
-        {
-         "t": "ocultar-sel",
-         "sel": ".hn-readonly"
-        },
-        {
-         "t": "verificar-viewport",
-         "sel": [".hn-sheet.hn-ficha-open", ".hn-ficha-head", ".hn-ficha-head .hn-h2"]
-        },
-        {
-         "t": "verificar-ausente",
-         "v": "Atlántico Sur"
-        },
-        {
-         "t": "verificar-ausente",
-         "v": "AS21"
-        },
-        {
-         "t": "poner-tiempo",
-         "v": "Pilot chart"
-        },
-        {
-         "t": "check-sel",
-         "sel": "#hn-wxlay-waves"
-        },
-        {
-         "t": "check-sel",
-         "sel": "#hn-wxlay-isobars"
-        },
-        {
-         "t": "cerrar-todos-acc"
-        },
-        {
-         "t": "verificar-ausente",
-         "v": "Escocia"
-        },
-        {
-         "t": "verificar-ausente",
-         "v": "Sin capas encendidas"
-        },
-        {
-         "t": "verificar-sin-error"
-        },
-        {
-         "t": "wait",
-         "v": 1500
-        },
-        {
-         "t": "drag",
-         "v": [0.5, 0.53, 0.5, 0.12]
-        },
-        {
-         "t": "wait",
-         "v": 600
-        },
-        {
-         "t": "verificar-viewport",
-         "sel": [".hn-sheet-full"]
-        },
-        {
-         "t": "ocultar-sel",
-         "sel": ".hn-wps .hn-wp-coord"
-        },
-        {
-         "t": "ocultar-no-costa"
-        },
-        {
-         "t": "scroll-ruta",
-         "sel": ".hn-wps",
-         "texto": "Costa 1",
-         "ms": 2500,
-         "align": "start"
-        },
-        {
-         "t": "verificar-tabla-wps",
-         "cantidad": 8
-        },
-        {
-         "t": "wait-for-timeout",
-         "v": 1500
-        },
-        {
-         "t": "scroll-top",
-         "sel": ".hn-sheet.hn-ficha-open .hn-col-ficha"
-        },
-        {
-         "t": "click-texto",
-         "v": "Simular travesía"
-        },
-        {
-         "t": "esperar-texto",
-         "v": "Día 1",
-         "ms": 8000
-        },
-        {
-         "t": "cerrar-todos-acc"
-        },
-        {
-         "t": "verificar-acordeones"
-        },
-        {
-         "t": "ocultar-sel",
-         "sel": ".hn-wx-stack"
-        },
-        {
-         "t": "verificar-sin-error"
-        },
-        {
-         "t": "set-sheet",
-         "v": "peek"
-        },
-        {
-         "t": "verificar-hoja-mapa",
-         "estado": "peek",
-         "min_pct": 60
-        },
-        {
-         "t": "verificar-badge",
-         "ms": 1600
-        },
-        {
-         "t": "screenshot",
-         "v": "demo-16-costera-mapa-v2-peek.png"
-        },
-        {
-         "t": "verificar-reloj",
-         "ms": 1600
-        },
-        {
-         "t": "wait",
-         "v": 12000
-        }
-       ],
-       "dur_ms": 2500
-      }
+        "orden": "16",
+        "id": "costera-mapa-v2",
+        "titulo": "AN98A: el mapa costero con el reloj de la simulación siempre a la vista",
+        "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Con el pilot chart del mes y las capas encendidas, arrancamos la simulación cada tres horas, cerramos los paneles y bajamos la hoja: la carta queda entera, el reloj sigue avanzando en un badge sobre el mapa y el punto recorre el corredor costero.",
+        "arranque": "?route=AN98&variant=AN98A",
+        "arranqueTexto": "AN98 · Cristobal → Miami",
+        "geoloc": { "latitude": 9.36, "longitude": -79.9, "accuracy": 50 },
+        "acciones": [
+         {
+          "t": "click-sel",
+          "sel": "button.hn-ctx-theme"
+         },
+         {
+          "t": "wait",
+          "v": 800
+         },
+         {
+          "t": "poner-texto",
+          "sel": ".hn-ficha-head .hn-h2",
+          "v": "AN98A · Cristobal → Miami"
+         },
+         {
+          "t": "poner-texto",
+          "sel": ".hn-ficha-head .hn-title-en",
+          "v": "variante costera AN98A · por el oeste de Cuba"
+         },
+         {
+          "t": "ocultar-fact",
+          "v": "Cuenca"
+         },
+         {
+          "t": "ocultar-sel",
+          "sel": ".hn-readonly"
+         },
+         {
+          "t": "verificar-viewport",
+          "sel": [".hn-sheet.hn-ficha-open", ".hn-ficha-head", ".hn-ficha-head .hn-h2"]
+         },
+         {
+          "t": "verificar-ausente",
+          "v": "Atlántico Sur"
+         },
+         {
+          "t": "verificar-ausente",
+          "v": "AS21"
+         },
+         {
+          "t": "poner-tiempo",
+          "v": "Pilot chart"
+         },
+         {
+          "t": "check-sel",
+          "sel": "#hn-wxlay-waves"
+         },
+         {
+          "t": "check-sel",
+          "sel": "#hn-wxlay-isobars"
+         },
+         {
+          "t": "cerrar-acc",
+          "sel": ".hn-acc-head:has-text('Consejo')"
+         },
+         {
+          "t": "verificar-ausente",
+          "v": "Escocia"
+         },
+         {
+          "t": "verificar-ausente",
+          "v": "Sin capas encendidas"
+         },
+         {
+          "t": "verificar-sin-error"
+         },
+         {
+          "t": "wait",
+          "v": 800
+         },
+         {
+          "t": "drag",
+          "v": [0.5, 0.53, 0.5, 0.12]
+         },
+         {
+          "t": "wait",
+          "v": 400
+         },
+         {
+          "t": "verificar-viewport",
+          "sel": [".hn-sheet-full"]
+         },
+         {
+          "t": "ocultar-sel",
+          "sel": ".hn-wps .hn-wp-coord"
+         },
+         {
+          "t": "ocultar-no-costa"
+         },
+         {
+          "t": "scroll-ruta",
+          "sel": ".hn-wps",
+          "texto": "Costa 1",
+          "ms": 2000,
+          "align": "start"
+         },
+         {
+          "t": "verificar-tabla-wps",
+          "cantidad": 8
+         },
+         {
+          "t": "wait-for-timeout",
+          "v": 800
+         },
+         {
+          "t": "scroll-top",
+          "sel": ".hn-sheet.hn-ficha-open .hn-col-ficha"
+         },
+         {
+          "t": "click-texto",
+          "v": "Simular travesía"
+         },
+         {
+          "t": "esperar-texto",
+          "v": "Día 1",
+          "ms": 8000
+         },
+         {
+          "t": "cerrar-todos-acc"
+         },
+         {
+          "t": "verificar-acordeones"
+         },
+         {
+          "t": "ocultar-sel",
+          "sel": ".hn-wx-stack"
+         },
+         {
+          "t": "verificar-sin-error"
+         },
+         {
+          "t": "bajar-hoja",
+          "v": "peek"
+         },
+         {
+          "t": "verificar-hoja-mapa",
+          "estado": "peek",
+          "min_pct": 60
+         },
+         {
+          "t": "verificar-badge",
+          "ms": 1200
+         },
+         {
+          "t": "screenshot",
+          "v": "demo-16-costera-mapa-v2-peek.png"
+         },
+         {
+          "t": "verificar-reloj",
+          "ms": 1200
+         },
+         {
+          "t": "wait",
+          "v": 5000
+         }
+        ],
+        "dur_ms": 2000
+       }
     ]
   }
