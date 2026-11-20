@@ -802,7 +802,7 @@ async function actuar(page, a) {
         // "Mis rutas" con el botón de importación antes de tocar el archivo.
         const ok = await page.evaluate(
           ({ s, d }) => {
-            const sc = document.querySelector(".hn-col-list .hn-sheet-body");
+            const sc = document.querySelector(".hn-rutas .hn-list");
             const tgt = document.querySelector(s);
             if (!sc || !tgt) return false;
             const st = sc.scrollTop + tgt.getBoundingClientRect().top - sc.getBoundingClientRect().top;
