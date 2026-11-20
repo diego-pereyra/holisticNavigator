@@ -171,17 +171,95 @@ async function actuar(page, a) {
         console.log(`  [acordeón] ${a.sel}: aria-expanded=${state}`);
         return state !== "true";
       }
+      case "cerrar-todos-acc": {
+        // Diego: "tenés que bajar el acordeón para que se vea el mapa". Se
+        // cierran TODOS los acordeones de la ficha (no sólo Consejo) antes de
+        // bajar la hoja, y se comprueba por DOM que ninguno quedó abierto.
+        const abiertos = await page.evaluate(() => {
+          const heads = [...document.querySelectorAll(".hn-acc-head")];
+          const abiertos = heads.filter((h) => h.getAttribute("aria-expanded") === "true");
+          for (const h of abiertos) h.click();
+          return heads.map((h) => (h.textContent || "").trim());
+        });
+        await sleep(500);
+        const quedan = await page.evaluate(() =>
+          [...document.querySelectorAll('.hn-acc-head[aria-expanded="true"]')].map(
+            (h) => (h.textContent || "").trim(),
+          ),
+        );
+        console.log(`  [acordeones] cerrados ${abiertos.length} de ${abiertos.length} · quedan abiertos: ${JSON.stringify(quedan)}`);
+        return quedan.length === 0;
+      }
+      case "verificar-acordeones": {
+        // Señal real durante la simulación: ningún .hn-acc-head con aria-expanded=true.
+        const abiertos = await page.evaluate(() =>
+          [...document.querySelectorAll('.hn-acc-head[aria-expanded="true"]')].map(
+            (h) => (h.textContent || "").trim(),
+          ),
+        );
+        console.log(`  [acordeones] aria-expanded=true: ${JSON.stringify(abiertos)} ${abiertos.length === 0 ? "OK" : "ABIERTO"}`);
+        return abiertos.length === 0;
+      }
+      case "verificar-sin-error": {
+        // El cartel del límite gratuito (429) y la nota de vista no cubierta
+        // son texto fuera de tema: tienen que NO estar visibles en pantalla.
+        const visibles = await page.evaluate((textos) => {
+          const out = [];
+          for (const t of textos) {
+            const hay = [...document.querySelectorAll("body *")].some((e) => {
+              if (e.children.length || !(e.textContent || "").includes(t)) return false;
+              const s = getComputedStyle(e);
+              const r = e.getBoundingClientRect();
+              return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
+            });
+            if (hay) out.push(t);
+          }
+          return out;
+        }, a.v ?? ["límite gratuito de la API", "no está cubierta por ningún paquete", "Reintentar"]);
+        console.log(`  [error] carteles visibles: ${JSON.stringify(visibles)} ${visibles.length === 0 ? "OK" : "PRESENTE"}`);
+        return visibles.length === 0;
+      }
+      case "verificar-badge": {
+        // El badge flotante tiene que estar dentro del viewport con la hoja en
+        // peek, y su reloj tiene que avanzar (misma señal que verificar-reloj).
+        const leer = () => page.locator(".hn-sim-badge-clock").first().textContent().catch(() => null);
+        const box = await page.locator(".hn-sim-badge").first().boundingBox().catch(() => null);
+        if (!box) {
+          console.log("  [badge] sin boundingBox (no visible con la hoja arriba)");
+          return false;
+        }
+        const margen = a.margen ?? 2;
+        const dentro =
+          box.width > 0 && box.height > 0 &&
+          box.x >= -margen && box.y >= -margen &&
+          box.x + box.width <= vp.width + margen &&
+          box.y + box.height <= vp.height + margen;
+        console.log(
+          `  [badge] ${Math.round(box.x)},${Math.round(box.y)} ${Math.round(box.width)}x${Math.round(box.height)} ${dentro ? "OK" : "FUERA"}`,
+        );
+        const antes = await leer();
+        await sleep(a.ms ?? 1600);
+        const despues = await leer();
+        const avanza = !!antes && !!despues && antes !== despues;
+        console.log(`  [badge] reloj "${antes}" → "${despues}" ${avanza ? "AVANZA" : "DETENIDO"}`);
+        return dentro && avanza;
+      }
       case "poner-tiempo": {
         // Tiempo: Apagado → Pilot chart → Pronóstico. Se chequea el título real
-        // del botón en vez de contar toques a ciegas.
+        // del botón en vez de contar toques a ciegas. `v` permite pedir otro
+        // modo (p. ej. "Pilot chart" para no descargar el pronóstico).
+        const objetivo = a.v ?? "Pronóstico";
         const btn = page.locator("button.hn-ctx-wx").first();
         for (let i = 0; i < 3; i++) {
           const title = (await btn.getAttribute("title").catch(() => "")) ?? "";
-          if (/Pronóstico/.test(title)) return true;
+          if (title.includes(objetivo)) {
+            console.log(`  [tiempo] ${title} (objetivo ${objetivo})`);
+            return true;
+          }
           await btn.click({ timeout: 8000 });
           await sleep(700);
         }
-        console.log("  [aviso] no se pudo poner Tiempo en Pronóstico");
+        console.log(`  [aviso] no se pudo poner Tiempo en ${objetivo}`);
         return false;
       }
       case "verificar-viewport": {

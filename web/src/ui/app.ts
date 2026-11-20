@@ -2176,6 +2176,7 @@ function renderSheet(ui: UiState, sheet: HTMLElement): void {
     const hasNav = activeNav(ui) !== null;
     sheet.className = `hn-sheet hn-sheet-${state}${sel ? " hn-ficha-open" : ""}${hasNav ? " hn-nav" : ""}`;
     document.body.classList.toggle("hn-has-ficha", !!sel);
+    document.body.dataset.hnSheet = state;
     const root = document.documentElement;
     if (window.matchMedia("(min-width: 700px)").matches) {
       root.style.removeProperty("--hn-sheet-h");
@@ -4372,7 +4373,32 @@ const optSim = {
   label: null as HTMLElement | null,
   info: null as HTMLElement | null,
   slider: null as HTMLInputElement | null,
+  // Badge flotante sobre la carta: el reloj de la simulación sigue viéndose
+  // cuando la hoja baja a peek (la fila hn-sim vive en la cabecera y se oculta).
+  badge: null as HTMLElement | null,
+  badgeClock: null as HTMLElement | null,
+  badgeInfo: null as HTMLElement | null,
 };
+
+// Badge mínimo sobre el mapa, activo sólo mientras corre la simulación. Reusa
+// los textos y colores de la fila hn-sim; no toca el cálculo de la simulación.
+function optSimBadgeEnsure(): void {
+  if (optSim.badge?.isConnected) return;
+  const clock = el("div", { class: "hn-sim-badge-clock" }, "Día 1");
+  const info = el("div", { class: "hn-sim-badge-info" });
+  const badge = el("div", { class: "hn-sim-badge" }, clock, info);
+  document.body.append(badge);
+  optSim.badge = badge;
+  optSim.badgeClock = clock;
+  optSim.badgeInfo = info;
+}
+
+function optSimBadgeClear(): void {
+  optSim.badge?.remove();
+  optSim.badge = null;
+  optSim.badgeClock = null;
+  optSim.badgeInfo = null;
+}
 
 // Viento de la simulación: el pronóstico manda mientras haya paquete; la
 // climatología del mes es el respaldo (igual que el optimizador).
@@ -4406,6 +4432,7 @@ function optSimOpen(
   optSim.prevWeather = ui.weather();
   stopGps(ui);
   optSimRowBuild(host);
+  optSimBadgeEnsure();
   optSimApply();
   optSimPlay();
 }
@@ -4466,14 +4493,16 @@ function optSimApply(): void {
   ui.position.set(pos);
   setSource(ui.map, "me", featureCollection([pointFeature(st.lon, st.lat)]));
   optSimSyncWx(st.tMs);
-  if (optSim.label) optSim.label.textContent = `Día ${st.day} · ${clockText(st.tMs)}`;
-  if (optSim.info) {
-    const viento =
-      st.twsKn === null
-        ? "sin dato de viento"
-        : `viento ${POINT_CARDINALS[Math.round((st.twdDeg ?? 0) / 22.5) % 16] ?? "—"} ${spd(ui, st.twsKn, false)}`;
-    optSim.info.textContent = `${dst(ui, st.nm, false)} en 3 h · ${st.sogKn.toFixed(1).replace(".", ",")} kn · rumbo ${rumboTexto(st.cogDeg)}° · ${viento}`;
-  }
+  const reloj = `Día ${st.day} · ${clockText(st.tMs)}`;
+  const viento =
+    st.twsKn === null
+      ? "sin dato de viento"
+      : `viento ${POINT_CARDINALS[Math.round((st.twdDeg ?? 0) / 22.5) % 16] ?? "—"} ${spd(ui, st.twsKn, false)}`;
+  const metricas = `${dst(ui, st.nm, false)} en 3 h · ${st.sogKn.toFixed(1).replace(".", ",")} kn · rumbo ${rumboTexto(st.cogDeg)}° · ${viento}`;
+  if (optSim.label) optSim.label.textContent = reloj;
+  if (optSim.info) optSim.info.textContent = metricas;
+  if (optSim.badgeClock) optSim.badgeClock.textContent = reloj;
+  if (optSim.badgeInfo) optSim.badgeInfo.textContent = metricas;
   if (optSim.slider) optSim.slider.value = String(st.index + 1);
 }
 
@@ -4533,6 +4562,7 @@ function optSimStop(): void {
   optSim.steps = [];
   optSim.idx = 0;
   optSim.row?.remove();
+  optSimBadgeClear();
   optSim.row = null;
   optSim.playBtn = null;
   optSim.label = null;

@@ -690,6 +690,30 @@ html[data-theme="red"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* Badge flotante de la simulación sobre la carta: el reloj sigue a la vista
+   cuando la hoja baja a peek (la fila hn-sim vive en la cabecera y se oculta).
+   Usa los colores de la fila y no roba el sitio a la ficha cuando está subida. */
+.hn-sim-badge {
+  display: none;
+  position: fixed;
+  top: 68px;
+  left: 12px;
+  z-index: 6;
+  max-width: min(86vw, 340px);
+  padding: 8px 10px;
+  border: 1px solid var(--hn-accent);
+  border-radius: 10px;
+  background: var(--hn-glass);
+  color: var(--hn-text);
+  font-size: 13px;
+  line-height: 1.35;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+body[data-hn-sheet="peek"] .hn-sim-badge { display: block; }
+.hn-sim-badge-clock { font-weight: 700; }
+.hn-sim-badge-info { color: var(--hn-text-2); font-size: 12px; }
+
 .hn-search-row {
   display: flex;
   flex: 0 0 auto;
