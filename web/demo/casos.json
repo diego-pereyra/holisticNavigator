@@ -984,20 +984,25 @@
          "t": "wait",
          "v": 1800
         },
-        {
-         "t": "scroll-lista",
-         "sel": ".hn-row-import",
-         "ms": 1800
-        },
-        {
-         "t": "verificar-viewport",
-         "sel": [".hn-row-import"]
-        },
-        {
-         "t": "wait",
-         "v": 2500
-        },
-        {
+         {
+          "t": "scroll-lista",
+          "sel": ".hn-row-import",
+          "ms": 1800
+         },
+         {
+          "t": "verificar-viewport",
+          "sel": [".hn-row-import"]
+         },
+         {
+          "t": "recortar-inicio",
+          "v": 0.5
+         },
+         {
+          "t": "wait",
+          "v": 2500
+         },
+         {
+
          "t": "filechooser",
          "texto": "Importar GPX a Mis rutas",
          "path": "sponsors/IG/posteos/2026-11-11-costera/ruta-navionics-ejemplo.gpx"

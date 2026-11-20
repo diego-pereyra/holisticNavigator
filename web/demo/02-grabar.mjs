@@ -569,6 +569,30 @@ async function actuar(page, a) {
         if (visible) console.log(`  [aviso] "${a.v}" sigue visible en pantalla`);
         return !visible;
       }
+      case "recortar-inicio": {
+        // El catálogo del libro muestra etiquetas elipsadas durante el arranque.
+        // Marcamos el momento en que Mis rutas ya está encuadrado y comprobamos
+        // que ninguno de esos textos siga visible: el workflow recorta todo lo
+        // anterior (ver plan de corte al cerrar el contexto).
+        const textos = a.textos ?? ["(northe", "(southe", "2 vari"];
+        const visibles = await page.evaluate((ts) => {
+          const out = [];
+          for (const t of ts) {
+            const hay = [...document.querySelectorAll("body *")].some((e) => {
+              if (e.children.length || !(e.textContent || "").includes(t)) return false;
+              const s = getComputedStyle(e);
+              const r = e.getBoundingClientRect();
+              return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
+            });
+            if (hay) out.push(t);
+          }
+          return out;
+        }, textos);
+        console.log(`  [texto] catálogo elipsado visible: ${JSON.stringify(visibles)} ${visibles.length === 0 ? "OK" : "PRESENTE"}`);
+        if (!globalThis.__corte) globalThis.__corte = {};
+        globalThis.__corte.inicio = Date.now() - (a.v ?? 0.5) * 1000;
+        return visibles.length === 0;
+      }
       case "esperar-paquete": {
         // Descarga con pacing: tarda minutos. Esperamos la señal real (aparece
         // el deslizador) y anotamos el tramo aburrido para RECORTARLO del video
@@ -919,10 +943,18 @@ for (const caso of espec.casos) {
       const { renameSync } = await import("node:fs");
       renameSync(join(OUT, pendientes[0]), join(OUT, `${nombre}.webm`));
     }
-    // Plan de recorte: si hubo una descarga larga, quedarse con el arranque
-    // (+3 s: se ve el clic y el "0 %") y el final (-3 s: el mapa ya cargado).
+    // Plan de recorte: si el caso marcó el encuadre limpio, descartar el
+    // arranque con el catálogo elipsado (desde=0, hasta=marca). Si hubo una
+    // descarga larga, quedarse con el arranque (+3 s: clic y "0 %") y el final
+    // (-3 s: el mapa ya cargado).
     const corte = globalThis.__corte;
-    if (corte?.["descarga-inicio"] && corte?.["descarga-fin"]) {
+    if (corte?.inicio) {
+      const hasta = Math.max(0, (corte.inicio - videoT0) / 1000);
+      if (hasta > 2) {
+        writeFileSync(join(OUT, `corte-${nombre}.json`), JSON.stringify({ desde: 0, hasta }) + "\n");
+        console.log(`  recorte: arranque en ${hasta.toFixed(1)}s (catálogo con texto elipsado fuera del video)`);
+      }
+    } else if (corte?.["descarga-inicio"] && corte?.["descarga-fin"]) {
       const desde = Math.max(0, (corte["descarga-inicio"] - videoT0) / 1000 + 3);
       const hasta = (corte["descarga-fin"] - videoT0) / 1000 - 3;
       if (hasta > desde + 2) {
