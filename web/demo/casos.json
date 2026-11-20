@@ -1,11 +1,11 @@
 {
- "version": 12,
+  "version": 13,
  "viewport": {
   "width": 432,
   "height": 768
  },
  "titulo": "Holistic Navigator — demo por caso de uso",
-  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj.",
+  "nota": "Cada caso se graba en contexto propio, con arranque incluido, gestos táctiles y viewport de celular a 2x. El caso 11 arranca directo en la AN98 variante A (costera Cristobal→Miami por oeste de Cuba, 8 waypoints Costa corregidos), rotula la variante en la cabecera, oculta la cuenca fuera de tema, enciende capas, cierra el consejo del capítulo, sube la hoja ANTES de simular y deja el panel de métricas quieto y medido dentro del viewport desde el primer frame del reloj. El caso 12 usa la misma ruta pero baja la hoja a peek apenas arranca la simulación: la carta ocupa el viewport y el marcador avanza por el corredor costero.",
  "casos": [
   {
    "orden": "05",
@@ -515,6 +515,158 @@
        "v": 10000
       }
      ],
+    "dur_ms": 4000
+   },
+   {
+    "orden": "12",
+    "id": "costera-mapa",
+    "titulo": "AN98A: el mapa costero con la simulación avanzando",
+    "narracion": "Cargamos la AN98, variante A: la costera de Cristobal a Miami por el oeste de Cuba. Ocho waypoints Costa corrigen el trazado para que la ruta no toque tierra. Con el pronóstico y las capas de ola e isobaras encendidas, arrancamos la simulación cada tres horas y bajamos la hoja: la carta queda entera y el punto va avanzando por el corredor costero.",
+    "arranque": "?route=AN98&variant=AN98A",
+    "arranqueTexto": "AN98 · Cristobal → Miami",
+    "geoloc": { "latitude": 9.36, "longitude": -79.9, "accuracy": 50 },
+    "acciones": [
+     {
+      "t": "click-sel",
+      "sel": "button.hn-ctx-theme"
+     },
+     {
+      "t": "wait",
+      "v": 1200
+     },
+     {
+      "t": "poner-texto",
+      "sel": ".hn-ficha-head .hn-h2",
+      "v": "AN98A · Cristobal → Miami"
+     },
+     {
+      "t": "poner-texto",
+      "sel": ".hn-ficha-head .hn-title-en",
+      "v": "variante costera AN98A · por el oeste de Cuba"
+     },
+     {
+      "t": "ocultar-fact",
+      "v": "Cuenca"
+     },
+     {
+      "t": "ocultar-sel",
+      "sel": ".hn-readonly"
+     },
+     {
+      "t": "verificar-viewport",
+      "sel": [".hn-sheet.hn-ficha-open", ".hn-ficha-head", ".hn-ficha-head .hn-h2"]
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Atlántico Sur"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "AS21"
+     },
+     {
+      "t": "poner-tiempo"
+     },
+     {
+      "t": "check-sel",
+      "sel": "#hn-wxlay-waves"
+     },
+     {
+      "t": "check-sel",
+      "sel": "#hn-wxlay-isobars"
+     },
+     {
+      "t": "cerrar-acc",
+      "sel": ".hn-acc-head:has-text('Consejo')"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Escocia"
+     },
+     {
+      "t": "click-sel",
+      "sel": ".hn-wx-dl"
+     },
+     {
+      "t": "esperar-paquete"
+     },
+     {
+      "t": "verificar-ausente",
+      "v": "Sin capas encendidas"
+     },
+     {
+      "t": "wait",
+      "v": 1500
+     },
+     {
+      "t": "drag",
+      "v": [0.5, 0.53, 0.5, 0.12]
+     },
+     {
+      "t": "wait",
+      "v": 600
+     },
+     {
+      "t": "verificar-viewport",
+      "sel": [".hn-sheet-full"]
+     },
+     {
+      "t": "ocultar-sel",
+      "sel": ".hn-wps .hn-wp-coord"
+     },
+     {
+      "t": "ocultar-no-costa"
+     },
+     {
+      "t": "scroll-ruta",
+      "sel": ".hn-wps",
+      "texto": "Costa 1",
+      "ms": 2500,
+      "align": "start"
+     },
+     {
+      "t": "verificar-tabla-wps",
+      "cantidad": 8
+     },
+     {
+      "t": "wait-for-timeout",
+      "v": 1500
+     },
+     {
+      "t": "scroll-top",
+      "sel": ".hn-sheet.hn-ficha-open .hn-col-ficha"
+     },
+     {
+      "t": "click-texto",
+      "v": "Simular travesía"
+     },
+     {
+      "t": "esperar-texto",
+      "v": "Día 1",
+      "ms": 8000
+     },
+     {
+      "t": "set-sheet",
+      "v": "peek"
+     },
+     {
+      "t": "verificar-hoja-mapa",
+      "estado": "peek",
+      "min_pct": 60
+     },
+     {
+      "t": "screenshot",
+      "v": "demo-12-costera-mapa-peek.png"
+     },
+     {
+      "t": "verificar-reloj",
+      "ms": 1600
+     },
+     {
+      "t": "wait",
+      "v": 20000
+     }
+    ],
     "dur_ms": 4000
    }
  ]

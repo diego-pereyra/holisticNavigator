@@ -19,6 +19,36 @@ mkdirSync(join(OUT, "shots"), { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const vp = espec.viewport;
 
+// Utilidades de la hoja: la altura define cuánta carta se ve. Se trasladan
+// tal cual de web/e2e/carrusel-ig.mjs (mismo tirador .hn-handle y mismos
+// estados peek/half/full) para no inventar otro mecanismo de gesto.
+async function sheetState(page) {
+  const cls = (await page.locator(".hn-sheet").first().getAttribute("class").catch(() => null)) ?? "";
+  return /hn-sheet-(peek|half|full)/.exec(cls)?.[1] ?? "half";
+}
+
+async function dragSheet(page, dy) {
+  const box = await page.locator(".hn-handle").first().boundingBox();
+  if (!box) throw new Error("no encuentro el tirador de la hoja (.hn-handle)");
+  const x = box.x + box.width / 2;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x, y + dy, { steps: 10 });
+  await page.mouse.up();
+  await sleep(450);
+}
+
+async function setSheet(page, target) {
+  const order = ["peek", "half", "full"];
+  for (let i = 0; i < 4; i++) {
+    const cur = await sheetState(page);
+    if (cur === target) return true;
+    await dragSheet(page, order.indexOf(target) > order.indexOf(cur) ? -320 : 320);
+  }
+  throw new Error(`la hoja quedó en ${await sheetState(page)}, esperaba ${target}`);
+}
+
 function mmss(ms) {
   const s = Math.max(0, Math.round(ms / 1000));
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
@@ -330,6 +360,49 @@ async function actuar(page, a) {
           ok = false;
         }
         return ok;
+      }
+      case "set-sheet": {
+        // Baja/sube la hoja con el mismo gesto que el e2e del carrusel.
+        await setSheet(page, a.v);
+        const state = await sheetState(page);
+        console.log(`  [hoja] estado=${state} (esperado ${a.v})`);
+        return state === a.v;
+      }
+      case "verificar-hoja-mapa": {
+        // Con la hoja abajo medimos la carta realmente visible: #map ocupa el
+        // viewport y la hoja tapa la franja inferior. Logueamos el porcentaje
+        // para que el artefacto de CI deje constancia del encuadre.
+        const estado = await sheetState(page);
+        const hoja = await page.locator(".hn-sheet").first().boundingBox().catch(() => null);
+        const mapa = await page.locator("#map").first().boundingBox().catch(() => null);
+        if (!hoja || !mapa) {
+          console.log("  [mapa] sin boundingBox de hoja o carta");
+          return false;
+        }
+        const alto = Math.max(0, Math.min(mapa.y + mapa.height, hoja.y) - Math.max(0, mapa.y));
+        const pct = (alto / vp.height) * 100;
+        const ok = estado === (a.estado ?? "peek") && pct >= (a.min_pct ?? 60);
+        console.log(
+          `  [mapa] hoja=${estado} · carta visible ${pct.toFixed(1)}% del viewport (${Math.round(alto)}/${vp.height}px) ${ok ? "OK" : "FUERA"}`,
+        );
+        return ok;
+      }
+      case "verificar-reloj": {
+        // La fila de la simulación sigue en el DOM aunque la hoja esté en peek:
+        // comparamos el texto del reloj en dos instantes para probar que el
+        // marcador sigue avanzando con la carta a pantalla completa.
+        const leer = () => page.locator(".hn-sim-days .hn-sim-progress").first().textContent().catch(() => null);
+        const antes = await leer();
+        await sleep(a.ms ?? 1600);
+        const despues = await leer();
+        const ok = !!antes && !!despues && antes !== despues;
+        console.log(`  [reloj] "${antes}" → "${despues}" ${ok ? "AVANZA" : "DETENIDO"}`);
+        return ok;
+      }
+      case "screenshot": {
+        await page.screenshot({ path: join(OUT, "shots", a.v) }).catch(() => undefined);
+        console.log(`  [foto] shots/${a.v}`);
+        return true;
       }
       case "wait-for-timeout": {
         // Pausa explicita para que el panel quede quieto y sea legible en el video.
