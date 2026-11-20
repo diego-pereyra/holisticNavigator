@@ -575,20 +575,36 @@ async function actuar(page, a) {
         // que ninguno de esos textos siga visible: el workflow recorta todo lo
         // anterior (ver plan de corte al cerrar el contexto).
         const textos = a.textos ?? ["(northe", "(southe", "2 vari"];
-        const visibles = await page.evaluate((ts) => {
+        const { visibles, enDom } = await page.evaluate((ts) => {
+          // Las filas del catálogo siguen en el DOM de la pestaña Rutas, pero
+          // quedan por encima del scroll: hay que intersectar con el viewport
+          // y con cada contenedor con overflow, no sólo mirar el estilo.
+          const inter = (a, b) => ({
+            left: Math.max(a.left, b.left), top: Math.max(a.top, b.top),
+            right: Math.min(a.right, b.right), bottom: Math.min(a.bottom, b.bottom),
+          });
+          const enPantalla = (e) => {
+            const s = getComputedStyle(e);
+            if (s.display === "none" || s.visibility === "hidden" || Number(s.opacity) === 0) return false;
+            let r = inter(e.getBoundingClientRect(), { left: 0, top: 0, right: innerWidth, bottom: innerHeight });
+            for (let p = e.parentElement; p && r.right > r.left && r.bottom > r.top; p = p.parentElement) {
+              const ps = getComputedStyle(p);
+              if (ps.overflowX !== "visible" || ps.overflowY !== "visible") r = inter(r, p.getBoundingClientRect());
+            }
+            return r.right > r.left && r.bottom > r.top;
+          };
           const out = [];
+          const dom = [];
           for (const t of ts) {
-            const hay = [...document.querySelectorAll("body *")].some((e) => {
-              if (e.children.length || !(e.textContent || "").includes(t)) return false;
-              const s = getComputedStyle(e);
-              const r = e.getBoundingClientRect();
-              return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
-            });
-            if (hay) out.push(t);
+            const nodos = [...document.querySelectorAll("body *")].filter(
+              (e) => !e.children.length && (e.textContent || "").includes(t),
+            );
+            if (nodos.length) dom.push(t);
+            if (nodos.some(enPantalla)) out.push(t);
           }
-          return out;
+          return { visibles: out, enDom: dom };
         }, textos);
-        console.log(`  [texto] catálogo elipsado visible: ${JSON.stringify(visibles)} ${visibles.length === 0 ? "OK" : "PRESENTE"}`);
+        console.log(`  [texto] catálogo elipsado en DOM: ${JSON.stringify(enDom)} · visible: ${JSON.stringify(visibles)} ${visibles.length === 0 ? "OK" : "PRESENTE"}`);
         if (!globalThis.__corte) globalThis.__corte = {};
         globalThis.__corte.inicio = Date.now() - (a.v ?? 0.5) * 1000;
         return visibles.length === 0;
