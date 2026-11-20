@@ -17,7 +17,9 @@ rmSync(OUT, { recursive: true, force: true });
 mkdirSync(join(OUT, "shots"), { recursive: true });
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-const vp = espec.viewport;
+// Viewport por caso: los casos de celular siguen usando el general de la
+// especificación; los de tablet traen su propio {"width":820,"height":1180}.
+let vp = espec.viewport;
 
 // Utilidades de la hoja: la altura define cuánta carta se ve. Se trasladan
 // tal cual de web/e2e/carrusel-ig.mjs (mismo tirador .hn-handle y mismos
@@ -40,6 +42,13 @@ async function dragSheet(page, dy) {
 }
 
 async function setSheet(page, target) {
+  // En tablet (≥820 px) la hoja es un dock lateral de alto fijo: el tirador no
+  // existe y peek/half/full no cambian el encuadre. Se respeta el helper y se
+  // deja constancia en el log en vez de simular un gesto que la app no tiene.
+  if (!(await page.locator(".hn-handle").first().isVisible().catch(() => false))) {
+    console.log(`  [hoja] dock sin tirador: estado=${await sheetState(page)} (${target} no aplica al alto fijo)`);
+    return true;
+  }
   const order = ["peek", "half", "full"];
   for (let i = 0; i < 4; i++) {
     const cur = await sheetState(page);
@@ -369,9 +378,9 @@ async function actuar(page, a) {
         return state === a.v;
       }
       case "verificar-hoja-mapa": {
-        // Con la hoja abajo medimos la carta realmente visible: #map ocupa el
-        // viewport y la hoja tapa la franja inferior. Logueamos el porcentaje
-        // para que el artefacto de CI deje constancia del encuadre.
+        // Medimos la carta realmente visible con boundingBox. En celular la
+        // hoja tapa una franja inferior; en tablet (dock lateral) tapa una
+        // franja a la izquierda. El umbral es el mismo en los dos casos.
         const estado = await sheetState(page);
         const hoja = await page.locator(".hn-sheet").first().boundingBox().catch(() => null);
         const mapa = await page.locator("#map").first().boundingBox().catch(() => null);
@@ -379,11 +388,18 @@ async function actuar(page, a) {
           console.log("  [mapa] sin boundingBox de hoja o carta");
           return false;
         }
-        const alto = Math.max(0, Math.min(mapa.y + mapa.height, hoja.y) - Math.max(0, mapa.y));
-        const pct = (alto / vp.height) * 100;
-        const ok = estado === (a.estado ?? "peek") && pct >= (a.min_pct ?? 60);
+        const caja = (b) => `${Math.round(b.x)},${Math.round(b.y)} ${Math.round(b.width)}x${Math.round(b.height)}`;
+        console.log(`  [mapa] hoja boundingBox: ${caja(hoja)} · carta boundingBox: ${caja(mapa)}`);
+        const dock = !(await page.locator(".hn-handle").first().isVisible().catch(() => false));
+        const libre = dock
+          ? Math.max(0, Math.min(mapa.x + mapa.width, vp.width) - Math.max(mapa.x, hoja.x + hoja.width))
+          : Math.max(0, Math.min(mapa.y + mapa.height, hoja.y) - Math.max(0, mapa.y));
+        const total = dock ? vp.width : vp.height;
+        const pct = (libre / total) * 100;
+        const estadoOk = a.estado === undefined || estado === a.estado;
+        const ok = estadoOk && pct >= (a.min_pct ?? 60);
         console.log(
-          `  [mapa] hoja=${estado} · carta visible ${pct.toFixed(1)}% del viewport (${Math.round(alto)}/${vp.height}px) ${ok ? "OK" : "FUERA"}`,
+          `  [mapa] ${dock ? "dock" : "hoja"}=${estado} · carta visible ${pct.toFixed(1)}% del ${dock ? "ancho" : "alto"} (${Math.round(libre)}/${total}px) ${ok ? "OK" : "FUERA"}`,
         );
         return ok;
       }
@@ -603,13 +619,14 @@ const narracion = [`# ${espec.titulo}\n\n_Un video por caso de uso · base ${BAS
 let casosFallidos = 0;
 
 for (const caso of espec.casos) {
+  vp = caso.viewport ?? espec.viewport;
   const nombre = `demo-${caso.orden}-${caso.id}`;
-  console.log(`grabando ${nombre} — ${caso.titulo}`);
+  console.log(`grabando ${nombre} — ${caso.titulo} · viewport ${vp.width}×${vp.height} @2x`);
   const ctx = await browser.newContext({
     viewport: vp,
     hasTouch: true,
     isMobile: true,
-    deviceScaleFactor: 2, // pantalla de celular nítida
+    deviceScaleFactor: 2, // pantalla nítida (celular o tablet)
     permissions: ["geolocation"],
     geolocation: caso.geoloc ?? { latitude: -34.9, longitude: -56.2, accuracy: 50 },
     recordVideo: { dir: OUT, size: vp },
@@ -629,7 +646,7 @@ for (const caso of espec.casos) {
     }
     await sleep(caso.dur_ms ?? 6000);
     if (fallos > 0) casosFallidos++;
-    narracion.push(`## ${caso.orden} · ${caso.titulo} (${mmss(caso.dur_ms ?? 6000)})\n\n${caso.narracion}\n\n_video: ${nombre}.mp4_\n`);
+    narracion.push(`## ${caso.orden} · ${caso.titulo} (${mmss(caso.dur_ms ?? 6000)} · ${vp.width}×${vp.height} @2x)\n\n${caso.narracion}\n\n_video: ${nombre}.mp4_\n`);
     writeFileSync(join(OUT, `${nombre}.srt`), subtitulos(caso.narracion, caso.dur_ms ?? 6000).join("\n") + "\n");
   } finally {
     await ctx.close(); // cierra el .webm de este caso
